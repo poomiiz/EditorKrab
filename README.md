@@ -45,9 +45,10 @@ These numbers come from our own test runs. They are not guarantees.
 |---|---|---|
 | English test speech, 68.6 s, large-v3 | 6.74% word error rate | [flow-run3](docs/test-logs/rust-20261018/flow-run3.md) |
 | Thai test speech, 45.1 s, large-v3 | 2.05% character error rate | [flow-run3](docs/test-logs/rust-20261018/flow-run3.md) |
-| Transcription speed, 2 CPU threads | about 5x slower than real time | [flow-run3](docs/test-logs/rust-20261018/flow-run3.md) |
+| Transcribe the English clip, 8 CPU threads (release build) | 94.1 s (was 332.6 s with 2 threads) | [flow-run3, run 4](docs/test-logs/rust-20261018/flow-run3.md) |
+| Transcribe the Thai clip, 8 CPU threads (release build) | 128.4 s (was 543.1 s with 2 threads) | [flow-run3, run 4](docs/test-logs/rust-20261018/flow-run3.md) |
 
-The test speech was generated from the scripts in that folder; it is not customer footage. The app now uses up to 8 CPU threads, and the speed with 8 threads has not been measured yet. Time saved compared with manual editing has not been measured.
+The test speech was generated from the scripts in that folder; it is not customer footage. The times were measured on one 20-thread desktop CPU without a GPU. The app uses up to 8 threads because more threads gave little extra speed. Time saved compared with manual editing has not been measured.
 
 ## Build from source
 
