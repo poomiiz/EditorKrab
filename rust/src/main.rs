@@ -1,0 +1,901 @@
+use axum::{
+    Json, Router,
+    body::Bytes,
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode},
+    response::{
+        Html, IntoResponse,
+        sse::{Event, KeepAlive, Sse},
+    },
+    routing::{get, post},
+};
+use editorkrab::drafts::{Error, Store};
+use editorkrab::jobs::{BatchRequest, Job, Task};
+use editorkrab::native_asr::{Config as AsrConfig, Settings as AsrSettings};
+use editorkrab::sources::{PickCommand, PickKind, PickerLease, Selection, SourceError};
+use serde::Deserialize;
+use serde_json::{Value, json};
+use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+};
+use std::{convert::Infallible, path::PathBuf, time::Duration};
+use tokio::sync::watch;
+
+type Shared = Arc<Mutex<Store>>;
+type ApiError = (StatusCode, Json<Value>);
+
+#[derive(Clone)]
+struct Runtime {
+    store: Shared,
+    stopping: watch::Sender<bool>,
+    picker: mpsc::Sender<PickCommand>,
+    picker_busy: Arc<AtomicBool>,
+    assets: PathBuf,
+    asr: Option<Arc<(AsrConfig, AsrSettings)>>,
+}
+
+async fn begin_upload(
+    State(runtime): State<Runtime>,
+    Json(body): Json<editorkrab::uploads::Begin>,
+) -> Result<Json<editorkrab::uploads::Progress>, ApiError> {
+    let assets = runtime.assets.clone();
+    database(runtime, move |store| store.begin_upload(&assets, &body))
+        .await
+        .map(Json)
+}
+#[derive(Deserialize)]
+struct ChunkQuery {
+    offset: u64,
+}
+async fn upload_chunk(
+    State(runtime): State<Runtime>,
+    Path(id): Path<String>,
+    Query(query): Query<ChunkQuery>,
+    body: Bytes,
+) -> Result<Json<editorkrab::uploads::Progress>, ApiError> {
+    let assets = runtime.assets.clone();
+    database(runtime, move |store| {
+        store.upload_chunk(&assets, &id, query.offset, &body)
+    })
+    .await
+    .map(Json)
+}
+async fn finish_upload(
+    State(runtime): State<Runtime>,
+    Path(id): Path<String>,
+) -> Result<Json<editorkrab::sources::Source>, ApiError> {
+    let assets = runtime.assets.clone();
+    database(runtime, move |store| store.finish_upload(&assets, &id))
+        .await
+        .map(Json)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PickBody {
+    kind: PickKind,
+}
+
+fn source_failure(error: SourceError) -> ApiError {
+    let (status, code) = match error {
+        SourceError::Limit => (StatusCode::PAYLOAD_TOO_LARGE, "source_limit_exceeded"),
+        SourceError::Path => (StatusCode::BAD_REQUEST, "source_path_not_unicode"),
+        SourceError::Io(_) => (StatusCode::UNPROCESSABLE_ENTITY, "source_read_failed"),
+    };
+    (status, Json(json!({"error":code})))
+}
+
+async fn pick_sources(
+    State(runtime): State<Runtime>,
+    Json(body): Json<PickBody>,
+) -> Result<Json<Selection>, ApiError> {
+    if runtime
+        .picker_busy
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return Err((StatusCode::CONFLICT, Json(json!({"error":"picker_busy"}))));
+    }
+    let lease = PickerLease(runtime.picker_busy.clone());
+    let (answer, receive) = tokio::sync::oneshot::channel();
+    runtime
+        .picker
+        .send(PickCommand {
+            kind: body.kind,
+            answer,
+            lease,
+        })
+        .map_err(|_| failure(Error::Unavailable))?;
+    let paths = receive.await.map_err(|_| failure(Error::Unavailable))?;
+    if paths.is_empty() {
+        return Ok(Json(Selection {
+            files: vec![],
+            skipped: 0,
+            cancelled: true,
+        }));
+    }
+    tokio::task::spawn_blocking(move || editorkrab::sources::collect(paths))
+        .await
+        .map_err(|_| failure(Error::Unavailable))?
+        .map(Json)
+        .map_err(source_failure)
+}
+
+async fn database<T: Send + 'static>(
+    runtime: Runtime,
+    operation: impl FnOnce(&mut Store) -> Result<T, Error> + Send + 'static,
+) -> Result<T, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let mut store = runtime.store.lock().map_err(|_| Error::Unavailable)?;
+        operation(&mut store)
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))?
+    .map_err(failure)
+}
+
+#[derive(Deserialize)]
+struct Save {
+    operation_id: String,
+    expected_revision: i64,
+    document: Value,
+}
+
+fn failure(error: Error) -> (StatusCode, Json<Value>) {
+    let (status, message) = match error {
+        Error::Conflict { expected, actual } => {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({"error":"revision_conflict","expected":expected,"actual":actual})),
+            );
+        }
+        Error::OperationConflict => (StatusCode::CONFLICT, "operation_conflict"),
+        Error::UploadConflict => (StatusCode::CONFLICT, "upload_bytes_conflict"),
+        Error::UploadIncomplete => (StatusCode::CONFLICT, "upload_incomplete"),
+        Error::UploadCorrupt => (StatusCode::CONFLICT, "upload_checkpoint_invalid"),
+        Error::Io(_) => (StatusCode::INSUFFICIENT_STORAGE, "source_storage_failed"),
+        Error::InvalidInput | Error::Json(_) => (StatusCode::BAD_REQUEST, "invalid_input"),
+        Error::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "draft_storage_failed"),
+        Error::NotFound => (StatusCode::NOT_FOUND, "not_found"),
+        Error::JobState => (StatusCode::CONFLICT, "invalid_job_state"),
+        Error::SourceChanged => (StatusCode::CONFLICT, "source_changed"),
+        Error::TranscriptionLimit => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "transcription_chunk_limit_exceeded",
+        ),
+        Error::TranscriptionCacheCorrupt => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "transcription_cache_corrupt",
+        ),
+        Error::Unavailable => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "storage_worker_unavailable",
+        ),
+    };
+    (status, Json(json!({"error":message})))
+}
+
+async fn read(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let draft = database(runtime, move |store| {
+        store.read(&project)?.ok_or(Error::NotFound)
+    })
+    .await?;
+    Ok(Json(json!(draft)))
+}
+
+async fn save(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+    Json(body): Json<Save>,
+) -> Result<Json<Value>, ApiError> {
+    let id = project.clone();
+    let revision = database(runtime, move |store| {
+        store.save(
+            &id,
+            &body.operation_id,
+            body.expected_revision,
+            &body.document,
+        )
+    })
+    .await?;
+    Ok(Json(json!({"project_id":project,"revision":revision})))
+}
+
+async fn create_jobs(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+    Json(body): Json<BatchRequest>,
+) -> Result<Json<Vec<Job>>, ApiError> {
+    for item in &body.items {
+        if let Task::Transcribe { settings, .. } = &item.task {
+            let configured = runtime.asr.as_ref().ok_or((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"error":"transcription_not_configured"})),
+            ))?;
+            if settings != &configured.1 {
+                return Err((
+                    StatusCode::CONFLICT,
+                    Json(json!({"error":"transcription_settings_changed"})),
+                ));
+            }
+        }
+    }
+    database(runtime, move |store| store.create_batch(&project, &body))
+        .await
+        .map(Json)
+}
+async fn copy_draft(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+    Json(body): Json<editorkrab::draft_copy::CopyRequest>,
+) -> Result<Json<editorkrab::drafts::Draft>, ApiError> {
+    database(runtime, move |store| store.copy_draft(&project, &body))
+        .await
+        .map(Json)
+}
+async fn start_transcription(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+    Json(body): Json<editorkrab::transcription_jobs::StartRequest>,
+) -> Result<Json<Vec<Job>>, ApiError> {
+    let configured = runtime
+        .asr
+        .as_ref()
+        .ok_or((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({"error":"transcription_not_configured"})),
+        ))?
+        .clone();
+    if body.settings != configured.1 {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({"error":"transcription_settings_changed"})),
+        ));
+    }
+    let id = project.clone();
+    let preflight = body.clone();
+    let path = database(runtime.clone(), move |store| {
+        store.transcription_source_path(&id, &preflight)
+    })
+    .await?;
+    let expected = body.settings.clone();
+    let source = tokio::task::spawn_blocking(move || {
+        if AsrSettings::read(&configured.0)? != expected {
+            return Err("transcription_settings_changed".to_string());
+        }
+        editorkrab::native_asr::Artifact::read(&path)
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))?
+    .map_err(|error| (StatusCode::CONFLICT, Json(json!({"error":error}))))?;
+    database(runtime, move |store| {
+        store.start_transcription_checked(&project, &body, Some(&source))
+    })
+    .await
+    .map(Json)
+}
+/// Corrections learned from hand fixes; shared with the old ClipKit `corrections.json` when pointed at it.
+fn corrections_path() -> Result<PathBuf, ApiError> {
+    if let Ok(path) = std::env::var("EDITORKRAB_CORRECTIONS") {
+        return Ok(PathBuf::from(path));
+    }
+    let state = std::env::var("EDITORKRAB_RUST_STATE").map_err(|_| failure(Error::Unavailable))?;
+    Ok(PathBuf::from(state).with_file_name("corrections.json"))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LearnBody {
+    old: String,
+    new: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FixBody {
+    lines: Vec<String>,
+}
+fn spelling_failure(error: String) -> ApiError {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({"error":error})),
+    )
+}
+async fn spelling_learn(Json(body): Json<LearnBody>) -> Result<Json<Value>, ApiError> {
+    if body.old.chars().count() > 2000 || body.new.chars().count() > 2000 {
+        return Err(failure(Error::InvalidInput));
+    }
+    let path = corrections_path()?;
+    // One learner at a time: learn() reads, merges and rewrites the whole file.
+    static LEARNING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let pairs = tokio::task::spawn_blocking(move || {
+        let _turn = LEARNING
+            .lock()
+            .map_err(|_| "corrections_lock_poisoned".to_string())?;
+        editorkrab::spelling::learn(&path, &body.old, &body.new)
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))?
+    .map_err(spelling_failure)?;
+    Ok(Json(json!({"learned":pairs})))
+}
+async fn spelling_fix(Json(body): Json<FixBody>) -> Result<Json<Value>, ApiError> {
+    if body.lines.len() > 10_000 || body.lines.iter().any(|l| l.chars().count() > 2000) {
+        return Err(failure(Error::InvalidInput));
+    }
+    let path = corrections_path()?;
+    let lines = tokio::task::spawn_blocking(move || {
+        let known = editorkrab::spelling::load(&path)?;
+        body.lines
+            .iter()
+            .map(|line| editorkrab::spelling::fix(line, &known))
+            .collect::<Result<Vec<_>, _>>()
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))?
+    .map_err(spelling_failure)?;
+    Ok(Json(json!({"lines":lines})))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TextQcBody {
+    items: Vec<editorkrab::text_qc::Item>,
+}
+/// Proofreads the clip's on-screen texts (headline, super, subtitle) and reports timed findings.
+async fn text_qc(Json(body): Json<TextQcBody>) -> Result<Json<Value>, ApiError> {
+    let findings = tokio::task::spawn_blocking(move || editorkrab::text_qc::check(&body.items))
+        .await
+        .map_err(|_| failure(Error::Unavailable))?
+        .map_err(spelling_failure)?;
+    Ok(Json(json!({"findings":findings})))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PauseQuery {
+    start_ms: u64,
+    end_ms: u64,
+}
+/// Quiet spans of one source range (the old `quiet_spans`), plus the pad kept around words.
+async fn source_pauses(
+    State(runtime): State<Runtime>,
+    Path((project, source_id)): Path<(String, String)>,
+    Query(query): Query<PauseQuery>,
+) -> Result<Json<Value>, ApiError> {
+    if query.end_ms <= query.start_ms || query.end_ms - query.start_ms > 3_600_000 {
+        return Err(failure(Error::InvalidInput));
+    }
+    let ffmpeg = runtime
+        .asr
+        .as_ref()
+        .map(|v| v.0.ffmpeg.clone())
+        .ok_or_else(|| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error":"transcription_not_configured"})),
+            )
+        })?;
+    let store = runtime.store.clone();
+    let path = tokio::task::spawn_blocking(move || -> Result<PathBuf, ApiError> {
+        let store = store.lock().map_err(|_| failure(Error::Unavailable))?;
+        let draft = store.read(&project).map_err(failure)?.ok_or((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error":"source_not_found"})),
+        ))?;
+        let file = draft.document["files"]
+            .as_array()
+            .and_then(|files| {
+                files
+                    .iter()
+                    .find(|f| f["source_id"].as_str() == Some(&source_id))
+            })
+            .ok_or((
+                StatusCode::NOT_FOUND,
+                Json(json!({"error":"source_not_found"})),
+            ))?;
+        let path = PathBuf::from(file["path"].as_str().ok_or(failure(Error::InvalidInput))?);
+        if !path.is_absolute() {
+            return Err(failure(Error::InvalidInput));
+        }
+        let metadata = std::fs::metadata(&path).map_err(|_| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error":"source_not_found"})),
+            )
+        })?;
+        let stamp = editorkrab::sources::stamp(&metadata).map_err(|e| failure(Error::Io(e)))?;
+        if Some(metadata.len()) != file["size"].as_u64()
+            || Some(stamp.as_str()) != file["modified_ns"].as_str()
+        {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(json!({"error":"source_changed"})),
+            ));
+        }
+        Ok(path)
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))??;
+    let spans = editorkrab::pauses::find(&ffmpeg, &path, query.start_ms, query.end_ms)
+        .await
+        .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
+    Ok(Json(
+        json!({"pauses":spans,"word_pad_ms":editorkrab::pauses::WORD_PAD_MS}),
+    ))
+}
+async fn source_audio(
+    State(runtime): State<Runtime>,
+    Path((project, source_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Result<axum::response::Response, editorkrab::transcript_audio::AudioError> {
+    editorkrab::transcript_audio::serve(runtime.store.clone(), project, source_id, headers).await
+}
+async fn list_jobs(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let (jobs, cursor) = database(runtime, move |store| {
+        Ok((
+            store.list_jobs(&project)?,
+            store.latest_job_event(&project)?,
+        ))
+    })
+    .await?;
+    Ok(([("x-job-cursor", cursor.to_string())], Json(jobs)))
+}
+async fn cancel_job(
+    State(runtime): State<Runtime>,
+    Path(id): Path<String>,
+) -> Result<Json<Job>, ApiError> {
+    database(runtime, move |store| store.cancel_job(&id))
+        .await
+        .map(Json)
+}
+async fn retry_job(
+    State(runtime): State<Runtime>,
+    Path(id): Path<String>,
+) -> Result<Json<Job>, ApiError> {
+    database(runtime, move |store| store.retry_job(&id))
+        .await
+        .map(Json)
+}
+
+#[derive(Deserialize)]
+struct Cursor {
+    after: Option<i64>,
+}
+
+async fn events(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+    Query(query): Query<Cursor>,
+    headers: HeaderMap,
+) -> Result<Sse<impl futures_core::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let mut cursor = match headers.get("last-event-id") {
+        Some(value) => value
+            .to_str()
+            .ok()
+            .and_then(|s| s.parse::<i64>().ok())
+            .ok_or_else(|| failure(Error::InvalidInput))?,
+        None => query.after.unwrap_or(0),
+    };
+    if cursor < 0 {
+        return Err(failure(Error::InvalidInput));
+    }
+    let mut stopping = runtime.stopping.subscribe();
+    let stream = async_stream::stream! {
+        let mut tick=tokio::time::interval(Duration::from_millis(500));
+        loop {
+            if *stopping.borrow() {break;}
+            tokio::select! {_=tick.tick()=>{},_=stopping.changed()=>break}
+            let id=project.clone();
+            let result=database(runtime.clone(),move |store| {
+                let latest=store.latest_job_event(&id)?;
+                if cursor>latest {return Ok((latest,Vec::new(),Some(store.list_jobs(&id)?)));}
+                Ok((latest,store.job_events(&id,cursor)?,None))
+            }).await;
+            match result {
+                Ok((latest,items,Some(snapshot))) => {
+                    cursor=latest;
+                    yield Ok::<_,Infallible>(Event::default().id(cursor.to_string()).event("reset").data(json!(snapshot).to_string()));
+                    debug_assert!(items.is_empty());
+                },
+                Ok((_,items,None)) => for item in items {
+                    cursor=item.sequence;
+                    yield Ok(Event::default().id(cursor.to_string()).event("job").data(json!(item.job).to_string()));
+                },
+                Err(_) => {yield Ok(Event::default().event("storage-error").data("{\"error\":\"job_read_failed\"}"));break;},
+            }
+        }
+    };
+    Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(10))))
+}
+
+async fn transcribe_job(
+    runtime: &Runtime,
+    job: &Job,
+    mut stopping: watch::Receiver<bool>,
+) -> Result<(Value, Option<editorkrab::chunk_cache::Candidate>), String> {
+    let Task::Transcribe {
+        path,
+        context,
+        settings,
+    } = &job.task
+    else {
+        return Err("invalid_transcription_task".into());
+    };
+    let (config, _) = runtime
+        .asr
+        .as_ref()
+        .ok_or("transcription_not_configured")?
+        .as_ref();
+    let (cancel, signal) = watch::channel(false);
+    let (progress, mut stages) = watch::channel("verifying");
+    let task = editorkrab::native_asr::run_cached(
+        config,
+        std::path::Path::new(path),
+        context,
+        signal,
+        Some(settings),
+        Some(progress),
+        Some((runtime.store.clone(), job.id.clone())),
+    );
+    tokio::pin!(task);
+    let mut tick = tokio::time::interval(Duration::from_millis(250));
+    let mut stage = "verifying".to_string();
+    loop {
+        tokio::select! {
+            biased;
+            result=&mut task=>return result.and_then(|mut v|{let candidate=v.cache_candidate.take();serde_json::to_value(v).map(|value|(value,candidate)).map_err(|_|"transcription_result_invalid".into())}),
+            _=async {let _=stopping.wait_for(|v|*v).await;}=>{let _=cancel.send(true);let _=task.await;return Err("application_stopping".into());},
+            change=stages.changed()=>{if change.is_ok(){stage=stages.borrow_and_update().to_string();}},
+            _=tick.tick()=>{
+                let id=job.id.clone();let next=stage.clone();
+                let checked=database(runtime.clone(),move|store|{
+                    let cancelled=store.job(&id)?.cancel_requested;
+                    store.job_step(&id,&next)?;store.heartbeat_job(&id)?;Ok(cancelled)
+                }).await;
+                match checked {
+                    Ok(true)=>{let _=cancel.send(true);let _=task.await;return Err("cancelled".into());},
+                    Ok(false)=>{},
+                    Err(_)=>{let _=cancel.send(true);let _=task.await;return Err("job_store_unavailable".into());}
+                }
+            }
+        }
+    }
+}
+
+async fn worker(runtime: Runtime, ffprobe: PathBuf) {
+    let mut stopping = runtime.stopping.subscribe();
+    let mut tick = tokio::time::interval(Duration::from_millis(500));
+    loop {
+        if *stopping.borrow() {
+            return;
+        }
+        tokio::select! {_=tick.tick()=>{},_=stopping.changed()=>return}
+        let job = match database(runtime.clone(), |store| store.claim_job()).await {
+            Ok(Some(job)) => job,
+            Ok(None) => continue,
+            Err(_) => {
+                eprintln!("job_claim_failed");
+                continue;
+            }
+        };
+        let result = match &job.task {
+            Task::Probe { .. } => {
+                editorkrab::media::probe(&job, &ffprobe, runtime.store.clone(), stopping.clone())
+                    .await
+                    .map(|value| (value, None))
+            }
+            Task::Transcribe { .. } => transcribe_job(&runtime, &job, stopping.clone()).await,
+        };
+        loop {
+            if *stopping.borrow() {
+                return;
+            }
+            let id = job.id.clone();
+            let result = result.clone();
+            match database(runtime.clone(), move |store| {
+                let (result, cache) = match result {
+                    Ok((value, cache)) => (Ok(value), cache),
+                    Err(error) => (Err(error), None),
+                };
+                match store.finish_job_cached(&id, result, cache.as_ref()) {
+                    Err(Error::TranscriptionCacheCorrupt) => {
+                        store.finish_job(&id, Err("transcription_cache_corrupt".into()))
+                    }
+                    other => other,
+                }
+            })
+            .await
+            {
+                Ok(_) => break,
+                Err(_) => eprintln!("job_completion_save_failed"),
+            }
+            tokio::select! {_=tokio::time::sleep(Duration::from_secs(1))=>{},_=stopping.changed()=>return}
+        }
+    }
+}
+
+async fn local_only(
+    headers: HeaderMap,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let host = headers
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let allowed = host
+        .strip_prefix("127.0.0.1:")
+        .or_else(|| host.strip_prefix("localhost:"))
+        .is_some_and(|port| port.parse::<u16>().is_ok());
+    let foreign_origin = headers
+        .get("origin")
+        .is_some_and(|origin| origin.to_str().ok() != Some(&format!("http://{host}")));
+    let foreign_fetch = headers
+        .get("sec-fetch-site")
+        .is_some_and(|v| v == "cross-site");
+    if !allowed || foreign_origin || foreign_fetch {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error":"local_origin_required"})),
+        )
+            .into_response();
+    }
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(
+        "cache-control",
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    response
+}
+
+/// Transcription tools shipped beside the executable in `tools/`, so a fresh install works
+/// without environment variables. All three must exist; the largest model wins.
+fn bundled_asr_tools() -> Option<(PathBuf, PathBuf, PathBuf)> {
+    let tools = std::env::current_exe().ok()?.parent()?.join("tools");
+    let exe = if cfg!(windows) { ".exe" } else { "" };
+    let engine = tools.join("whisper").join(format!("whisper-cli{exe}"));
+    let ffmpeg = tools.join("ffmpeg").join(format!("ffmpeg{exe}"));
+    let model = std::fs::read_dir(tools.join("models"))
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("ggml-") && n.ends_with(".bin"))
+        })
+        .max_by_key(|p| p.metadata().map(|m| m.len()).unwrap_or(0))?;
+    (engine.is_file() && ffmpeg.is_file()).then_some((engine, model, ffmpeg))
+}
+
+async fn serve(
+    picker: mpsc::Sender<PickCommand>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Separate state is required during migration; never open the live Python state implicitly.
+    let input = PathBuf::from(std::env::var("EDITORKRAB_RUST_STATE")?);
+    let state_path = if input.exists() {
+        input.canonicalize()?
+    } else {
+        input
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(std::path::Path::new("."))
+            .canonicalize()?
+            .join(input.file_name().ok_or("state file name missing")?)
+    };
+    let mut lock_path = state_path.as_os_str().to_os_string();
+    lock_path.push(".lock");
+    let instance_lock = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock_path)?;
+    instance_lock.try_lock()?;
+    let mut store = Store::open(&state_path)?;
+    store.initialize_jobs()?;
+    store.recover_jobs()?;
+    let (stopping, _) = watch::channel(false);
+    let asr = match (
+        std::env::var("EDITORKRAB_WHISPER"),
+        std::env::var("EDITORKRAB_WHISPER_MODEL"),
+        std::env::var("EDITORKRAB_FFMPEG"),
+    ) {
+        (Err(_), Err(_), Err(_)) => match bundled_asr_tools() {
+            None => None,
+            Some((engine, model, ffmpeg)) => {
+                let config = AsrConfig {
+                    whisper: engine,
+                    model,
+                    ffmpeg,
+                    workspace: PathBuf::from(format!("{}.asr-work", state_path.display())),
+                    timeout: Duration::from_secs(3600),
+                    threads: 2,
+                };
+                let capture = config.clone();
+                let settings =
+                    tokio::task::spawn_blocking(move || AsrSettings::read(&capture)).await??;
+                if !settings.valid() {
+                    return Err("invalid bundled transcription tools".into());
+                }
+                Some(Arc::new((config, settings)))
+            }
+        },
+        (Ok(engine), Ok(model), Ok(ffmpeg)) => {
+            let config = AsrConfig {
+                whisper: engine.into(),
+                model: model.into(),
+                ffmpeg: ffmpeg.into(),
+                workspace: PathBuf::from(format!("{}.asr-work", state_path.display())),
+                timeout: Duration::from_secs(3600),
+                threads: 2,
+            };
+            let capture = config.clone();
+            let settings =
+                tokio::task::spawn_blocking(move || AsrSettings::read(&capture)).await??;
+            if !settings.valid() {
+                return Err("invalid transcription configuration".into());
+            }
+            Some(Arc::new((config, settings)))
+        }
+        _ => return Err(
+            "configure EDITORKRAB_WHISPER, EDITORKRAB_WHISPER_MODEL and EDITORKRAB_FFMPEG together"
+                .into(),
+        ),
+    };
+    let runtime = Runtime {
+        store: Arc::new(Mutex::new(store)),
+        stopping,
+        asr,
+        picker,
+        picker_busy: Arc::new(AtomicBool::new(false)),
+        assets: PathBuf::from(format!(
+            "{}.assets",
+            state_path.to_str().ok_or("state path is not Unicode")?
+        )),
+    };
+    let ffprobe =
+        PathBuf::from(std::env::var("EDITORKRAB_FFPROBE").unwrap_or_else(|_| "ffprobe".into()));
+    let app = Router::new()
+        .route(
+            "/",
+            get(|| async { Html(include_str!("../../design/rust-flow/index.html")) }),
+        )
+        .route(
+            "/flow.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/flow.js"),
+                )
+            }),
+        )
+        .route(
+            "/autosave.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/autosave.js"),
+                )
+            }),
+        )
+        .route(
+            "/jobs.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/jobs.js"),
+                )
+            }),
+        )
+        .route(
+            "/uploads.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/uploads.js"),
+                )
+            }),
+        )
+        .route(
+            "/text-style.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/text-style.js"),
+                )
+            }),
+        )
+        .route("/api/v1/drafts/{project}", get(read).put(save))
+        .route("/api/v1/drafts/{project}/copy", post(copy_draft))
+        .route(
+            "/text-qc.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/text-qc.js"),
+                )
+            }),
+        )
+        .route(
+            "/transcription.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/transcription.js"),
+                )
+            }),
+        )
+        .route(
+            "/api/v1/transcription/settings",
+            get(|State(runtime): State<Runtime>| async move {
+                Json(runtime.asr.as_ref().map(|v| v.1.clone()))
+            }),
+        )
+        .route(
+            "/api/v1/projects/{project}/transcription",
+            post(start_transcription),
+        )
+        .route(
+            "/api/v1/projects/{project}/sources/{source_id}/audio",
+            get(source_audio),
+        )
+        .route(
+            "/api/v1/projects/{project}/sources/{source_id}/pauses",
+            get(source_pauses),
+        )
+        .route("/api/v1/spelling/learn", post(spelling_learn))
+        .route("/api/v1/spelling/fix", post(spelling_fix))
+        .route("/api/v1/text-qc", post(text_qc))
+        .route("/api/v1/sources/pick", post(pick_sources))
+        .route("/api/v1/sources/uploads", post(begin_upload))
+        .route("/api/v1/sources/uploads/{id}", post(upload_chunk))
+        .route("/api/v1/sources/uploads/{id}/finish", post(finish_upload))
+        .route("/favicon.ico", get(|| async { StatusCode::NO_CONTENT }))
+        .route(
+            "/api/v1/projects/{project}/jobs",
+            get(list_jobs).post(create_jobs),
+        )
+        .route("/api/v1/projects/{project}/events", get(events))
+        .route("/api/v1/jobs/{id}/cancel", post(cancel_job))
+        .route("/api/v1/jobs/{id}/retry", post(retry_job))
+        .layer(axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024))
+        .layer(axum::middleware::from_fn(local_only))
+        .with_state(runtime.clone());
+    let port: u16 = std::env::var("EDITORKRAB_RUST_PORT")
+        .unwrap_or_else(|_| "8871".into())
+        .parse()?;
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).await?;
+    println!("EditorKrab Rust migration preview: http://127.0.0.1:{port}");
+    let work = tokio::spawn(worker(runtime.clone(), ffprobe));
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            let _ = tokio::signal::ctrl_c().await;
+            let _ = runtime.stopping.send(true);
+        })
+        .await?;
+    work.await?;
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let (picker, requests) = mpsc::channel();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    let server = runtime.spawn(serve(picker));
+    while !server.is_finished() {
+        match requests.recv_timeout(Duration::from_millis(100)) {
+            Ok(command) => editorkrab::sources::dispatch(command),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
+    runtime.block_on(server)??;
+    Ok(())
+}
