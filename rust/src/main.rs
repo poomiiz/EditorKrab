@@ -24,6 +24,7 @@ use std::{convert::Infallible, path::PathBuf, time::Duration};
 use tokio::sync::watch;
 
 type Shared = Arc<Mutex<Store>>;
+type Asr = Arc<(AsrConfig, AsrSettings)>;
 type ApiError = (StatusCode, Json<Value>);
 
 #[derive(Clone)]
@@ -33,7 +34,33 @@ struct Runtime {
     picker: mpsc::Sender<PickCommand>,
     picker_busy: Arc<AtomicBool>,
     assets: PathBuf,
-    asr: Option<Arc<(AsrConfig, AsrSettings)>>,
+    // swapped in place when the in-app download finishes, so no restart is needed
+    asr: Arc<std::sync::RwLock<Option<Asr>>>,
+    setup: Arc<AsrSetup>,
+    download: Arc<Mutex<Download>>,
+}
+impl Runtime {
+    fn asr(&self) -> Option<Asr> {
+        self.asr.read().ok().and_then(|v| v.clone())
+    }
+}
+
+/// Where the app looks for, and downloads, its speech tools.
+struct AsrSetup {
+    state_path: PathBuf,
+    data: PathBuf,
+    /// test-only override of the model to download (EDITORKRAB_DOWNLOAD_MANIFEST)
+    model: Option<editorkrab::asr_download::Item>,
+}
+#[derive(Clone, Default, serde::Serialize)]
+struct Download {
+    state: &'static str,
+    received: u64,
+    total: u64,
+    bytes_per_second: u64,
+    error: Option<String>,
+    #[serde(skip)]
+    cancel: Option<watch::Sender<bool>>,
 }
 
 async fn begin_upload(
@@ -213,7 +240,7 @@ async fn create_jobs(
 ) -> Result<Json<Vec<Job>>, ApiError> {
     for item in &body.items {
         if let Task::Transcribe { settings, .. } = &item.task {
-            let configured = runtime.asr.as_ref().ok_or((
+            let configured = runtime.asr().ok_or((
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Json(json!({"error":"transcription_not_configured"})),
             ))?;
@@ -243,14 +270,10 @@ async fn start_transcription(
     Path(project): Path<String>,
     Json(body): Json<editorkrab::transcription_jobs::StartRequest>,
 ) -> Result<Json<Vec<Job>>, ApiError> {
-    let configured = runtime
-        .asr
-        .as_ref()
-        .ok_or((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({"error":"transcription_not_configured"})),
-        ))?
-        .clone();
+    let configured = runtime.asr().ok_or((
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({"error":"transcription_not_configured"})),
+    ))?;
     if body.settings != configured.1 {
         return Err((
             StatusCode::CONFLICT,
@@ -367,16 +390,12 @@ async fn source_pauses(
     if query.end_ms <= query.start_ms || query.end_ms - query.start_ms > 3_600_000 {
         return Err(failure(Error::InvalidInput));
     }
-    let ffmpeg = runtime
-        .asr
-        .as_ref()
-        .map(|v| v.0.ffmpeg.clone())
-        .ok_or_else(|| {
-            (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"error":"transcription_not_configured"})),
-            )
-        })?;
+    let ffmpeg = runtime.asr().map(|v| v.0.ffmpeg.clone()).ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error":"transcription_not_configured"})),
+        )
+    })?;
     let store = runtime.store.clone();
     let path = tokio::task::spawn_blocking(move || -> Result<PathBuf, ApiError> {
         let store = store.lock().map_err(|_| failure(Error::Unavailable))?;
@@ -526,11 +545,8 @@ async fn transcribe_job(
     else {
         return Err("invalid_transcription_task".into());
     };
-    let (config, _) = runtime
-        .asr
-        .as_ref()
-        .ok_or("transcription_not_configured")?
-        .as_ref();
+    let asr = runtime.asr().ok_or("transcription_not_configured")?;
+    let (config, _) = asr.as_ref();
     let (cancel, signal) = watch::channel(false);
     let (progress, mut stages) = watch::channel("verifying");
     let task = editorkrab::native_asr::run_cached(
@@ -653,15 +669,31 @@ async fn local_only(
     response
 }
 
-/// Transcription tools shipped beside the executable in `tools/`, so a fresh install works
-/// without environment variables. All three must exist; the largest model wins.
-fn bundled_asr_tools() -> Option<(PathBuf, PathBuf, PathBuf)> {
-    let tools = std::env::current_exe().ok()?.parent()?.join("tools");
+/// Transcription tools shipped beside the executable in `tools/`, or downloaded by the app into its
+/// data folder, so a fresh install works without environment variables. The largest model wins.
+struct Found {
+    engine: Option<PathBuf>,
+    model: Option<PathBuf>,
+    ffmpeg: Option<PathBuf>,
+}
+fn find_asr_tools(data: &std::path::Path) -> Found {
     let exe = if cfg!(windows) { ".exe" } else { "" };
-    let engine = tools.join("whisper").join(format!("whisper-cli{exe}"));
-    let ffmpeg = tools.join("ffmpeg").join(format!("ffmpeg{exe}"));
-    let model = std::fs::read_dir(tools.join("models"))
-        .ok()?
+    let roots: Vec<PathBuf> = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("tools")))
+        .into_iter()
+        .chain([data.to_path_buf()])
+        .collect();
+    let first = |folder: &str, name: &str| {
+        roots
+            .iter()
+            .map(|r| r.join(folder).join(format!("{name}{exe}")))
+            .find(|p| p.is_file())
+    };
+    let model = roots
+        .iter()
+        .filter_map(|r| std::fs::read_dir(r.join("models")).ok())
+        .flatten()
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| {
@@ -669,8 +701,220 @@ fn bundled_asr_tools() -> Option<(PathBuf, PathBuf, PathBuf)> {
                 .and_then(|n| n.to_str())
                 .is_some_and(|n| n.starts_with("ggml-") && n.ends_with(".bin"))
         })
-        .max_by_key(|p| p.metadata().map(|m| m.len()).unwrap_or(0))?;
-    (engine.is_file() && ffmpeg.is_file()).then_some((engine, model, ffmpeg))
+        .max_by_key(|p| p.metadata().map(|m| m.len()).unwrap_or(0));
+    Found {
+        engine: first("whisper", "whisper-cli"),
+        model,
+        ffmpeg: first("ffmpeg", "ffmpeg"),
+    }
+}
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
+async fn configure_asr(
+    whisper: PathBuf,
+    model: PathBuf,
+    ffmpeg: PathBuf,
+    state_path: &std::path::Path,
+) -> Result<Asr, BoxError> {
+    let config = AsrConfig {
+        whisper,
+        model,
+        ffmpeg,
+        workspace: PathBuf::from(format!("{}.asr-work", state_path.display())),
+        timeout: Duration::from_secs(3600),
+        threads: 2,
+    };
+    let capture = config.clone();
+    let settings = tokio::task::spawn_blocking(move || AsrSettings::read(&capture)).await??;
+    if !settings.valid() {
+        return Err("invalid transcription tools".into());
+    }
+    Ok(Arc::new((config, settings)))
+}
+fn data_dir() -> PathBuf {
+    if let Ok(path) = std::env::var("EDITORKRAB_DATA") {
+        return path.into();
+    }
+    let base = std::env::var("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+        .unwrap_or_else(|_| PathBuf::from("."));
+    base.join("EditorKrab")
+}
+
+/// What the in-app download still has to fetch; an error names what it cannot fetch.
+fn download_plan(setup: &AsrSetup) -> Result<Vec<editorkrab::asr_download::Item>, String> {
+    let found = find_asr_tools(&setup.data);
+    if found.ffmpeg.is_none() {
+        return Err("ffmpeg_missing".into());
+    }
+    if found.engine.is_none() && !cfg!(windows) {
+        return Err("runtime_missing".into());
+    }
+    let mut items =
+        editorkrab::asr_download::plan(&setup.data, found.engine.is_none(), found.model.is_none());
+    if let Some(model) = &setup.model {
+        for item in items.iter_mut().filter(|i| !i.unzip) {
+            *item = model.clone();
+        }
+    }
+    Ok(items)
+}
+fn received(items: &[editorkrab::asr_download::Item]) -> u64 {
+    items
+        .iter()
+        .map(|i| match std::fs::metadata(i.part()) {
+            Ok(m) => m.len().min(i.size),
+            Err(_) if i.dest.exists() => i.size,
+            Err(_) => 0,
+        })
+        .sum()
+}
+fn download_error(code: String) -> ApiError {
+    let body = match code.strip_prefix("disk_space:") {
+        Some(rest) => {
+            let (drive, needed) = rest.rsplit_once(':').unwrap_or((rest, "0"));
+            json!({"error":"disk_space","drive":drive,"needed_bytes":needed.parse::<u64>().unwrap_or(0)})
+        }
+        None => json!({ "error": code }),
+    };
+    (StatusCode::CONFLICT, Json(body))
+}
+async fn download_status(State(runtime): State<Runtime>) -> Json<Download> {
+    let mut status = runtime
+        .download
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    if runtime.asr().is_some() {
+        status.state = "done";
+    } else if status.state.is_empty() || status.state == "idle" {
+        let setup = runtime.setup.clone();
+        match tokio::task::spawn_blocking(move || download_plan(&setup).map(|p| (received(&p), p)))
+            .await
+        {
+            Ok(Ok((have, plan))) => {
+                status.state = "idle";
+                status.total = plan.iter().map(|i| i.size).sum();
+                status.received = have;
+            }
+            Ok(Err(code)) => {
+                status.state = "failed";
+                status.error = Some(code);
+            }
+            Err(e) => {
+                status.state = "failed";
+                status.error = Some(e.to_string());
+            }
+        }
+    }
+    Json(status)
+}
+async fn start_download(State(runtime): State<Runtime>) -> Result<Json<Download>, ApiError> {
+    if runtime.asr().is_some() {
+        return Ok(download_status(State(runtime)).await);
+    }
+    let setup = runtime.setup.clone();
+    let items = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        let items = download_plan(&setup)?;
+        let free = editorkrab::asr_download::free_space(&setup.data)?;
+        let drive = editorkrab::asr_download::drive(&setup.data);
+        editorkrab::asr_download::check_space(free, &items, &drive)?;
+        Ok(items)
+    })
+    .await
+    .map_err(|e| download_error(e.to_string()))?
+    .map_err(download_error)?;
+    let (cancel, signal) = watch::channel(false);
+    {
+        let mut status = runtime.download.lock().unwrap_or_else(|e| e.into_inner());
+        if status.state == "running" {
+            return Ok(Json(status.clone()));
+        }
+        *status = Download {
+            state: "running",
+            total: items.iter().map(|i| i.size).sum(),
+            received: received(&items),
+            cancel: Some(cancel),
+            ..Download::default()
+        };
+    }
+    tokio::spawn(run_download(runtime.clone(), items, signal));
+    Ok(download_status(State(runtime)).await)
+}
+async fn cancel_download(State(runtime): State<Runtime>) -> Json<Download> {
+    if let Some(cancel) = &runtime
+        .download
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .cancel
+    {
+        let _ = cancel.send(true);
+    }
+    download_status(State(runtime)).await
+}
+async fn run_download(
+    runtime: Runtime,
+    items: Vec<editorkrab::asr_download::Item>,
+    signal: watch::Receiver<bool>,
+) {
+    let ticker = {
+        let (runtime, items) = (runtime.clone(), items.clone());
+        tokio::spawn(async move {
+            let mut last = (std::time::Instant::now(), received(&items));
+            loop {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                let now = (std::time::Instant::now(), received(&items));
+                let rate = now.1.saturating_sub(last.1) as f64
+                    / now.0.duration_since(last.0).as_secs_f64().max(0.001);
+                let mut status = runtime.download.lock().unwrap_or_else(|e| e.into_inner());
+                status.received = now.1;
+                status.bytes_per_second = rate as u64;
+                last = now;
+            }
+        })
+    };
+    let curl = if cfg!(windows) {
+        PathBuf::from(std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into()))
+            .join("System32")
+            .join("curl.exe")
+    } else {
+        PathBuf::from("curl")
+    };
+    let mut outcome = Ok(());
+    for item in &items {
+        if let Err(e) = editorkrab::asr_download::fetch(item, &curl, signal.clone()).await {
+            outcome = Err(e);
+            break;
+        }
+    }
+    if outcome.is_ok() {
+        let found = find_asr_tools(&runtime.setup.data);
+        outcome = match (found.engine, found.model, found.ffmpeg) {
+            (Some(engine), Some(model), Some(ffmpeg)) => {
+                match configure_asr(engine, model, ffmpeg, &runtime.setup.state_path).await {
+                    Ok(asr) => {
+                        *runtime.asr.write().unwrap_or_else(|e| e.into_inner()) = Some(asr);
+                        Ok(())
+                    }
+                    Err(e) => Err(format!("invalid_tools:{e}")),
+                }
+            }
+            _ => Err("invalid_tools".into()),
+        };
+    }
+    ticker.abort();
+    let mut status = runtime.download.lock().unwrap_or_else(|e| e.into_inner());
+    status.received = received(&items);
+    status.bytes_per_second = 0;
+    status.cancel = None;
+    match outcome {
+        Ok(()) => status.state = "done",
+        Err(e) if e == "cancelled" => status.state = "cancelled",
+        Err(e) => {
+            status.state = "failed";
+            status.error = Some(e);
+        }
+    }
 }
 
 async fn serve(
@@ -701,57 +945,43 @@ async fn serve(
     store.initialize_jobs()?;
     store.recover_jobs()?;
     let (stopping, _) = watch::channel(false);
+    let data = data_dir();
     let asr = match (
         std::env::var("EDITORKRAB_WHISPER"),
         std::env::var("EDITORKRAB_WHISPER_MODEL"),
         std::env::var("EDITORKRAB_FFMPEG"),
     ) {
-        (Err(_), Err(_), Err(_)) => match bundled_asr_tools() {
-            None => None,
-            Some((engine, model, ffmpeg)) => {
-                let config = AsrConfig {
-                    whisper: engine,
-                    model,
-                    ffmpeg,
-                    workspace: PathBuf::from(format!("{}.asr-work", state_path.display())),
-                    timeout: Duration::from_secs(3600),
-                    threads: 2,
-                };
-                let capture = config.clone();
-                let settings =
-                    tokio::task::spawn_blocking(move || AsrSettings::read(&capture)).await??;
-                if !settings.valid() {
-                    return Err("invalid bundled transcription tools".into());
-                }
-                Some(Arc::new((config, settings)))
-            }
+        (Err(_), Err(_), Err(_)) => match find_asr_tools(&data) {
+            Found {
+                engine: Some(engine),
+                model: Some(model),
+                ffmpeg: Some(ffmpeg),
+            } => Some(configure_asr(engine, model, ffmpeg, &state_path).await?),
+            _ => None,
         },
         (Ok(engine), Ok(model), Ok(ffmpeg)) => {
-            let config = AsrConfig {
-                whisper: engine.into(),
-                model: model.into(),
-                ffmpeg: ffmpeg.into(),
-                workspace: PathBuf::from(format!("{}.asr-work", state_path.display())),
-                timeout: Duration::from_secs(3600),
-                threads: 2,
-            };
-            let capture = config.clone();
-            let settings =
-                tokio::task::spawn_blocking(move || AsrSettings::read(&capture)).await??;
-            if !settings.valid() {
-                return Err("invalid transcription configuration".into());
-            }
-            Some(Arc::new((config, settings)))
+            Some(configure_asr(engine.into(), model.into(), ffmpeg.into(), &state_path).await?)
         }
         _ => return Err(
             "configure EDITORKRAB_WHISPER, EDITORKRAB_WHISPER_MODEL and EDITORKRAB_FFMPEG together"
                 .into(),
         ),
     };
+    // test-only: download this model item instead of the pinned large-v3
+    let model = match std::env::var("EDITORKRAB_DOWNLOAD_MANIFEST") {
+        Ok(path) => Some(serde_json::from_slice(&std::fs::read(path)?)?),
+        Err(_) => None,
+    };
     let runtime = Runtime {
         store: Arc::new(Mutex::new(store)),
         stopping,
-        asr,
+        asr: Arc::new(std::sync::RwLock::new(asr)),
+        setup: Arc::new(AsrSetup {
+            state_path: state_path.clone(),
+            data,
+            model,
+        }),
+        download: Arc::new(Mutex::new(Download::default())),
         picker,
         picker_busy: Arc::new(AtomicBool::new(false)),
         assets: PathBuf::from(format!(
@@ -834,8 +1064,16 @@ async fn serve(
         .route(
             "/api/v1/transcription/settings",
             get(|State(runtime): State<Runtime>| async move {
-                Json(runtime.asr.as_ref().map(|v| v.1.clone()))
+                Json(runtime.asr().map(|v| v.1.clone()))
             }),
+        )
+        .route(
+            "/api/v1/transcription/download",
+            get(download_status).post(start_download),
+        )
+        .route(
+            "/api/v1/transcription/download/cancel",
+            post(cancel_download),
         )
         .route(
             "/api/v1/projects/{project}/transcription",

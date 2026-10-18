@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import functools
+import hashlib
+import http.server
 import json
+import threading
 import os
 import shutil
 import socket
@@ -26,8 +30,7 @@ def main():
     engine = native / "whisper-v1.9.2-win-x64" / "Release" / "whisper-cli.exe"
     model = native / "ggml-tiny.bin"
     original = native / "jfk.wav"
-    required = (EXE, original) if args.unconfigured else (EXE, engine, model, original)
-    for path in required:
+    for path in (EXE, engine, model, original):
         assert path.is_file(), f"Fixture prerequisite missing: {path}"
     ffmpeg = shutil.which("ffmpeg")
     assert ffmpeg and shutil.which("ffprobe"), "Native FFmpeg/ffprobe required"
@@ -56,9 +59,29 @@ def main():
     native_env = {**os.environ, "EDITORKRAB_RUST_STATE": str(state), "EDITORKRAB_RUST_PORT": str(number)}
     for key in ("EDITORKRAB_WHISPER", "EDITORKRAB_WHISPER_MODEL", "EDITORKRAB_FFMPEG"):
         native_env.pop(key, None)
+    # The app also finds tools in its data folder; keep that inside the fixture, never the real one.
+    data = folder / "data"
+    native_env["EDITORKRAB_DATA"] = str(data)
+    native_env.pop("EDITORKRAB_DOWNLOAD_MANIFEST", None)
+    model_server = None
     if not args.unconfigured:
         native_env.update(EDITORKRAB_WHISPER=str(engine), EDITORKRAB_WHISPER_MODEL=str(model),
                           EDITORKRAB_FFMPEG=ffmpeg)
+    else:
+        # The in-app download gets the tiny model from a local server instead of 3.1 GB of large-v3;
+        # the runtime and ffmpeg are already in place, as an installed app would have them.
+        shutil.copytree(engine.parent, data / "whisper")
+        (data / "ffmpeg").mkdir(parents=True)
+        shutil.copyfile(ffmpeg, data / "ffmpeg" / Path(ffmpeg).name)
+        handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(model.parent))
+        model_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=model_server.serve_forever, daemon=True).start()
+        manifest = folder / "download-manifest.json"
+        manifest.write_text(json.dumps(dict(
+            url=f"http://127.0.0.1:{model_server.server_address[1]}/{model.name}",
+            size=model.stat().st_size, sha256=hashlib.sha256(model.read_bytes()).hexdigest(),
+            dest=str(data / "models" / model.name))), encoding="utf-8")
+        native_env["EDITORKRAB_DOWNLOAD_MANIFEST"] = str(manifest)
     process = None
     try:
         process = subprocess.Popen([str(EXE)], env=native_env, stdout=subprocess.PIPE,
@@ -79,7 +102,7 @@ def main():
         assert status == 200 and saved["revision"] == 1, (status, saved)
         evidence = dict(base=base, project=PROJECT, source=selected, silent_source=selected_silent,
                         url=f"{base}/?project={PROJECT}", state=str(state), server_pid=process.pid,
-                        integration_fixture_only=True,
+                        integration_fixture_only=True, download=model_server is not None,
                         model="not configured" if args.unconfigured else "multilingual tiny; not production")
         evidence_name = "transcription-browser-unconfigured.json" if args.unconfigured else "transcription-browser-fixture.json"
         (ROOT / "output" / evidence_name).write_text(
@@ -93,6 +116,8 @@ def main():
     finally:
         if process is not None:
             stop(process)
+        if model_server is not None:
+            model_server.shutdown()
 
 
 if __name__ == "__main__":

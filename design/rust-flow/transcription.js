@@ -8,7 +8,7 @@ export function validTranscriptEdits(value){
  return Array.isArray(value)&&value.length<=10000&&new Set(value.map(v=>JSON.stringify([v?.job_id,v?.segment_id]))).size===value.length&&value.every(v=>v&&Object.keys(v).length===5&&['job_id','segment_id'].every(k=>typeof v[k]==='string'&&v[k].length>0&&v[k].length<=256&&!/[\u0000-\u001f\u007f-\u009f]/.test(v[k]))&&/^[a-fA-F0-9]{64}$/.test(v.source_sha256)&&['text','original_text'].every(k=>typeof v[k]==='string'&&v[k].length<=2000));
 }
 export function createTranscription({project,read,state,writeEdit,changed}){
- const jobs=new Map();let settings=null,configuration='loading',busy=false,stopStarting=false,page=0,chosen='',rowsKey='',audio,stopAt=0;
+ const jobs=new Map();let settings=null,configuration='loading',download=null,downloadError='',downloadTimer=0,busy=false,stopStarting=false,page=0,chosen='',rowsKey='',audio,stopAt=0;
  let settingsGeneration=0,notice='',playing=null;const suggestions=new Map(),fixAsked=new Set();
  const failed=new Set(['failed','cancelled']);
  const messages={transcription_not_configured:'ยังไม่ได้ติดตั้งตัวถอดเสียง',transcription_settings_changed:'ตัวถอดเสียงเปลี่ยนแล้ว กดลองอีกครั้ง',source_changed:'ไฟล์เปลี่ยนแล้ว เลือกไฟล์ใหม่',transcription_source_changed:'ไฟล์เปลี่ยนแล้ว เลือกไฟล์ใหม่',draft_conflict:'งานเปลี่ยนแล้ว รอให้บันทึกก่อนลองใหม่',revision_conflict:'งานเปลี่ยนแล้ว รอให้บันทึกก่อนลองใหม่',transcription_chunk_limit_exceeded:'ไฟล์ยาวเกิน 500 นาที แบ่งไฟล์ก่อนถอดเสียง',transcription_cache_corrupt:'ข้อความที่ถอดไว้เสีย ถอดเสียงใหม่'};
@@ -90,15 +90,15 @@ export function createTranscription({project,read,state,writeEdit,changed}){
   const waiting=read().files.filter(f=>!probe(f)).length,silent=read().files.length-waiting-files.length;
   $('transcribe').disabled=!editable||!ready||busy||configuration!=='ready'||!files.length||running.length>0;
   $('transcribe').textContent=busy?'กำลังเตรียมงาน':complete()?'ใช้ข้อความที่ถอดไว้':'ถอดเสียง';
-  $('transcribe').classList.toggle('primary',!$('transcribe').disabled&&!complete());$('pick').classList.toggle('primary',$('transcribe').disabled||complete());
+  $('transcribe').classList.toggle('primary',!$('transcribe').disabled&&!complete());$('pick').classList.toggle('primary',configuration!=='missing'&&($('transcribe').disabled||complete()));
   $('cancelTranscription').hidden=!running.length;$('cancelTranscription').disabled=!editable;
   $('retryTranscription').hidden=!retry.length;$('retryTranscription').disabled=!editable||!ready||busy||!!running.length;
   $('reloadAsr').hidden=configuration==='ready'||configuration==='loading';$('reloadAsr').disabled=busy;
-  $('transcribeSetup').hidden=configuration!=='missing';
+  paintDownload();
   $('transcribeError').textContent=notice;$('transcribeError').hidden=!notice;
   const phases={verifying:'กำลังตรวจไฟล์',extracting:'กำลังเตรียมเสียง',transcribing:'กำลังถอดเสียง',cache:'กำลังเปิดข้อความที่ถอดไว้'};
   $('transcribeState').textContent=busy?'เตรียมงาน':running.length?'กำลังทำ':complete()?'ถอดครบแล้ว':configuration==='loading'?'กำลังตรวจ':configuration==='ready'?'พร้อม':'ยังใช้ไม่ได้';
-  $('transcribeHint').textContent=configuration==='missing'?'ยังไม่ได้ติดตั้งตัวถอดเสียง':configuration==='error'?'ตรวจตัวถอดเสียงไม่ได้ กดลองอีกครั้ง':configuration==='loading'?'กำลังเตรียม':!read().files.length?'เลือกไฟล์ที่มีเสียงก่อน':!files.length?'รออ่านไฟล์ และตรวจว่ามีเสียง':!ready?'รอให้บันทึกงานสำเร็จก่อนเริ่ม':running.length?(phases[running.find(j=>j.status==='running')?.step] || 'รอคิว')+` · สำเร็จ ${completed}/${all.length} ช่วง`:all.length?`สำเร็จ ${completed}/${all.length} ช่วง`+(waiting?' · มีไฟล์ที่ยังตรวจไม่สำเร็จ':'')+(silent?` · ข้าม ${silent} ไฟล์ไม่มีเสียง`:''):'เลือกไฟล์ที่มีเสียงก่อน';
+  $('transcribeHint').textContent=configuration==='missing'?'ดาวน์โหลดตัวถอดเสียงก่อนใช้ครั้งแรก':configuration==='error'?'ตรวจตัวถอดเสียงไม่ได้ กดลองอีกครั้ง':configuration==='loading'?'กำลังเตรียม':!read().files.length?'เลือกไฟล์ที่มีเสียงก่อน':!files.length?'รออ่านไฟล์ และตรวจว่ามีเสียง':!ready?'รอให้บันทึกงานสำเร็จก่อนเริ่ม':running.length?(phases[running.find(j=>j.status==='running')?.step] || 'รอคิว')+` · สำเร็จ ${completed}/${all.length} ช่วง`:all.length?`สำเร็จ ${completed}/${all.length} ช่วง`+(waiting?' · มีไฟล์ที่ยังตรวจไม่สำเร็จ':'')+(silent?` · ข้าม ${silent} ไฟล์ไม่มีเสียง`:''):'เลือกไฟล์ที่มีเสียงก่อน';
   const progress=$('transcribeProgress');progress.hidden=!all.length&&!busy;if(all.length){progress.max=all.length;progress.value=completed;}else progress.removeAttribute('value');
   const selected=chosen;if(!files.some(f=>f.source_id===chosen))chosen=files[0]?.source_id || '';
   if(selected!==chosen){page=0;rowsKey='';clearAudio();}
@@ -110,7 +110,7 @@ export function createTranscription({project,read,state,writeEdit,changed}){
   $('transcriptPacketHint').textContent=complete()?'ไฟล์เล็ก มีแค่ข้อความ ไม่มีวิดีโอ':'ถอดเสียงเสร็จแล้วจึงดาวน์โหลดได้';
   changed();
  }
- async function loadSettings(){const generation=++settingsGeneration;configuration='loading';refresh();try{const response=await fetch('/api/v1/transcription/settings',{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error('settings');const value=await response.json();if(generation!==settingsGeneration)return;if(value&&(!Number.isInteger(value.threads)||!['engine','model','ffmpeg'].every(key=>typeof value[key]?.path==='string'&&/^[a-f0-9]{64}$/i.test(value[key]?.sha256))))throw Error('settings');settings=value;configuration=value?'ready':'missing';}catch(_){if(generation!==settingsGeneration)return;configuration='error';}refresh();}
+ async function loadSettings(){const generation=++settingsGeneration;configuration='loading';refresh();try{const response=await fetch('/api/v1/transcription/settings',{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error('settings');const value=await response.json();if(generation!==settingsGeneration)return;if(value&&(!Number.isInteger(value.threads)||!['engine','model','ffmpeg'].every(key=>typeof value[key]?.path==='string'&&/^[a-f0-9]{64}$/i.test(value[key]?.sha256))))throw Error('settings');settings=value;configuration=value?'ready':'missing';if(!value&&!download)queueMicrotask(pollDownload);}catch(_){if(generation!==settingsGeneration)return;configuration='error';}refresh();}
  $('transcribe').onclick=async()=>{
   if($('transcribe').disabled)return;busy=true;stopStarting=false;notice='';const snapshot=structuredClone(read()),saved=state(),configured=structuredClone(settings);refresh();
   try{
@@ -127,6 +127,31 @@ export function createTranscription({project,read,state,writeEdit,changed}){
  $('cancelTranscription').onclick=async()=>{stopStarting=true;notice='';try{for(const job of active()){const next=await request(`/api/v1/jobs/${encodeURIComponent(job.id)}/cancel`,{});jobs.set(next.id,next);}}catch(_){notice='ส่งคำสั่งหยุดไม่สำเร็จ ตรวจสถานะก่อนลองใหม่';}refresh();};
  $('retryTranscription').onclick=async()=>{busy=true;notice='';try{for(const job of eligible().flatMap(chunks).filter(j=>j&&failed.has(j.status))){const next=await request(`/api/v1/jobs/${encodeURIComponent(job.id)}/retry`,{});jobs.set(next.id,next);}}catch(_){notice='ลองใหม่ไม่ได้ ตรวจไฟล์วิดีโอ';}finally{busy=false;refresh();}};
  $('reloadAsr').onclick=loadSettings;
+ // First run: fetch the speech model (and runtime) in the app, then switch on without a restart.
+ const gb=n=>(n/1e9).toFixed(1)+' GB',mb=n=>(n/1e6).toFixed(1)+' MB';
+ const downloadMessages={ffmpeg_missing:'ไม่พบ ffmpeg ในโฟลเดอร์แอป ติดตั้งแอปใหม่แล้วลองอีกครั้ง',runtime_missing:'เครื่องนี้ต้องติดตั้งตัวถอดเสียงเอง',checksum_mismatch:'ไฟล์ที่ได้ไม่ตรงต้นฉบับ กดลองต่อเพื่อโหลดใหม่',curl_missing:'เครื่องนี้ไม่มี curl สำหรับดาวน์โหลด',invalid_tools:'ไฟล์ที่โหลดมาใช้ถอดเสียงไม่ได้'};
+ function downloadText(error){if(!error)return '';if(error.error==='disk_space')return `พื้นที่ไดรฟ์ ${error.drive} ไม่พอ ต้องการอีก ${gb(error.needed_bytes)}`;const code=String(error.error||error).split(':')[0];return code==='network'?'เชื่อมต่อไม่ได้ ตรวจอินเทอร์เน็ตแล้วกดลองต่อ':downloadMessages[code]||'ดาวน์โหลดไม่สำเร็จ กดลองต่อ';}
+ function paintDownload(){
+  const show=configuration==='missing'&&!!download,running=download?.state==='running',resumable=download&&download.received>0&&download.received<download.total;
+  $('asrDownload').hidden=!show;if(!show)return;
+  $('asrDownloadStart').textContent=(resumable?'ดาวน์โหลดต่อ':'ดาวน์โหลดตัวถอดเสียง')+(download.total?` (${gb(download.total)})`:'');
+  $('asrDownloadStart').hidden=running;$('asrDownloadStart').disabled=busy||download.error==='ffmpeg_missing'||download.error==='runtime_missing';
+  $('asrDownloadStart').classList.toggle('primary',!running);$('asrDownloadCancel').hidden=!running;
+  $('asrDownloadNote').textContent=download.total?`ใช้ครั้งแรกต้องดาวน์โหลดตัวถอดเสียงก่อน ใช้พื้นที่ ${gb(download.total)}`:'ใช้ครั้งแรกต้องดาวน์โหลดตัวถอดเสียงก่อน';
+  $('asrDownloadProgress').hidden=!running&&!resumable;$('asrDownloadProgress').value=download.total?download.received/download.total:0;
+  $('asrDownloadRate').hidden=!running&&!resumable;
+  $('asrDownloadRate').textContent=`${Math.floor(100*(download.total?download.received/download.total:0))}% · ${gb(download.received)} จาก ${gb(download.total)}`+(running?` · ${mb(download.bytes_per_second)}/วิ`:'');
+  const message=downloadError||(download.state==='failed'?downloadText(download.error):'');$('asrDownloadError').textContent=message;$('asrDownloadError').hidden=!message;
+ }
+ async function pollDownload(){
+  clearTimeout(downloadTimer);
+  try{const response=await fetch('/api/v1/transcription/download',{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error('download');download=await response.json();}catch(_){downloadError='อ่านสถานะดาวน์โหลดไม่ได้';}
+  if(download?.state==='done'){download=null;await loadSettings();return;}
+  refresh();if(download?.state==='running')downloadTimer=setTimeout(pollDownload,700);
+ }
+ async function downloadCall(path){downloadError='';try{const response=await fetch(path,{method:'POST',signal:AbortSignal.timeout(30000)});const body=await response.json();if(!response.ok){downloadError=downloadText(body);refresh();return;}download=body;}catch(_){downloadError='เริ่มดาวน์โหลดไม่ได้ กดลองอีกครั้ง';}pollDownload();}
+ $('asrDownloadStart').onclick=()=>downloadCall('/api/v1/transcription/download');
+ $('asrDownloadCancel').onclick=()=>downloadCall('/api/v1/transcription/download/cancel');
  $('transcriptFile').onchange=()=>{chosen=$('transcriptFile').value;page=0;rowsKey='';clearAudio();refresh(true);};
  $('transcriptPrevious').onclick=()=>{page=Math.max(0,page-1);paintRows(true);};$('transcriptNext').onclick=()=>{page++;paintRows(true);};
  $('transcriptRows').onfocusout=event=>{if(!$('transcriptRows').contains(event.relatedTarget))queueMicrotask(()=>paintRows());};
