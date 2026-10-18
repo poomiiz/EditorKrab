@@ -8,8 +8,10 @@ foreach ($name in 'EditorKrab.exe', 'tools\ffmpeg\ffprobe.exe', 'tools\ffmpeg\ff
 }
 $link = Join-Path ([Environment]::GetFolderPath('Programs')) 'EditorKrab.lnk'
 if (-not (Test-Path -LiteralPath $link)) { throw 'Start Menu shortcut was not created' }
-& (Join-Path $target 'tools\ffmpeg\ffprobe.exe') -version | Select-Object -First 1
+# Capture all output first: Select-Object -First 1 in the pipeline would stop ffprobe early and fail its exit code.
+$version = & (Join-Path $target 'tools\ffmpeg\ffprobe.exe') -version
 if ($LASTEXITCODE -ne 0) { throw 'Bundled ffprobe does not run' }
+Write-Host $version[0]
 $env:EDITORKRAB_RUST_STATE = Join-Path $target 'check.sqlite'
 $env:EDITORKRAB_RUST_PORT = '8899'
 $server = Start-Process (Join-Path $target 'EditorKrab.exe') -WorkingDirectory $target -PassThru -WindowStyle Hidden
