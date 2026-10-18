@@ -34,7 +34,7 @@ async (page)=>{
  await page.locator('#text-text').fill('โปรโมตฟรีของจริง');await saved();
  const good=await read(),bad=structuredClone(good.document);bad.text_styles.speech.size=-10;
  await page.locator('#openFile').setInputFiles({name:'bad-style.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(bad))});
- await page.waitForFunction(()=>document.querySelector('#error').textContent.includes('เปิดร่างไม่ได้'));
+ await page.waitForFunction(()=>document.querySelector('#error').textContent.includes('เปิดไม่ได้'));
  check((await read()).revision===good.revision,'invalid style import replaced draft');
  // Clear test-only alert with a reload; the valid stored style must remain available.
  await page.reload();await page.locator('#textFrame').waitFor();

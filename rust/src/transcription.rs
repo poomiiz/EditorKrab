@@ -124,6 +124,7 @@ impl Context {
     }
 }
 pub const MAX_JSON: u64 = 16 * 1024 * 1024;
+const END_SLACK_MS: i64 = 3_000;
 pub fn parse(bytes: &[u8], context: &Context) -> Result<Transcript, String> {
     context.validate()?;
     if bytes.len() as u64 > MAX_JSON {
@@ -149,7 +150,16 @@ pub fn parse(bytes: &[u8], context: &Context) -> Result<Transcript, String> {
     let mut segments = Vec::with_capacity(raw.transcription.len());
     let mut previous_end = 0;
     let mut token_count = 0;
-    for (index, segment) in raw.transcription.into_iter().enumerate() {
+    let count = raw.transcription.len();
+    for (index, mut segment) in raw.transcription.into_iter().enumerate() {
+        // whisper.cpp often ends the final segment a little past the audio; only that one is pulled back
+        if index + 1 == count
+            && segment.offsets.from < length
+            && segment.offsets.to > length
+            && segment.offsets.to - length <= END_SLACK_MS
+        {
+            segment.offsets.to = length;
+        }
         let clock = &segment.offsets;
         if clock.from < previous_end
             || clock.to <= clock.from
