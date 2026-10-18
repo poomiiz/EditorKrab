@@ -56,7 +56,7 @@ async(page)=>{
  const current=await read();const external={...current.document,title:'external revision'};
  check((await page.request.put(`${base}/api/v1/drafts/${project}`,{data:{operation_id:crypto.randomUUID(),expected_revision:current.revision,document:external}})).ok(),'remote edit fixture failed');
  await page.locator('#title').fill('local recovery copy');
- await page.waitForFunction(()=>document.querySelector('#saved').textContent==='ร่างขัดแย้ง');
+ await page.waitForFunction(()=>document.querySelector('#saved').textContent==='งานชนกัน');
  await page.locator('#fork').click();await page.waitForURL(url=>url.searchParams.get('project')!==project,{timeout:120000});await complete();
  const copiedId=new URL(page.url()).searchParams.get('project'),copied=await read(copiedId);
  check(copied.document.title==='local recovery copy'&&copied.document.transcript_edits[0].text===corrected,'fork lost unsaved work or correction');

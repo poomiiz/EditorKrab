@@ -33,6 +33,10 @@ jobs:
         run: choco install ffmpeg -y --no-progress
       - name: Install pinned dependencies
         run: python -m pip install -r requirements.txt
+      - name: Build and test the Rust app
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked
+          cargo test --manifest-path rust/Cargo.toml --locked
       - name: Python tests
         shell: pwsh
         run: |
@@ -125,6 +129,10 @@ jobs:
           PY
       - name: Install, configure paths and run CPU transcription
         run: bash scripts/setup.sh "$RUNNER_TEMP/Editor Krab Workspace"
+      - name: Build and test the Rust app
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked
+          cargo test --manifest-path rust/Cargo.toml --locked
       - name: Python tests
         run: |
           failed=0

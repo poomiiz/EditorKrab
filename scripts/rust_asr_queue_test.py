@@ -17,6 +17,9 @@ def wait(base, project, predicate, timeout=90):
 
 
 def main():
+    # like rust/tests/native_asr.rs (#[ignore]): needs a real whisper engine, model and clip, which CI does not have
+    if 'EDITORKRAB_ASR_TEST_ENGINE' not in os.environ:
+        print('SKIP native ASR queue: set EDITORKRAB_ASR_TEST_ENGINE, EDITORKRAB_ASR_TEST_MODEL and EDITORKRAB_ASR_TEST_SOURCE'); return
     engine=Path(os.environ['EDITORKRAB_ASR_TEST_ENGINE']).resolve()
     original_model=Path(os.environ['EDITORKRAB_ASR_TEST_MODEL']).resolve()
     fixture=Path(os.environ['EDITORKRAB_ASR_TEST_SOURCE']).resolve()

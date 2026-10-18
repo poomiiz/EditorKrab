@@ -856,7 +856,16 @@ async fn serve(
         .route("/api/v1/sources/uploads", post(begin_upload))
         .route("/api/v1/sources/uploads/{id}", post(upload_chunk))
         .route("/api/v1/sources/uploads/{id}/finish", post(finish_upload))
-        .route("/favicon.ico", get(|| async { StatusCode::NO_CONTENT }))
+        // the app window (Edge/Chrome --app) shows this as its title-bar and taskbar icon
+        .route(
+            "/favicon.ico",
+            get(|| async {
+                (
+                    [("content-type", "image/x-icon")],
+                    include_bytes!("../../app/static/editorkrab-crab.ico").as_slice(),
+                )
+            }),
+        )
         .route(
             "/api/v1/projects/{project}/jobs",
             get(list_jobs).post(create_jobs),
