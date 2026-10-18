@@ -721,7 +721,7 @@ async fn configure_asr(
         ffmpeg,
         workspace: PathBuf::from(format!("{}.asr-work", state_path.display())),
         timeout: Duration::from_secs(3600),
-        threads: 2,
+        threads: asr_threads(),
     };
     let capture = config.clone();
     let settings = tokio::task::spawn_blocking(move || AsrSettings::read(&capture)).await??;
@@ -729,6 +729,10 @@ async fn configure_asr(
         return Err("invalid transcription tools".into());
     }
     Ok(Arc::new((config, settings)))
+}
+// 2 threads left a 20-thread CPU mostly idle (docs/test-logs/rust-20261018/flow-run3.md); capped at 8 until a sweep is measured
+fn asr_threads() -> u16 {
+    std::thread::available_parallelism().map_or(2, |n| n.get().clamp(1, 8) as u16)
 }
 fn data_dir() -> PathBuf {
     if let Ok(path) = std::env::var("EDITORKRAB_DATA") {
