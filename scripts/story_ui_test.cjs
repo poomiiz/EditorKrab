@@ -80,6 +80,9 @@ async function mutationChecks() {
   assert.equal(stories[1].end,4);
   h.context.confirm=()=>false;
   await h.run('storyMerge(0)'); assert.equal(h.read('storyList').length,2);
+  let merging;h.context.confirm=()=>new Promise(done=>merging=done);
+  const merge=h.run('storyMerge(0)');h.run('storyList.reverse()');merging(true);await merge;assert.equal(h.read('storyList').length,2);
+  h.run('storyList.reverse()');
   h.context.confirm=()=>true;
   await h.run('storyMerge(0)'); assert.equal(h.read('storyList').length,1); assert.equal(h.read('storyList')[0].end,4);
   h.run('storyAdd()'); stories=h.read('storyList');

@@ -12,6 +12,8 @@ function start(saved,languages,language) {
 }
 assert.equal(start(undefined,['th-TH','en-US'],'th-TH').lang,'th');
 assert.equal(start(undefined,undefined,'th').lang,'th');
+assert.equal(start(undefined,['th_TH'],'th_TH').lang,'th');
+assert.equal(start(undefined,['thx'],'thx').lang,'en');
 assert.equal(start(undefined,['en-US','th'],'en-US').lang,'en');
 assert.equal(start(undefined,['ja-JP'],'ja-JP').lang,'en');
 assert.equal(start(undefined,[],'').lang,'en');
