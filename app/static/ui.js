@@ -17,6 +17,7 @@
   .ck-dlg::backdrop{background:rgba(0,0,0,.55)}
   .ck-dlg form{display:flex;flex-direction:column;gap:14px;padding:18px}
   .ck-dlg p{margin:0;white-space:pre-line;overflow-wrap:anywhere;max-height:50vh;overflow:auto}
+  .ck-dlg .ck-dlg-quote{color:#b4b6c0;font-weight:600}
   .ck-dlg input{font:inherit;color:inherit;background:#1d1f24;border:1px solid #2a2c33;border-radius:8px;padding:8px 10px;width:100%;box-sizing:border-box}
   .ck-dlg input:focus{outline:none;border-color:#7c5cff}
   .ck-dlg .ck-dlg-row{display:flex;flex-direction:row-reverse;justify-content:flex-start;gap:8px}  /* ok first in the DOM: Enter submits ok */
@@ -28,12 +29,14 @@
   document.head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
 
   // one dialog for all three; resolves true / false, or the typed text / null
-  const ask = (text, {input = null, ok = 'ตกลง', cancel = 'ยกเลิก', danger = false} = {}) => new Promise(resolve => {
+  // quote: the person's own words (a title, a name) shown under the question and never translated
+  const ask = (text, {input = null, ok = 'ตกลง', cancel = 'ยกเลิก', danger = false, quote = ''} = {}) => new Promise(resolve => {
     const d = document.createElement('dialog');
     d.className = 'ck-dlg' + (danger ? ' danger' : '');
-    d.innerHTML = '<form method="dialog"><p></p>' + (input === null ? '' : '<input>') +
+    d.innerHTML = '<form method="dialog"><p></p>' + (quote ? '<p class="ck-dlg-quote" translate="no"></p>' : '') + (input === null ? '' : '<input>') +
       '<div class="ck-dlg-row"><button value="ok"></button>' + (cancel ? '<button value="cancel"></button>' : '') + '</div></form>';
     d.querySelector('p').textContent = text;
+    if (quote) d.querySelector('.ck-dlg-quote').textContent = quote;
     d.querySelector('[value=ok]').textContent = ok;
     if (cancel) d.querySelector('[value=cancel]').textContent = cancel;
     const field = d.querySelector('input');
@@ -57,8 +60,9 @@
 // People's own text is left alone: typed fields, translate="no", and any text still holding Thai after the swap.
 (() => {
   let lang = null;
-  try { lang = localStorage.getItem('ck_lang'); } catch (e) { /* private window: English */ }
-  lang = lang === 'th' ? 'th' : 'en';   // English unless the person picked Thai with the TH/EN switch
+  try { lang = localStorage.getItem('ck_lang'); } catch (e) { /* private window: follow the browser */ }
+  // the TH/EN switch wins; until it is used, a Thai browser gets Thai and any other language gets English
+  if (lang !== 'th' && lang !== 'en') lang = /^th([-_]|$)/i.test((navigator.languages || [])[0] || navigator.language || '') ? 'th' : 'en';
   window.ckLang = lang;
   window.ckSetLang = next => { try { localStorage.setItem('ck_lang', next); } catch (e) { /* not kept */ } location.reload(); };
   if (lang !== 'en') return;
