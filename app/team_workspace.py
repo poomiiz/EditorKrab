@@ -246,3 +246,12 @@ def require_review_access(request:Request) -> None:
  user=hub.session(request)['user']['id']
  if not any(member['user_id']==user and member['role'] in ('admin','lead') for org in hub.organizations(request) for member in org['clipkit_members']):
   raise HTTPException(403,'หน้าตรวจงานสำหรับหัวหน้าและผู้ดูแลองค์กร')
+
+@router.get('/review-access')
+def review_access(request:Request) -> dict[str,bool]:
+ """Whether to show the team review link; other failures (provider down) stay errors."""
+ try:require_review_access(request)
+ except HTTPException as exc:
+  if exc.status_code!=403:raise
+  return {'allowed':False}
+ return {'allowed':True}

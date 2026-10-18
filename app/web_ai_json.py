@@ -287,7 +287,7 @@ def parse(text: str) -> dict[str, Any]:
     try:
         out = json.loads(body)
     except ValueError as exc:
-        raise VideoEditError(f"คำตอบไม่ใช่ JSON: {exc}") from exc
+        raise VideoEditError(f"ไม่พบคำตอบที่ใช้ได้ คัดลอกคำตอบของ AI ทั้งหมด (รวมกล่องโค้ด) มาวางใหม่ ({exc})") from exc
     if not isinstance(out, dict):
         raise VideoEditError("คำตอบต้องเป็น JSON object { ... }")
     return out

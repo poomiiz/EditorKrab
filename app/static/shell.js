@@ -41,6 +41,10 @@
     '<div class="sb-foot" id="sbVer">EditorKrab</div>';
   aside.querySelector('a[href="/styles.html"]').after(aside.querySelector('#ckCreateProject'));
   document.body.prepend(aside);
+  // team review is for leads and admins: hide its links for everyone else (a failed check keeps them)
+  fetch('/api/team/review-access').then(r => r.ok ? r.json() : null).then(j => {
+    if (j && j.allowed === false) document.querySelectorAll('a[href="/review.html"]').forEach(a => { a.hidden = true; });
+  }).catch(() => {});
   const openPicked = picked => {
     if (typeof window.openPicked === 'function') window.openPicked(picked);
     else location.href = '/video-editor.html?' + new URLSearchParams({[picked.kind === 'folder' ? 'folder' : 'raw']: picked.path});

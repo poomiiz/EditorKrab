@@ -32,7 +32,7 @@ h3{font-size:14px;color:var(--sub);margin:16px 0 8px}
 .parts{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--sub)}.parts label{display:flex;gap:4px;align-items:center}
 .family{grid-column:1/-1;border:1px solid var(--line);border-radius:14px;padding:2px 12px 12px}.family h3{margin:10px 0}
 </style>
-<link rel="stylesheet" href="/shell.css?v=8">
+<link rel="stylesheet" href="/shell.css?v=9">
 <script src="/ui.js?v=3"></script></head>
 <body>
 <main>
@@ -208,6 +208,6 @@ api('/api/style/capcut-projects').then(j => j.projects.forEach(p => {
 })).catch(e => { $('startMsg').textContent = '❌ ' + ckErr(e); $('startMsg').className = 'msg bad'; });
 load();
 </script>
-<script src="/shell.js?v=12"></script>
+<script src="/shell.js?v=13"></script>
 </body>
 </html>
