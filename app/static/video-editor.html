@@ -2065,14 +2065,18 @@ function storySplit(i) {
   storyList.splice(i,1,{...story,end:split.left.time,end_anchor:split.left.anchor},{...story,start:split.right.time,start_anchor:split.right.anchor,summary:'',duration_reason:''});
   storyView.selected = new Set(storyList.map((_,n) => n)); storyChanged(); renderStories();
 }
-function storyMerge(i) {
+async function storyMerge(i) {
   if (storyView.saving || !storyList[i+1]) return;
-  if (!confirm('รวมเรื่อง “'+storyList[i].title+'” กับ “'+storyList[i+1].title+'” รวมช่วงระหว่างเรื่อง?')) return;
+  const [a, b] = [storyList[i], storyList[i+1]];
+  if (!await ckConfirm('รวมเรื่อง “'+a.title+'” กับ “'+b.title+'” รวมช่วงระหว่างเรื่อง?', {ok:'รวมเรื่อง'})) return;
+  if (storyView.saving || storyList[i] !== a || storyList[i+1] !== b) return;   // the list changed while the dialog was open
   storyList[i] = {...storyList[i],end:storyList[i+1].end,end_anchor:storyList[i+1].end_anchor}; storyList.splice(i+1,1);
   storyView.selected = new Set(storyList.map((_,n) => n)); storyChanged(); renderStories();
 }
-function storyRemove(i) {
-  if (storyView.saving || !confirm('ลบเรื่อง “'+storyList[i].title+'” จากรายการ?')) return;
+async function storyRemove(i) {
+  const story = storyList[i];
+  if (storyView.saving || !await ckConfirm('ลบเรื่อง “'+story.title+'” จากรายการ?', {ok:'ลบ', danger:true})) return;
+  if (storyView.saving || storyList[i] !== story) return;   // the list changed while the dialog was open
   storyList.splice(i,1); storyView.selected = new Set(storyList.map((_,n) => n)); storyChanged(); renderStories();
 }
 async function saveStories() {
@@ -2090,7 +2094,9 @@ async function planStories(saved) {
   const box = document.getElementById('storyPlan');
   if (storyView.saving) return;
   if (!state.file) { box.textContent = 'ยังไม่ได้เลือกไฟล์'; return; }
-  if (storyView.dirty && !confirm('อ่านรายการใหม่แทนเรื่องที่ยังไม่บันทึก?')) return;
+  const asked = state.file;
+  if (storyView.dirty && !await ckConfirm('อ่านรายการใหม่แทนเรื่องที่ยังไม่บันทึก?', {ok:'อ่านรายการใหม่', danger:true})) return;
+  if (storyView.saving || state.file !== asked) return;   // another file or a save started while the dialog was open
   const file = state.file.path, epoch = ++storyEpoch;
   document.getElementById('planStoriesBtn').disabled = true;
   document.getElementById('storyTarget').disabled = true;

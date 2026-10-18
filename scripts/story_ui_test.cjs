@@ -26,7 +26,7 @@ function harness() {
   const sandbox = {
     document:{getElementById:node,querySelector:()=>null,querySelectorAll: selector => selector.includes('input:checked') ? vm.runInContext('[...storyView.selected].map(i=>({dataset:{i:String(i)}}))',context) : []},
     state:{file:{path:'fixture.mp4',name:'fixture.mp4'},focusManual:true},
-    confirm:()=>true,ckErr:e=>e.message,findFocus(){},markMade:async()=>{},
+    confirm:()=>true,ckConfirm:async(...args)=>sandbox.confirm(...args),ckErr:e=>e.message,findFocus(){},markMade:async()=>{},
     setTimeout:fn=>timers.push(fn),webAiBox:()=>'<div class="agent-cmd">AI</div>',
     api:async(path,body)=>{calls.push([path,clone(body ?? null)]);return handlers[path] ? handlers[path](body) : clone(job);},
     makeDraft:async()=>{calls.push(['makeDraft']);},location:{},shapeNow:()=>'',SHAPES:{},
@@ -67,7 +67,7 @@ function dataChecks() {
   assert.ok(h.node('storyPlan').innerHTML.includes('เป้า'));
 }
 
-function mutationChecks() {
+async function mutationChecks() {
   const h=harness();
   h.node('storySplit0').value='0';
   h.run('storySplit(0)');
@@ -79,13 +79,17 @@ function mutationChecks() {
   assert.equal(stories[1].start_anchor.word,3);
   assert.equal(stories[1].end,4);
   h.context.confirm=()=>false;
-  h.run('storyMerge(0)'); assert.equal(h.read('storyList').length,2);
+  await h.run('storyMerge(0)'); assert.equal(h.read('storyList').length,2);
   h.context.confirm=()=>true;
-  h.run('storyMerge(0)'); assert.equal(h.read('storyList').length,1); assert.equal(h.read('storyList')[0].end,4);
+  await h.run('storyMerge(0)'); assert.equal(h.read('storyList').length,1); assert.equal(h.read('storyList')[0].end,4);
   h.run('storyAdd()'); stories=h.read('storyList');
   assert.equal(stories.length,2);assert.equal(stories[1].start,5);assert.equal(stories[1].end,9);
-  h.context.confirm=()=>false;h.run('storyRemove(0)');assert.equal(h.read('storyList').length,2);
-  h.context.confirm=()=>true;h.run('storyRemove(0)');assert.equal(h.read('storyList').length,1);
+  h.context.confirm=()=>false;await h.run('storyRemove(0)');assert.equal(h.read('storyList').length,2);
+  // a list that changes while the dialog is open is left as it now is
+  let answer;h.context.confirm=()=>new Promise(done=>answer=done);
+  const removing=h.run('storyRemove(0)');h.run('storyList.reverse()');answer(true);await removing;assert.equal(h.read('storyList').length,2);
+  h.run('storyList.reverse()');
+  h.context.confirm=()=>true;await h.run('storyRemove(0)');assert.equal(h.read('storyList').length,1);
   h.run('storySelectAll(false)');assert.equal(h.read('[...storyView.selected]').length,0);
   h.run('storySelectAll(true)');assert.equal(h.read('[...storyView.selected]').length,1);
 }
@@ -201,4 +205,4 @@ async function metadataChecks() {
   stale.resolve({x:.1,y:.2,found:true});await oldFocus;assert.deepEqual(other.context.state.focus,{x:.7,y:.6});
 }
 
-(async()=>{dataChecks();mutationChecks();await savingChecks();await requestChecks();await creationChecks();await metadataChecks();console.log('PASS story UI: original clocks/anchors, split/merge/remove, save preservation, stale polling, safe selection, metadata hydration and focus ownership');})().catch(error=>{console.error(error);process.exitCode=1;});
+(async()=>{dataChecks();await mutationChecks();await savingChecks();await requestChecks();await creationChecks();await metadataChecks();console.log('PASS story UI: original clocks/anchors, split/merge/remove, save preservation, stale polling, safe selection, metadata hydration and focus ownership');})().catch(error=>{console.error(error);process.exitCode=1;});

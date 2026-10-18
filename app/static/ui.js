@@ -57,8 +57,9 @@
 // People's own text is left alone: typed fields, translate="no", and any text still holding Thai after the swap.
 (() => {
   let lang = null;
-  try { lang = localStorage.getItem('ck_lang'); } catch (e) { /* private window: English */ }
-  lang = lang === 'th' ? 'th' : 'en';   // English unless the person picked Thai with the TH/EN switch
+  try { lang = localStorage.getItem('ck_lang'); } catch (e) { /* private window: follow the browser */ }
+  // the TH/EN switch wins; until it is used, a Thai browser gets Thai and any other language gets English
+  if (lang !== 'th' && lang !== 'en') lang = /^th\b/i.test((navigator.languages || [])[0] || navigator.language || '') ? 'th' : 'en';
   window.ckLang = lang;
   window.ckSetLang = next => { try { localStorage.setItem('ck_lang', next); } catch (e) { /* not kept */ } location.reload(); };
   if (lang !== 'en') return;
