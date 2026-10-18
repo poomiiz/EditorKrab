@@ -2,15 +2,18 @@ name: release
 
 # Editors' machines update to the newest vX.Y.Z tag (scripts/update.py), so pushing a tag is shipping:
 #   git tag v0.29.0 && git push origin v0.29.0
+# Run it by hand (workflow_dispatch) to build the Windows download as a workflow artifact without releasing.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: GitHub Release with the merged PRs as notes
@@ -23,3 +26,32 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag
           fi
+
+  windows-app:
+    needs: release
+    # Runs after the release on a tag, and on its own when started by hand.
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build EditorKrab.exe
+        run: cargo build --manifest-path rust/Cargo.toml --release --locked
+      - name: Package the Windows download
+        shell: pwsh
+        run: ./scripts/package-windows-app.ps1 -Exe rust/target/release/editorkrab.exe -Output dist/EditorKrab-windows-x64.zip
+      - name: Check the package contents
+        shell: pwsh
+        run: |
+          $check = Join-Path $env:RUNNER_TEMP 'unzipped'
+          Expand-Archive -LiteralPath dist/EditorKrab-windows-x64.zip -DestinationPath $check
+          ./scripts/package_windows_app_check.ps1 -Folder (Join-Path $check 'EditorKrab')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EditorKrab-windows-x64
+          path: dist/EditorKrab-windows-x64.zip
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$env:GITHUB_REF_NAME" dist/EditorKrab-windows-x64.zip --repo "$env:GITHUB_REPOSITORY" --clobber

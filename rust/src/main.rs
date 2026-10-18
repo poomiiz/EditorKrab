@@ -676,20 +676,24 @@ struct Found {
     model: Option<PathBuf>,
     ffmpeg: Option<PathBuf>,
 }
-fn find_asr_tools(data: &std::path::Path) -> Found {
-    let exe = if cfg!(windows) { ".exe" } else { "" };
-    let roots: Vec<PathBuf> = std::env::current_exe()
+fn tool_roots(data: &std::path::Path) -> Vec<PathBuf> {
+    std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.join("tools")))
         .into_iter()
         .chain([data.to_path_buf()])
-        .collect();
-    let first = |folder: &str, name: &str| {
-        roots
-            .iter()
-            .map(|r| r.join(folder).join(format!("{name}{exe}")))
-            .find(|p| p.is_file())
-    };
+        .collect()
+}
+fn find_tool(roots: &[PathBuf], folder: &str, name: &str) -> Option<PathBuf> {
+    let exe = if cfg!(windows) { ".exe" } else { "" };
+    roots
+        .iter()
+        .map(|r| r.join(folder).join(format!("{name}{exe}")))
+        .find(|p| p.is_file())
+}
+fn find_asr_tools(data: &std::path::Path) -> Found {
+    let roots = tool_roots(data);
+    let first = |folder: &str, name: &str| find_tool(&roots, folder, name);
     let model = roots
         .iter()
         .filter_map(|r| std::fs::read_dir(r.join("models")).ok())
@@ -993,8 +997,11 @@ async fn serve(
             state_path.to_str().ok_or("state path is not Unicode")?
         )),
     };
-    let ffprobe =
-        PathBuf::from(std::env::var("EDITORKRAB_FFPROBE").unwrap_or_else(|_| "ffprobe".into()));
+    let ffprobe = match std::env::var("EDITORKRAB_FFPROBE") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => find_tool(&tool_roots(&runtime.setup.data), "ffmpeg", "ffprobe")
+            .unwrap_or_else(|| "ffprobe".into()),
+    };
     let app = Router::new()
         .route(
             "/",
