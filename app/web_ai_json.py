@@ -296,7 +296,7 @@ def parse(text: str) -> dict[str, Any]:
 def _head(ans: dict[str, Any], step: str, key: str, name: str) -> None:
     version = 1 if step == "inserts" else VERSION
     if ans.get("clipkit_web_ai") != version:
-        raise VideoEditError(f"clipkit_web_ai ต้องเป็น {version} (ได้ {ans.get('clipkit_web_ai')!r}): ใช้ไฟล์ที่ export จาก ClipKit รุ่นนี้")
+        raise VideoEditError(f"clipkit_web_ai ต้องเป็น {version} (ได้ {ans.get('clipkit_web_ai')!r}): ใช้ไฟล์ที่ส่งออกจาก EditorKrab รุ่นนี้")
     if ans.get("step") != step:
         raise VideoEditError(f"คำตอบนี้เป็นขั้น {ans.get('step')!r} แต่กำลังนำเข้าขั้น {step!r}")
     if ans.get(key) != name:

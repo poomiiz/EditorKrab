@@ -233,7 +233,7 @@ class NativeBuildSafetyTests(unittest.TestCase):
         content = self.project / "draft_content.json"
         content.write_bytes(content.read_bytes() + b" ")
         changed = snapshot(self.project)
-        with self.assertRaisesRegex(build.VideoEditError, "ClipKit"):
+        with self.assertRaisesRegex(build.VideoEditError, "ถูกแก้นอก"):
             build.build(str(self.project))
         self.assertEqual(snapshot(self.project), changed)
         self.assertEqual(snapshot(self.existing), self.before_existing)

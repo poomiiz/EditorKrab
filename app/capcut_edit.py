@@ -58,13 +58,13 @@ def accept(folder: str) -> None:
 def _load(folder: Path) -> dict[str, Any]:
     content = folder / "draft_content.json"
     if not content.is_file():
-        raise VideoEditError(f"not a CapCut draft: {folder}")
+        raise VideoEditError(f"ไม่พบโปรเจกต์ที่โฟลเดอร์นี้ อาจถูกย้ายหรือลบไปแล้ว: {folder}")
     text = content.read_text(encoding="utf-8")
     seal = folder / SEAL
     if seal.is_file() and json.loads(seal.read_text(encoding="utf-8")).get("draft_content") != _digest(text):
         raise VideoEditError(
-            f"โปรเจกต์ {folder.name} ถูกแก้นอก ClipKit (CapCut หรือ AI ตัวอื่นแก้ไฟล์ draft_content.json เอง) "
-            "ClipKit จะไม่ทำต่อบนไฟล์นี้ เพราะอาจได้งานเพี้ยน: สร้างโปรเจกต์ใหม่จากไฟล์ดิบ หรือถ้าตั้งใจแก้ใน CapCut เอง "
+            f"โปรเจกต์ {folder.name} ถูกแก้นอก EditorKrab (CapCut หรือ AI ตัวอื่นแก้ไฟล์ draft_content.json เอง) "
+            "EditorKrab จะไม่ทำต่อบนไฟล์นี้ เพราะอาจได้งานเพี้ยน: สร้างโปรเจกต์ใหม่จากไฟล์ดิบ หรือถ้าตั้งใจแก้ใน CapCut เอง "
             f'สั่ง  python scripts/accept_edit.py "{folder}"  แล้วทำต่อได้')
     return json.loads(text)
 

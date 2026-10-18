@@ -5,15 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ตัดต่อ · EditorKrab</title>
 <style>
-:root{--bg:#0e0f12;--card:#16171b;--card2:#1d1f24;--line:#2a2c33;--txt:#ececf1;--sub:#c9cbd3;--mut:#8b8d98;--acc:#6c4cf0;--ok:#10b981;--warn:#f59e0b;--bad:#ef4444}
+:root{/* page aliases for the shared EditorKrab tokens in shell.css */--bg:var(--ek-bg);--card:var(--ek-surface);--card2:var(--ek-surface-2);--line:var(--ek-line);--txt:var(--ek-text);--sub:var(--ek-text-2);--mut:var(--ek-muted);--acc:var(--ek-accent);--acc-ink:var(--ek-accent-ink);--ok:var(--ek-ok);--warn:var(--ek-warn);--bad:var(--ek-danger)}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--txt);font:13.5px/1.5 "Inter","Segoe UI Variable Text","Segoe UI","Leelawadee UI",system-ui,sans-serif}
+body{margin:0;background:var(--bg);color:var(--txt);font:13.5px/1.6 var(--ui-font)}
 main{display:grid;grid-template-rows:auto 1fr auto;height:100vh;min-width:0}
 button{background:var(--card2);color:var(--sub);border:1px solid var(--line);border-radius:7px;padding:5px 12px;min-height:30px;font:inherit;font-weight:500;cursor:pointer}
-button:hover{border-color:var(--acc);color:#fff}
-button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button:hover{border-color:var(--acc);color:var(--txt)}
+button.pri{background:var(--acc);border-color:var(--acc);color:var(--acc-ink);font-weight:650}
+button.pri:hover{background:var(--ek-accent-hover);color:var(--acc-ink)}
 button:disabled{opacity:.5;cursor:wait}
-input,select{background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:inherit}
+input,select{accent-color:var(--acc);background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:inherit}
 .top{display:flex;gap:6px;align-items:center;padding:8px 14px;min-height:48px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .top button,.ck-dlg .ck-dlg-row button{min-height:44px}
 .top h1{font-size:14.5px;font-weight:600;margin:0 8px 0 0;flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -39,23 +40,23 @@ input,select{background:var(--card2);color:var(--txt);border:1px solid var(--lin
 /* timeline */
 .tl{border-top:1px solid var(--line);background:var(--card);padding:6px 14px 10px;user-select:none}
 .tlbar{display:flex;gap:10px;align-items:center;margin-bottom:6px;font-size:13px;color:var(--sub)}
-.tlbar .t{font-variant-numeric:tabular-nums;color:#fff;min-width:110px}
+.tlbar .t{font-variant-numeric:tabular-nums;color:var(--txt);min-width:110px}
 .tracks{display:grid;grid-template-columns:84px 1fr;gap:8px;align-items:start}
 .lab{font-size:11.5px;color:var(--mut);white-space:nowrap;height:38px;margin-top:4px;display:flex;align-items:center}
-.lane{position:relative;height:38px;background:#1a1b20;border-radius:6px;overflow:hidden}
+.lane{position:relative;height:38px;background:var(--card2);border-radius:6px;overflow:hidden}
 .scroll{overflow-x:auto;position:relative;padding-bottom:4px}
 .inner{position:relative}
 .ruler{height:18px;position:relative;font-size:10.5px;color:var(--mut)}
-.ruler i{position:absolute;top:0;border-left:1px solid #2a2c33;height:18px;padding-left:3px;font-style:normal}
+.ruler i{position:absolute;top:0;border-left:1px solid var(--line);height:18px;padding-left:3px;font-style:normal}
 .blk{position:absolute;top:3px;bottom:3px;border-radius:5px;padding:2px 6px;font-size:11.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;border:1px solid transparent}
 .blk.sub{background:#2d3a5c;color:#e6e9f5}
 .blk.sub b{color:#ffb15c}
 .blk.br{background:#11463a;color:#c9f7e6;display:flex;gap:4px;align-items:center}
 .blk.br img{height:100%;border-radius:4px}
-.blk.mo{background:#4a2a6e;color:#eadcff}
+.blk.mo{background:oklch(0.73 0.16 37 / .28);color:var(--txt)}
 .lane.motion .blk{height:44px;bottom:auto;min-width:44px}
 .blk.mu{background:#3a3220;color:#f3e1b5;cursor:default}
-.blk.sel{border-color:#fff;box-shadow:0 0 0 2px var(--acc)}
+.blk.sel{border-color:var(--txt);box-shadow:0 0 0 2px var(--acc)}
 .blk .rz{position:absolute;right:0;top:0;bottom:0;width:8px;cursor:ew-resize;background:rgba(255,255,255,.15)}
 .ph{position:absolute;top:0;bottom:0;width:2px;background:#ff4d6d;pointer-events:none;z-index:5}
 .busy{color:var(--warn);font-size:13px;margin-left:6px}
@@ -65,7 +66,7 @@ input,select{background:var(--card2);color:var(--txt);border:1px solid var(--lin
 .steps ol{margin:6px 0 0;padding-left:20px;color:var(--sub)}.steps li{margin:3px 0}
 #adv{margin-top:14px;border-top:1px solid var(--line);padding-top:8px}#adv summary{cursor:pointer;font-weight:600;color:var(--sub);padding:4px 0}
 .agent{border:1px dashed var(--acc);border-radius:10px;padding:10px;margin-top:8px}
-.agent code{display:block;background:#0e0f12;border-radius:8px;padding:8px;margin:6px 0;word-break:break-all;font-size:12.5px}
+.agent code{display:block;background:var(--bg);border-radius:8px;padding:8px;margin:6px 0;word-break:break-all;font-size:12.5px}
 .ai-answer{width:100%;min-height:88px;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;resize:vertical}
 .ai-actions button,.ai-actions summary{min-height:44px}
 .insert-panel input,.insert-panel select,.insert-panel button,.insert-panel summary{min-height:44px;max-width:100%}
@@ -104,12 +105,12 @@ input,select{background:var(--card2);color:var(--txt);border:1px solid var(--lin
 <body>
 <main>
   <div class="top">
-    <button onclick="location.href='/video-editor.html'">‹</button>
+    <button onclick="location.href='/video-editor.html'" aria-label="กลับหน้าแรก">‹</button>
     <h1 id="title" translate="no">กำลังโหลด…</h1>
     <span id="repairStatus" class="repair-badge" role="status" hidden>ต้องแก้ซับ</span>
     <button class="pri" id="bAuto" title="ถอดเสียง ตัดเงียบ ซับ ภาพประกอบ เพลง เอฟเฟกต์ ให้ครบในครั้งเดียว">ทำให้ครบ</button>
     <button id="bCover">ปก</button>
-    <button id="bExport" class="pri">ส่งออก</button>
+    <button id="bExport">ส่งออก</button>
     <button id="bCapcut" title="เกลาต่อในแอป CapCut">แก้ต่อใน CapCut</button>
     <span class="busy" id="busy"></span>
   </div>
@@ -928,6 +929,7 @@ document.addEventListener('keydown', e => {
 // a project this page cannot open: say why where the player would be, and leave only Back and CapCut usable
 function broken(msg) {
   $('title').textContent = PATH ? 'เปิดโปรเจกต์นี้ในหน้านี้ไม่ได้' : msg;
+  $('title').translate = true;
   $('empty').style.display = ''; $('empty').textContent = '❌ ' + msg; say('');
   ['bAuto', 'bCover', 'bExport', 'bAddBr'].forEach(id => { $(id).dataset.off = '1'; $(id).disabled = true; });
   if (!PATH) $('bCapcut').dataset.off = $('bCapcut').disabled = '1';

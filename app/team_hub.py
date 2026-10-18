@@ -75,7 +75,7 @@ def _provider(path: str, method: str = "GET", body: dict | None = None, token: s
 def _same_origin(request: Request) -> None:
     origin = request.headers.get("origin")
     if origin and origin != str(request.base_url).rstrip("/"):
-        raise HTTPException(403, "คำขอต้องมาจากหน้า ClipKit นี้")
+        raise HTTPException(403, "คำขอต้องมาจากหน้า EditorKrab นี้")
 
 
 def _remember(data: dict, response: Response) -> bool:

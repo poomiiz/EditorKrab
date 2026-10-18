@@ -1130,7 +1130,7 @@ def render_draft(path: str, out_dir: str, preview: bool = False, dry: bool = Fal
     if any(mats[s["material_id"]]["path"] != src for s in segs):
         names = sorted({Path(mats[s["material_id"]]["path"]).name for s in segs})
         raise VideoEditError("โปรเจกต์นี้แทร็กหลักมีหลายไฟล์ (" + ", ".join(names[:3]) + ") แบบที่ตัดมือใน CapCut: "
-                             "หน้าแก้คลิปของ ClipKit เปิดได้เฉพาะคลิปที่ตัดจากไฟล์ดิบไฟล์เดียว ให้กดปุ่ม CapCut เพื่อแก้ต่อ "
+                             "หน้าแก้คลิปของ EditorKrab เปิดได้เฉพาะคลิปที่ตัดจากไฟล์ดิบไฟล์เดียว ให้กดปุ่ม CapCut เพื่อแก้ต่อ "
                              "หรือสร้างโปรเจกต์ใหม่จากไฟล์ดิบ")
     if not Path(src).is_file():
         raise VideoEditError(f"raw file not found: {src}")

@@ -1257,5 +1257,9 @@
 "เปลี่ยนโฟลเดอร์": "Change folder",
 "แก้ชื่อ": "Rename",
 "คีย์ลัด": "Shortcuts",
-"1–7 สลับเครื่องมือ · Enter ปุ่มหลัก · Ctrl+E ส่งออก · ↑↓ เลือกข้อความ · Ctrl+C / Ctrl+V คัดลอกตำแหน่งข้อความ · Ctrl+S บันทึกตำแหน่ง": "1–7 switch tools · Enter main button · Ctrl+E export · ↑↓ select text · Ctrl+C / Ctrl+V copy text position · Ctrl+S save position"
+"1–7 สลับเครื่องมือ · Enter ปุ่มหลัก · Ctrl+E ส่งออก · ↑↓ เลือกข้อความ · Ctrl+C / Ctrl+V คัดลอกตำแหน่งข้อความ · Ctrl+S บันทึกตำแหน่ง": "1–7 switch tools · Enter main button · Ctrl+E export · ↑↓ select text · Ctrl+C / Ctrl+V copy text position · Ctrl+S save position",
+"กลับหน้าแรก": "Back to home",
+"โปรเจกต์นี้แทร็กหลักมีหลายไฟล์ (": "This project's main track uses several files (",
+") แบบที่ตัดมือใน CapCut: หน้าแก้คลิปของ EditorKrab เปิดได้เฉพาะคลิปที่ตัดจากไฟล์ดิบไฟล์เดียว ให้กดปุ่ม CapCut เพื่อแก้ต่อ หรือสร้างโปรเจกต์ใหม่จากไฟล์ดิบ": "), as when it was cut by hand in CapCut. The EditorKrab clip editor opens only clips cut from a single raw file: press the CapCut button to keep editing, or create a new project from the raw file",
+"ไม่พบโปรเจกต์ที่โฟลเดอร์นี้ อาจถูกย้ายหรือลบไปแล้ว: ": "Project not found in this folder; it may have been moved or deleted: "
 }
