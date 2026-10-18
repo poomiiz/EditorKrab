@@ -1254,5 +1254,8 @@
 "ถอดเสียงด้วยการ์ดจอ": "Transcribing on GPU",
 "ถอดเสียงด้วย CPU": "Transcribing on CPU",
 "อัปเดต EditorKrab": "Update EditorKrab",
-"เปลี่ยนโฟลเดอร์": "Change folder"
+"เปลี่ยนโฟลเดอร์": "Change folder",
+"แก้ชื่อ": "Rename",
+"คีย์ลัด": "Shortcuts",
+"1–7 สลับเครื่องมือ · Enter ปุ่มหลัก · Ctrl+E ส่งออก · ↑↓ เลือกข้อความ · Ctrl+C / Ctrl+V คัดลอกตำแหน่งข้อความ · Ctrl+S บันทึกตำแหน่ง": "1–7 switch tools · Enter main button · Ctrl+E export · ↑↓ select text · Ctrl+C / Ctrl+V copy text position · Ctrl+S save position"
 }

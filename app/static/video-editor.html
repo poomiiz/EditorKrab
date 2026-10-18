@@ -405,6 +405,13 @@
   .foot .ft-nm input { width: 100%; min-width: 0; padding: 3px 6px; font-size: 14px; }
   .foot .ft-rename { min-height: 28px; padding: 3px 8px; font-size: 12px; border-radius: 6px; }
   .foot .ft-rename[hidden] { display: none; }
+  .foot .ft-rename { gap: 5px; }
+  .foot .ft-rename svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  /* mouse: rename shows on hover so the card reads as footage first */
+  @media (hover: hover) {
+    .foot .ft-rename { opacity: 0; transition: opacity .12s; }
+    .foot:hover .ft-rename, .foot:focus-within .ft-rename { opacity: 1; }
+  }
   .foot .ft-nm { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .foot .ft-nm span { color: var(--mut); font-weight: 400; font-size: 12px; margin-left: 6px; }
   .foot .ft-path { font-size: 11.5px; color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
@@ -599,12 +606,12 @@
   <!-- Screen 1: Home -->
   <div class="screen on" id="s-home">
     <span class="hint">ลากไฟล์วิดีโอหรือโฟลเดอร์มาวางที่หน้านี้ หรือกด “สร้างโปรเจกต์” ทางซ้าย</span>
-    <div class="proj-head"><b>โปรเจกต์</b><span id="projCount"></span><span id="projTabs" class="proj-tabs"></span>
+    <div class="proj-head"><b title="ลากคลุมเพื่อเลือกหลายโปรเจกต์ · Ctrl+คลิก เลือกทีละอัน">โปรเจกต์</b><span id="projCount"></span><span id="projTabs" class="proj-tabs"></span>
       <span id="selBar" style="display:none">เลือก <b id="selN"></b> โปรเจกต์
         <a href="/review.html">ตรวจงานทีม</a>
         <button class="small del" onclick="delSelected()">ลบที่เลือก</button>
         <button class="small" onclick="clearSel()">ยกเลิก</button></span>
-      <span class="hint" id="selHint">ลากคลุมเพื่อเลือกหลายโปรเจกต์ · Ctrl+คลิก เลือกทีละอัน</span></div>
+      <span class="hint" id="selHint" hidden></span></div>
     <div id="homeDrafts" class="foot-grid"><div class="hint">กำลังอ่านโปรเจกต์…</div></div>
     <div id="recentWrap" class="recent-list"></div>
   </div>
@@ -699,7 +706,7 @@
           <div id="wzShow"></div>
           <details id="wzMoreBox"><summary>ปรับเพิ่ม</summary><div id="wzMore"></div></details>
           <div class="wz-nav"><button class="ghost" id="wzPrev">← ก่อนหน้า</button><button id="wzNext">ถัดไป →</button></div>
-          <div class="hint" style="margin-top:10px">คีย์ลัด: 1–7 สลับเครื่องมือ · Enter ปุ่มหลัก · Ctrl+E ส่งออก · ↑↓ เลือกข้อความ · Ctrl+C / Ctrl+V คัดลอกตำแหน่งข้อความ · Ctrl+S บันทึกตำแหน่ง</div>
+          <details class="hint" style="margin-top:10px"><summary>คีย์ลัด</summary>1–7 สลับเครื่องมือ · Enter ปุ่มหลัก · Ctrl+E ส่งออก · ↑↓ เลือกข้อความ · Ctrl+C / Ctrl+V คัดลอกตำแหน่งข้อความ · Ctrl+S บันทึกตำแหน่ง</details>
         </div>
       </div>
       <div id="wzHold" style="display:none"></div>
@@ -1051,8 +1058,9 @@ function renderStepper(id) {
   box.style.display = 'flex';
   box.innerHTML = STEPS.map(s => {
     const on = s.n === cur.n, done = s.n < cur.n;
-    const bg = on ? 'var(--acc)' : done ? 'var(--ok)' : 'var(--card2)';
-    return `<span style="padding:5px 11px;border-radius:99px;background:${bg};color:${on || done ? '#fff' : 'var(--mut)'}">${done ? '✓' : s.n} ${s.label}</span>`;
+    const bg = on ? 'var(--acc)' : done ? 'var(--ok-bg)' : 'var(--card2)';
+    const fg = on ? 'var(--acc-ink)' : done ? 'var(--ok)' : 'var(--mut)';
+    return `<span style="padding:5px 11px;border-radius:99px;background:${bg};color:${fg}">${done ? '✓' : s.n} ${s.label}</span>`;
   }).join('');
 }
 
@@ -1849,7 +1857,7 @@ function renderGuide(d) {
   mains.forEach(([text, fn, cls]) => {
     const b = document.createElement('button');
     b.textContent = text;
-    b.className = cls || 'primary';
+    b.className = cls || (main.children.length ? 'ghost' : 'primary');   // one primary per step
     b.onclick = async () => { await fn(); if (!cls) { wzMark(w.key); renderGuide(state.draft); } };
     main.appendChild(b);
   });
@@ -2480,7 +2488,7 @@ async function loadHomeDrafts() {
     const shown = all.filter(d => pick === 'all' || d.sys === pick);
     document.getElementById('projCount').textContent = shown.length + ' โปรเจกต์';
     const tabs = document.getElementById('projTabs');
-    tabs.innerHTML = SYS.map(([k, t]) => `<button class="small${k === pick ? ' on' : ''}" data-k="${k}">${t} ${k === 'all' ? all.length : all.filter(d => d.sys === k).length}</button>`).join('');
+    tabs.innerHTML = SYS.filter(([k]) => k === 'all' || k === pick || all.some(d => d.sys === k)).map(([k, t]) => `<button class="small${k === pick ? ' on' : ''}" data-k="${k}">${t} ${k === 'all' ? all.length : all.filter(d => d.sys === k).length}</button>`).join('');
     tabs.querySelectorAll('button').forEach(b => b.onclick = () => { loadHomeDrafts.sys = b.dataset.k; loadHomeDrafts(); });
     box.innerHTML = shown.length ? '' : '<div class="hint">ยังไม่มีโปรเจกต์ในหมวดนี้ · ลากไฟล์วิดีโอมาวางที่หน้านี้เพื่อเริ่ม</div>';
     selSet.clear(); showSel();
@@ -2511,7 +2519,7 @@ window.ckOpenProject = async path => {
 function footCard(g) {
   const el = document.createElement('div');
   el.className = 'foot';
-  el.innerHTML = '<div class="ft-th"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg></div><div class="ft-info"><div class="ft-title"><div class="ft-nm"></div><button class="ft-rename" hidden>✎ แก้ชื่อ</button></div><div class="ft-path" translate="no"></div></div><div class="ft-ps" tabindex="0" aria-label="รายการโปรเจกต์"></div>';
+  el.innerHTML = '<div class="ft-th"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg></div><div class="ft-info"><div class="ft-title"><div class="ft-nm"></div><button class="ft-rename" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg>แก้ชื่อ</button></div><div class="ft-path" translate="no"></div></div><div class="ft-ps" tabindex="0" aria-label="รายการโปรเจกต์"></div>';
   const th = el.querySelector('.ft-th'), nm = el.querySelector('.ft-nm'), pth = el.querySelector('.ft-path');
   nm.textContent = '';
   const nb = document.createElement('bdi');   // the footage name is the person's own text: never translated
@@ -2598,7 +2606,6 @@ function showSel() {
   document.querySelectorAll('#homeDrafts .proj').forEach(el => el.classList.toggle('sel', selSet.has(el)));
   document.getElementById('selN').textContent = selSet.size;
   document.getElementById('selBar').style.display = selSet.size ? '' : 'none';
-  document.getElementById('selHint').style.display = selSet.size ? 'none' : '';
 }
 function clearSel() { selSet.clear(); showSel(); }
 async function delSelected() {
