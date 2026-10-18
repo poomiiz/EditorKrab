@@ -48,7 +48,7 @@ These numbers come from our own test runs. They are not guarantees.
 | Transcribe the English clip, 8 CPU threads (release build) | 94.1 s (was 332.6 s with 2 threads) | [flow-run3, run 4](docs/test-logs/rust-20261018/flow-run3.md) |
 | Transcribe the Thai clip, 8 CPU threads (release build) | 128.4 s (was 543.1 s with 2 threads) | [flow-run3, run 4](docs/test-logs/rust-20261018/flow-run3.md) |
 
-The test speech was generated from the scripts in that folder; it is not customer footage. The times were measured on one 20-thread desktop CPU without a GPU. The app uses up to 8 threads because more threads gave little extra speed. Time saved compared with manual editing has not been measured.
+The test speech was generated from the scripts in that folder; it is not customer footage. The times were measured on one 20-thread desktop CPU, with whisper running on the CPU only. The app uses up to 8 threads because more threads gave little extra speed. Time saved compared with manual editing has not been measured.
 
 ## Build from source
 
