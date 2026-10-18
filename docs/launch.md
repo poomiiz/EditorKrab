@@ -31,8 +31,8 @@ The plugin ID `clip-kit` and existing `clipkit` file-format names remain unchang
 
 | Check | Required evidence | Current status |
 |---|---|---|
-| Release delivery | Published tag/Release at the intended commit; Update verified in a disposable clone | v0.29.0 published and Update checked; see the [verification log](test-logs/macos-support.md) for patch status |
-| Software checks | CI at the release commit and required original security hotfix ancestry | v0.29.0 passed; recheck the patch before publishing |
+| Release delivery | Published tag/Release at the intended commit; Update verified in a disposable clone | [v0.29.1](https://github.com/poomiiz/EditorKrab/releases/tag/v0.29.1) published at `21c5f81`; [Update from v0.29.0](https://github.com/poomiiz/EditorKrab/actions/runs/38389874905) passed on Windows, Mac Intel and Apple Silicon |
+| Software checks | CI at the release commit and required original security hotfix ancestry | [CI at `21c5f81`](https://github.com/poomiiz/EditorKrab/actions/runs/38389017829) passed; all 11 commits in the [release inventory](release-inventory.json) are ancestors of that exact release commit |
 | Windows editing | A real source, exported pilot and the quality checklist | Record the actual result; software tests alone are insufficient |
 | Mac editing | Installation, transcription, export and CapCut review on intended Mac devices | Experimental; still needs testing on real devices |
 | Timing claim | Completed human benchmark with CSV and trial-scoped log | UNKNOWN; no real percentage available |

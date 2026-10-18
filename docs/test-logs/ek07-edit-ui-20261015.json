@@ -1,0 +1,103 @@
+{
+  "scope": "Generated-media existing-motion UI repair and generic edit/reorder/delete; not real-speech/native/human acceptance",
+  "source_sha256": {
+    "app/static/editor.html": "db5dec61434c0035de0cb7c8211a792260f24f42e2efbdde17aff9da45e14679",
+    "app/static/ai-plan.js": "a3050a6123ea604897a8046966a789c4011deda1ee7a4f5f13815ae5d002cabc",
+    "app/video_editor.py": "81f26ebf14c48075d11694f86eb7cc68cecba412b24bad64dffdf425cf21aacb",
+    "app/motion_plan.py": "1fa0da44ee4d3646c4ecca9014462a3d2caa956d92f056067a168d72ed8df88c",
+    "scripts/ai_plan_ui_test.js": "0a6d5c1d7c9f41f7774797dfaf1f7234509307247259cbbf08e940c5e7172bfb",
+    "scripts/motion_cut_test.py": "ecebada46ddd70af92025c0a934fc8f4b05b6dae48d9da6ddbb0eaf830137179",
+    "scripts/motion_freshness_test.py": "8abe1914a703bcb0ca74a20eea7d8c686dcdc114799bf36b1e2f54b6957c189e"
+  },
+  "tests": {
+    "python_cases": 115,
+    "programs": 7,
+    "private_config_read_attempts": 0,
+    "node_suites": [
+      "ai_plan_ui",
+      "subtitle_ui",
+      "web_ai_ui"
+    ],
+    "stat_payload": "Node request-builder checks: content/unit/label, normalized placement, retained ownership/anchor/font and explicit timeline/default-font choices"
+  },
+  "ui": {
+    "desktop": [
+      1440,
+      1000
+    ],
+    "mobile": [
+      375,
+      844
+    ],
+    "body_width": 375,
+    "panel_width": 325,
+    "independent_review": "source and screenshot scoped pass; native/human excluded"
+  },
+  "repair": {
+    "old_recipe_stale": true,
+    "preserved_original_media": true,
+    "stable_placement_id": true,
+    "normal_span": [
+      2,
+      6
+    ],
+    "motion_emphasis_span": [
+      4.2,
+      6
+    ],
+    "during_render_input_preserved": true,
+    "changed_input_requires_new_review": true
+  },
+  "generic": {
+    "template": "hook-title",
+    "old_start": 0,
+    "new_start": 6.4,
+    "end": 7.9,
+    "selection_after_sort": 1,
+    "selected_template": "hook-title",
+    "delete_leaves": [
+      "sentence-pair"
+    ]
+  },
+  "media": [
+    {
+      "template": "sentence-pair",
+      "sha256": "e8a7fcfdffb38c3bdb4a33eae7844ad7f45e39825c8d90442cbcef3de8ff342c",
+      "width": 1920,
+      "height": 1080,
+      "duration": 1.8,
+      "alpha_decode": true
+    },
+    {
+      "template": "hook-title",
+      "sha256": "a4bd366c0c7b65397ee1806fd9343f89224ca727d34f558ecba77934114059e3",
+      "width": 1920,
+      "height": 1080,
+      "duration": 1.5,
+      "alpha_decode": true
+    },
+    {
+      "template": "hook-title",
+      "sha256": "e0a89f69debe6fce280c586273b0683dbf3b53d3c11ddf2d24f8dee85199eb35",
+      "width": 1920,
+      "height": 1080,
+      "duration": 1.5,
+      "alpha_decode": true
+    }
+  ],
+  "ci_prior": {
+    "head": "c65fbc8",
+    "run": 38766321547,
+    "conclusion": "failure",
+    "windows": "motion_cut_test fixture read non-ASCII journal using default encoding; explicit UTF-8 fixed here",
+    "mac_intel": "success",
+    "mac_arm": "success",
+    "install": "success"
+  },
+  "limits": [
+    "Browser applies preceded the final float-duration freshness correction; stored output accepted after fixture process reload with correction, without rerendering.",
+    "Generic hook-title preview/apply/reorder/delete actual UI; stat-number branch shares controls but was not exercised in this browser round.",
+    "Synthetic fixture picker/auth/lifecycle only; installed authentication, user/native CapCut and real audio/human quality not tested.",
+    "No release, batch, deployment or measured editing savings."
+  ]
+}

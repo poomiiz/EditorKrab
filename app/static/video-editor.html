@@ -117,7 +117,7 @@
   label { font-size: 13px; color: var(--txt-sub); font-weight: 500; }
 
   /* Tile Lists */
-  .list-grid { display: grid; gap: 12px; align-items: start; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .list-grid { display: grid; gap: 12px; align-items: start; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
   .recent-list { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
   .recent-list .recent-label { color: var(--mut); font-size: 13px; }
   .recent-list .recent-item { min-height: auto; padding: 2px 0; border: 0; background: transparent; color: var(--txt-sub); font-size: 13px; font-weight: 500; }
@@ -130,7 +130,7 @@
   }
   .tile:hover { background: var(--card-hover); border-color: var(--acc); transform: translateY(-1px); }
   .tile .ico { font-size: 24px; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--card2); }
-  .tile .body { flex: 1; min-width: 0; }
+  .tile .body { flex: 1; min-width: 0; max-width: 100%; }
   .tile .t1 { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--txt); }
   .tile .t2 { font-size: 12px; color: var(--mut); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tile .go { color: var(--mut); font-size: 18px; font-weight: bold; }
@@ -453,6 +453,10 @@
   .make-pair b { font-size: 17px; white-space: nowrap; }
   .make-pair button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px; text-align: center; }
   .make-pair small { font-size: 12.5px; font-weight: 400; opacity: .8; }
+  @media (max-width: 600px) {
+    .make-wrap { width: 100%; }
+    .make-pair { grid-template-columns: minmax(0, 1fr); }
+  }
   .make-pair .ghost, #planStoriesBtn { background: #1b2030; color: #f1f4fb; border: 1px solid #3a4260; border-radius: 12px; }
   .make-pair .ghost:hover, #planStoriesBtn:hover { border-color: #7c5cff; }
   #planStoriesBtn { padding: 10px 16px; width: 100%; }
@@ -491,6 +495,42 @@
   .story .st-txt .hint { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .story .st-time { color: var(--mut, #828ca4); font-size: 12.5px; white-space: nowrap; }
   .story .st-done { font-size: 11.5px; padding: 2px 8px; border-radius: 99px; background: rgba(16,185,129,.15); color: #10b981; white-space: nowrap; }
+  .clip-layout, .clip-right { min-width: 0; width: 100%; }
+  #storyPlan { min-width: 0; }
+  #storyPlan [hidden] { display: none !important; }
+  #storyPlan .story { display: flex; flex-direction: column; align-items: stretch; cursor: default; padding: 12px; }
+  #storyPlan .story-head, #storyPlan .story-facts, .story-actions, .story-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #storyPlan .tick { display: flex; gap: 8px; align-items: center; min-height: 44px; flex: 1; min-width: 0; }
+  #storyPlan .tick input { flex: none; width: 20px; height: 20px; }
+  #storyPlan .st-title { min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #storyPlan .story-facts { color: var(--txt-sub); font-size: 13px; }
+  #storyPlan .story-time, #storyPlan .source-time { font-family: Consolas, monospace; font-variant-numeric: tabular-nums; }
+  #storyPlan .story-status { font-size: 13px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 99px; color: var(--mut); }
+  #storyPlan .story-status.warn { background: var(--warn-bg); color: var(--warn); }
+  #storyPlan .story-reason { font-size: 13px; color: var(--mut); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #storyPlan button, #storyPlan select, #storyPlan summary, #storyPlan input:not([type=checkbox]), #storyPlan textarea { min-height: 44px; }
+  #storyPlan summary { display: flex; gap: 8px; align-items: center; cursor: pointer; color: var(--txt-sub); }
+  #storyPlan summary::before { content: '›'; }
+  #storyPlan details[open] > summary::before { content: '⌄'; }
+  #storyPlan .story-form { display: grid; gap: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+  #storyPlan .story-field { display: grid; gap: 4px; min-width: 0; }
+  #storyPlan .story-field label { font-size: 13px; color: var(--txt-sub); }
+  #storyPlan .story-field input, #storyPlan .story-field textarea, #storyPlan .story-field select { width: 100%; max-width: 100%; }
+  #storyPlan .story-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  #storyPlan .story-actions button { flex: 1; }
+  #storyPlan .story-error { color: var(--danger); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+  #storyPlan .story-save { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  #storyPlan .story-source { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; overflow-wrap: anywhere; }
+  #storyPlan .story-source button { flex: none; }
+  #storyPlan .story-skeleton { height: 14px; margin: 12px 0; background: var(--line); border-radius: var(--radius-sm); width: 75%; }
+  #storyPlan .story-skeleton.short { width: 45%; }
+  @media (max-width: 600px) {
+    .clip-layout { grid-template-columns: minmax(0, 1fr); }
+    #storyPlan .story-fields { grid-template-columns: minmax(0, 1fr); }
+    #storyPlan .story-actions button { flex: 1 1 44%; }
+    #storyPlan .story-save { flex-wrap: wrap; }
+    #storyPlan .story-save button { width: 100%; }
+  }
   #draftList .tile .body { min-width: 0; }
   #draftList .tile .t1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .proj.sel { outline: 2px solid #7c5cff; }
@@ -526,7 +566,8 @@
   .lib-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 10px; background: var(--card2, #1b2030); font-size: 13.5px; }
   .lib-row .hint { word-break: break-all; }
   #rvEdit h4 { margin: 14px 0 6px; font-size: 14px; }
-  .pl-row { display: flex; gap: 10px; align-items: flex-start; padding: 8px; border-radius: 10px; background: var(--card2, #1b2030); margin-bottom: 6px; font-size: 13.5px; }
+  .pl-row { display: flex; gap: 10px; align-items: flex-start; padding: 8px; border-radius: 10px; background: var(--card2); margin-bottom: 6px; font-size: 13.5px; }
+  .pl-row button,.pl-row select,.pl-row input{min-height:44px;max-width:100%}
   .pl-row > img, .pl-ph { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex: none; display: grid; place-items: center; background: #000; }
   .pl-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
   .pl-q { width: 100%; }
@@ -541,7 +582,8 @@
   body.simple #engine, body.simple #projTabs, body.simple #selHint { display: none !important; }  /* tech words a beginner does not need */
 </style>
 <link rel="stylesheet" href="/shell.css?v=8">
-<script src="/ui.js?v=2"></script></head>
+<link rel="stylesheet" href="/ai-plan.css?v=1"><script src="/ai-plan.js?v=1"></script>
+<script src="/ui.js?v=3"></script></head>
 <body>
 <div class="app">
 
@@ -592,7 +634,10 @@
       <div class="clip-right">
         <div class="card">
           <h2>📝 ดูเนื้อหาก่อน <span class="hint" style="font-weight:400">(ไม่บังคับ)</span></h2>
-          <textarea id="brief" rows="2" maxlength="2000" style="width:100%;margin-bottom:8px" placeholder="อยากได้คลิปแบบไหน (ไม่ใส่ก็ได้) เช่น vlog สบายๆ เน้นช่วงตลก คลิปละไม่เกิน 1 นาที"></textarea>
+          <textarea id="brief" rows="2" maxlength="2000" oninput="storyTargetChanged('brief')" style="width:100%;margin-bottom:8px" placeholder="อยากได้คลิปแบบไหน เช่น vlog สบายๆ เน้นช่วงตลก"></textarea>
+          <label for="storyTarget">ความยาวต่อคลิปโดยประมาณ</label>
+          <select id="storyTarget" onchange="storyTargetChanged()" style="width:100%;min-height:44px;margin-bottom:8px"><option value="">ตามเนื้อหา</option><option value="0.5">30 วินาที</option><option value="1">1 นาที</option><option value="2">2 นาที</option><option value="3">3 นาที</option><option value="5">5 นาที</option></select>
+          <div class="hint">สั้นกว่าได้ · เกินเล็กน้อยเพื่อจบประเด็น</div>
           <button class="ghost" id="planStoriesBtn" onclick="planStories()">🔍 ถอดเสียงและแบ่งเรื่อง</button>
           <div id="storyPlan" style="margin-top:10px"></div>
         </div>
@@ -1204,7 +1249,7 @@ async function scanFolder(path, autoName) {
       div.innerHTML = '<div class="ico">🎬</div><div class="body"><div class="t1">' + f.name +
         '</div><div class="t2">' + (f.error ? '⚠ เปิดไม่ได้: ' + f.error : mins + ' นาที · ' + shape) +
         '</div></div><div class="go">›</div>';
-      div.title = (f.folder ? f.folder + ' · ' : '') + (f.width ? f.width + '×' + f.height + ' · ' + f.size_mb + ' MB' : '');
+      div.title = f.name + ' · ' + (f.folder ? f.folder + ' · ' : '') + (f.width ? f.width + '×' + f.height + ' · ' + f.size_mb + ' MB' : '');
       if (!f.error) div.onclick = () => pickFile(f);
       box.appendChild(div);
     });
@@ -1282,6 +1327,7 @@ async function showTranscriptResults(path) {
 }
 
 function pickFile(f) {
+  const load = ++clipLoadEpoch;
   state.file = f;
   document.getElementById('pname').value = f.name.replace(/\.[^.]+$/, '');
   const mins = Math.floor(f.duration / 60) + ':' + String(Math.round(f.duration % 60)).padStart(2, '0');
@@ -1290,10 +1336,20 @@ function pickFile(f) {
   document.getElementById('clipFolder').textContent = f.path;
   document.getElementById('clipVideo').src = '/api/kit/media?path=' + encodeURIComponent(f.path);
   document.getElementById('result').className = 'msg';
-  storyList = [];
-  document.getElementById('storyPlan').innerHTML = '';
+  resetStories();
   document.getElementById('brief').value = '';
-  api('brief?file=' + encodeURIComponent(f.path)).then(r => { if (state.file.path === f.path) document.getElementById('brief').value = r.brief; }).catch(e => { document.getElementById('storyPlan').textContent = '❌ ' + ckErr(e); });
+  document.getElementById('storyTarget').value = '';
+  while (document.getElementById('storyTarget').options.length > 6) document.getElementById('storyTarget').remove(6);
+  document.getElementById('storyTarget').options[5] = new Option('5 นาที', '5');
+  const briefEdits = storyBriefEdits, targetEdits = storyTargetEdits;
+  api('brief?file=' + encodeURIComponent(f.path)).then(r => { if (state.file?.path === f.path && clipLoadEpoch === load) {
+    if (storyBriefEdits === briefEdits && document.getElementById('brief').value === '') document.getElementById('brief').value = r.brief;
+    const target = document.getElementById('storyTarget');
+    if (storyTargetEdits === targetEdits && target.value === '') {
+      if (r.max_minutes != null && ![...target.options].some(o => o.value === String(r.max_minutes))) target.add(new Option(r.max_minutes + ' นาที (บันทึกไว้)', r.max_minutes));
+      target.value = r.max_minutes == null ? '' : String(r.max_minutes);
+    }
+  } }).catch(e => { if (state.file?.path === f.path && clipLoadEpoch === load) storyError(ckErr(e)); });
   go('s-clip');
   findFocus();
   planStories(true);
@@ -1306,16 +1362,22 @@ const shapeNow = () => document.getElementById('shape').value;
 try { const v = localStorage.getItem('ck_shape'); if (v) document.getElementById('shape').value = v; } catch {}
 function shapeChanged() { try { localStorage.setItem('ck_shape', shapeNow()); } catch {} drawCrop(); }
 async function findFocus(range) {
+  const file = state.file?.path, epoch = ++focusEpoch, load = clipLoadEpoch;
+  if (!file) return;
   const note = document.getElementById('focusNote');
   state.focus = {x: 0.5, y: 0.5};
   state.focusManual = false;
   note.textContent = 'กำลังหาใบหน้า…';
   drawCrop();
   try {
-    const f = await api('focus', {file: state.file.path, ...(range || {})});
+    const f = await api('focus', {file, ...(range || {})});
+    if (state.file?.path !== file || epoch !== focusEpoch || load !== clipLoadEpoch || state.focusManual) return;
     state.focus = {x: f.x, y: f.y};
     note.textContent = f.found ? '· กรอบอยู่ที่ใบหน้าคนพูดแล้ว ลากปรับได้' : '· ไม่เจอใบหน้า วางกลางภาพ ลากปรับได้';
-  } catch (e) { note.textContent = '❌ หาใบหน้าไม่ได้: ' + ckErr(e); }
+  } catch (e) {
+    if (state.file?.path !== file || epoch !== focusEpoch || load !== clipLoadEpoch || state.focusManual) return;
+    note.textContent = '❌ หาใบหน้าไม่ได้: ' + ckErr(e);
+  }
   drawCrop();
 }
 // the box shows the part of the frame that stays in the clip, drawn over the picture inside the player
@@ -1338,6 +1400,7 @@ function drawCrop() {
 window.addEventListener('resize', drawCrop);
 document.getElementById('clipVideo').addEventListener('loadedmetadata', drawCrop);
 document.getElementById('cropBox').addEventListener('pointerdown', e => {
+  state.focusManual = true;
   const b = e.currentTarget, r0 = cropRect(), x0 = e.clientX, y0 = e.clientY, f0 = {...state.focus};
   b.setPointerCapture(e.pointerId);
   const move = ev => {
@@ -1365,6 +1428,7 @@ function openSubs() {
 function subRow(sub, emphasis) {
   const div = document.createElement('div');
   div.className = 'sub';
+  div.dataset.cueId = sub.id || '';
   div.dataset.start = sub.start;
   div.dataset.end = sub.end;
 
@@ -1444,6 +1508,7 @@ async function saveSubs() {
   const subs = [...document.querySelectorAll('#subsList .sub')].map(row => {
     const on = !!row.querySelector('button').dataset.on;
     const item = {
+      id: row.dataset.cueId || undefined,
       start: parseFloat(row.dataset.start),
       end: parseFloat(row.dataset.end),
       text: row.querySelector('.t').value.trim()
@@ -1843,67 +1908,230 @@ async function makeDraft(open = true) {
 }
 
 // Before choosing CapCut or HyperFrames: transcribe the whole file and split it into stories.
-const mmss = t => Math.floor(t / 60) + ':' + String(Math.round(t % 60)).padStart(2, '0');
+const mmss = t => { const n = Math.max(0, Math.round(t)); return Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0'); };
 let storyList = [];
-// saved = only show a split this file already has (on opening it); nothing saved = leave the box empty
+let storyEpoch = 0;
+let clipLoadEpoch = 0, focusEpoch = 0, storyBriefEdits = 0, storyTargetEdits = 0;
+let storyView = {file: '', revision: '', rows: [], job: {}, dirty: false, targetDirty: false, saving: false, selected: new Set(), error: ''};
+// Story data helpers: source seconds and anchors remain independent of the output clock.
+const storyEsc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function storyBoundary(rows, anchor, edge) {
+  const row = rows.find(r => r.cue_id === anchor?.cue_id);
+  if (!row) throw new Error('ไม่พบข้อความอ้างอิง · อ่านรายการใหม่');
+  if (anchor.word == null) return {time: row[edge], anchor: {cue_id: row.cue_id}};
+  const word = (row.words || []).find(w => w.n === anchor.word);
+  if (!word) throw new Error('ไม่พบคำอ้างอิง · เลือกคำใหม่');
+  return {time: word[edge], anchor: {cue_id: row.cue_id, word: anchor.word}};
+}
+function storySplits(story, rows) {
+  const starts = [], ends = [];
+  rows.forEach(row => {
+    starts.push({time: row.start, anchor: {cue_id: row.cue_id}, text: row.text});
+    ends.push({time: row.end, anchor: {cue_id: row.cue_id}});
+    (row.words || []).forEach(w => {
+      starts.push({time: w.start, anchor: {cue_id: row.cue_id, word: w.n}, text: w.text});
+      ends.push({time: w.end, anchor: {cue_id: row.cue_id, word: w.n}});
+    });
+  });
+  return starts.filter(s => story.start < s.time && s.time < story.end).map(s => {
+    const left = ends.filter(e => story.start < e.time && e.time <= s.time && e.time < story.end).sort((a,b) => b.time-a.time)[0];
+    return left ? {left, right: s, text: s.text} : null;
+  }).filter(Boolean).sort((a,b) => a.right.time-b.right.time);
+}
+function storyPayload(story) {
+  const out = {};
+  for (const key of ['title','summary','reason','start','end','start_anchor','end_anchor','duration_reason']) if (story[key] != null) out[key] = story[key];
+  return out;
+}
+function storyMeasure(story, targetMinutes) {
+  const duration = story.end-story.start, target = targetMinutes == null ? null : targetMinutes*60;
+  return {duration, target, delta: target == null ? null : Math.round((duration-target)*10)/10};
+}
+// Story DOM and request coordination.
+function resetStories() {
+  storyEpoch++;
+  storyList = [];
+  storyView = {file: state.file?.path || '', revision: '', rows: [], job: {}, dirty: false, targetDirty: false, saving: false, selected: new Set(), error: ''};
+  document.getElementById('storyPlan').innerHTML = '';
+  document.getElementById('storyTarget').disabled = false;
+  document.getElementById('planStoriesBtn').disabled = false;
+}
+function storyCurrent(file, epoch) { return state.file?.path === file && storyEpoch === epoch; }
+function storyError(message) {
+  storyView.error = message;
+  const node = document.getElementById('storyError');
+  if (node) node.textContent = message;
+  const retry = document.getElementById('storyRetry');
+  if (retry) retry.hidden = !message;
+}
+function storyTargetChanged(kind) {
+  if (kind === 'brief') storyBriefEdits++; else storyTargetEdits++;
+  storyEpoch++;
+  storyView.targetDirty = true;
+  storyError((kind === 'brief' ? 'โจทย์เปลี่ยน' : 'ความยาวเปลี่ยน') + ' · กดถอดเสียงและแบ่งเรื่องเพื่อใช้ค่านี้');
+  renderStories();
+}
+function storyChanged() {
+  if (storyView.saving) return;
+  if (!storyView.dirty) storyEpoch++; // stop old polling before it can overwrite manual edits
+  storyView.dirty = true;
+  if (!storyView.targetDirty) storyError('');
+  const status = document.getElementById('storyEditStatus');
+  if (status) status.textContent = 'ยังไม่บันทึก';
+  const save = document.getElementById('storySaveBtn');
+  if (save) save.disabled = !storyList.length || !storyView.revision || storyView.targetDirty;
+  storyNotes();
+}
+function storyOptions(story, edge) {
+  const selected = story[edge + '_anchor']?.cue_id;
+  return storyView.rows.map(r => `<option value="${storyEsc(r.cue_id)}" ${r.cue_id === selected ? 'selected' : ''}>${mmss(r[edge])} ${storyEsc(String(r.text).slice(0,80))}</option>`).join('');
+}
+function storyWords(story, edge) {
+  const anchor = story[edge + '_anchor'], row = storyView.rows.find(r => r.cue_id === anchor?.cue_id);
+  return '<option value="">ทั้งข้อความ</option>' + (row?.words || []).map(w => {
+    const n = w.n;
+    return `<option value="${n}" ${anchor?.word === n ? 'selected' : ''}>${mmss(w[edge])} ${storyEsc(String(w.text).slice(0,60))}</option>`;
+  }).join('');
+}
+function storyMarkup(story, i) {
+  const m = storyMeasure(story, storyView.job.max_minutes), splits = storySplits(story, storyView.rows);
+  const facts = m.target == null ? 'ตามเนื้อหา' : `เป้า <span class="story-time">${mmss(m.target)}</span> · <span class="story-time">${m.delta > 0 ? '+' : ''}${m.delta}</span> วิ`;
+  return `<div class="story ${storyView.selected.has(i) ? 'on' : ''}" data-story="${i}"><div class="story-head"><label class="tick"><input type="checkbox" data-i="${i}" ${storyView.selected.has(i) ? 'checked' : ''} onchange="storySelect(${i},this.checked)"><strong class="st-title" translate="no">${i+1}. ${storyEsc(story.title)}</strong></label><span class="st-done" style="display:none"></span>${story.review_required ? '<span class="story-status warn">ตรวจเวลา</span>' : ''}</div><div class="story-facts"><button type="button" onclick="storyPlay(${i})" aria-label="ฟังเรื่อง ${i+1}"><span class="story-time">▶ ${mmss(story.start)}–${mmss(story.end)}</span></button><span>จริง <b class="story-time">${mmss(m.duration)}</b></span><span>${facts}</span></div><div class="story-reason">${storyEsc(story.duration_reason || story.summary || '')}</div><details class="story-detail"><summary>รายละเอียดและแก้ไข</summary><div class="story-form"><div class="story-field"><label for="storyTitle${i}">ชื่อเรื่อง</label><input id="storyTitle${i}" maxlength="30" value="${storyEsc(story.title)}" oninput="storyField(${i},'title',this.value)"></div><div class="story-field"><label for="storySummary${i}">ใจความเรื่อง</label><textarea id="storySummary${i}" rows="2" maxlength="80" oninput="storyField(${i},'summary',this.value)">${storyEsc(story.summary || '')}</textarea></div><div class="story-fields">${['start','end'].map(edge => `<div class="story-field"><label for="story${edge}${i}">${edge === 'start' ? 'เริ่มจากข้อความ' : 'จบที่ข้อความ'}</label><select id="story${edge}${i}" onchange="storyAnchor(${i},'${edge}',this.value)">${storyOptions(story,edge)}</select><label for="story${edge}Word${i}">${edge === 'start' ? 'คำเริ่ม' : 'คำจบ'}</label><select id="story${edge}Word${i}" onchange="storyAnchor(${i},'${edge}',null,this.value)">${storyWords(story,edge)}</select></div>`).join('')}</div><div class="story-field"><label for="storyReason${i}">เหตุผลการเลือกช่วง</label><textarea id="storyReason${i}" rows="2" maxlength="80" oninput="storyField(${i},'duration_reason',this.value)">${storyEsc(story.duration_reason || '')}</textarea></div><div class="story-field"><label for="storySplit${i}">แบ่งจากข้อความต้นฉบับ</label><select id="storySplit${i}" ${splits.length ? '' : 'disabled'}>${splits.map((s,n) => `<option value="${n}" translate="no">${mmss(s.right.time)} ${storyEsc(String(s.text).slice(0,60))}</option>`).join('')}</select></div><div class="story-actions"><button type="button" onclick="storySplit(${i})" ${splits.length ? '' : 'disabled'}>แบ่งเรื่อง</button><button type="button" onclick="storyMerge(${i})" ${i+1 < storyList.length ? '' : 'disabled'}>รวมถัดไป</button><button type="button" class="del" onclick="storyRemove(${i})">ลบเรื่อง</button></div></div></details></div>`;
+}
+function renderStories() {
+  const box = document.getElementById('storyPlan');
+  const opened = [...box.querySelectorAll('.story-detail[open]')].map(d => +d.closest('.story').dataset.story);
+  const editable = storyView.revision && storyView.rows.length && !storyView.targetDirty;
+  const warning = storyView.job.unverified_selection ? '<span class="story-status warn">รอตรวจรายการเดิม</span>' : '';
+  box.innerHTML = `<div class="story-toolbar"><b class="grow">${storyList.length} เรื่อง</b>${warning}<button type="button" onclick="storyAdd()" ${editable ? '' : 'disabled'}>เพิ่มเรื่อง</button></div>${storyList.length ? '<label class="tick"><input type="checkbox" onchange="storySelectAll(this.checked)" '+(storyView.selected.size === storyList.length ? 'checked' : '')+'> เลือกทุกเรื่อง</label>' : '<div class="hint">ยังไม่มีเรื่อง · เพิ่มจากข้อความต้นฉบับได้</div>'}${storyList.map(storyMarkup).join('')}<div id="storyError" class="story-error" role="alert"></div><button type="button" id="storyRetry" hidden onclick="planStories(true)">อ่านรายการใหม่</button><div class="story-save"><span id="storyEditStatus" class="hint grow">${storyView.dirty ? 'ยังไม่บันทึก' : 'บันทึกแล้ว'}</span><button class="primary" id="storySaveBtn" type="button" onclick="saveStories()" ${editable && storyList.length && (storyView.dirty || storyView.job.unverified_selection) && !storyView.saving ? '' : 'disabled'}>${storyView.saving ? 'กำลังบันทึก…' : 'บันทึกเรื่อง'}</button></div>${storyView.rows.length ? '<details><summary>ข้อความและเวลาต้นฉบับ</summary>'+storyView.rows.map((r,i) => `<div class="story-source"><button type="button" class="source-time" onclick="storyPlaySource(${i})">${mmss(r.start)}</button><span translate="no">${storyEsc(r.text)}</span></div>`).join('')+'</details>' : ''}`;
+  opened.forEach(i => { const d = box.querySelector(`[data-story="${i}"] .story-detail`); if (d) d.open = true; });
+  storyError(storyView.error);
+  box.querySelectorAll('input,select,textarea,.story-actions button').forEach(node => { if (storyView.saving) node.disabled = true; });
+  document.getElementById('storyTarget').disabled = storyView.saving;
+  storyNotes();
+}
+function acceptStories(job, file) {
+  storyView.file = file;
+  storyView.job = job;
+  storyView.revision = job.plan_revision || '';
+  storyView.rows = job.source_rows || [];
+  storyList = (job.stories || []).map(s => ({...s}));
+  storyView.selected = new Set(storyList.map((_,i) => i));
+  storyView.dirty = false;
+  storyView.targetDirty = false;
+  storyView.error = '';
+  renderStories();
+}
+function storySelect(i, checked) { checked ? storyView.selected.add(i) : storyView.selected.delete(i); document.querySelector(`#storyPlan [data-story="${i}"]`)?.classList.toggle('on', checked); storyNotes(); }
+function storySelectAll(checked) { storyView.selected = new Set(checked ? storyList.map((_,i) => i) : []); renderStories(); }
+function storyField(i, key, value) {
+  if (storyView.saving) return;
+  storyList[i][key] = value; storyChanged();
+  const row = document.querySelector(`#storyPlan [data-story="${i}"]`);
+  if (key === 'title' && row) row.querySelector('.st-title').textContent = (i+1)+'. '+value;
+}
+function storyAnchor(i, edge, cue, word) {
+  if (storyView.saving) return;
+  try {
+    const anchor = {cue_id: cue ?? storyList[i][edge+'_anchor']?.cue_id};
+    if (word != null && word !== '') anchor.word = +word;
+    const chosen = storyBoundary(storyView.rows, anchor, edge);
+    storyList[i][edge] = chosen.time; storyList[i][edge+'_anchor'] = chosen.anchor;
+    storyChanged(); renderStories();
+  } catch(e) { storyError(ckErr(e)); }
+}
+function storyPlaySource(i) { const r = storyView.rows[i]; storyPlayRange(r.start, r.end); }
+function storyPlay(i) { const r = storyList[i]; storyPlayRange(r.start, r.end); }
+function storyPlayRange(start, end) {
+  const v = document.getElementById('clipVideo'); v.currentTime = start;
+  const played = v.play(); if (played?.catch) played.catch(() => storyError('เล่นตัวอย่างไม่สำเร็จ · ลองกดเล่นอีกครั้ง'));
+  if (!state.focusManual) findFocus({start,end});
+  v.ontimeupdate = () => { if (v.currentTime >= end) { v.pause(); v.ontimeupdate = null; } };
+}
+function storyAdd() {
+  if (!storyView.revision || !storyView.rows.length || storyView.saving || storyView.targetDirty) return;
+  const row = storyView.rows.find(r => !storyList.some(s => r.start < s.end && r.end > s.start));
+  if (!row) { storyError('ยังไม่มีช่วงว่าง · แบ่งหรือแก้เรื่องเดิมก่อน'); return; }
+  const at = storyList.findIndex(s => s.start > row.start), index = at < 0 ? storyList.length : at;
+  storyList.splice(index,0,{title:'เรื่องใหม่',summary:'',start:row.start,end:row.end,start_anchor:{cue_id:row.cue_id},end_anchor:{cue_id:row.cue_id},duration_reason:''});
+  storyView.selected = new Set(storyList.map((_,i) => i)); storyChanged(); renderStories();
+  const details = document.querySelector(`#storyPlan [data-story="${index}"] .story-detail`); if (details) details.open = true;
+}
+function storySplit(i) {
+  if (storyView.saving) return;
+  const split = storySplits(storyList[i],storyView.rows)[+document.getElementById('storySplit'+i)?.value];
+  if (!split) { storyError('ไม่มีข้อความให้แบ่งในช่วงนี้'); return; }
+  const story = storyList[i];
+  storyList.splice(i,1,{...story,end:split.left.time,end_anchor:split.left.anchor},{...story,start:split.right.time,start_anchor:split.right.anchor,summary:'',duration_reason:''});
+  storyView.selected = new Set(storyList.map((_,n) => n)); storyChanged(); renderStories();
+}
+async function storyMerge(i) {
+  if (storyView.saving || !storyList[i+1]) return;
+  const [a, b] = [storyList[i], storyList[i+1]];
+  if (!await ckConfirm('รวมสองเรื่องนี้เป็นเรื่องเดียว รวมช่วงระหว่างเรื่องด้วย?', {ok:'รวมเรื่อง', quote:'“'+a.title+'”\n“'+b.title+'”'})) return;
+  if (storyView.saving || storyList[i] !== a || storyList[i+1] !== b) return;   // the list changed while the dialog was open
+  storyList[i] = {...storyList[i],end:storyList[i+1].end,end_anchor:storyList[i+1].end_anchor}; storyList.splice(i+1,1);
+  storyView.selected = new Set(storyList.map((_,n) => n)); storyChanged(); renderStories();
+}
+async function storyRemove(i) {
+  const story = storyList[i];
+  if (storyView.saving || !await ckConfirm('ลบเรื่องนี้จากรายการ?', {ok:'ลบ', danger:true, quote:'“'+story.title+'”'})) return;
+  if (storyView.saving || storyList[i] !== story) return;   // the list changed while the dialog was open
+  storyList.splice(i,1); storyView.selected = new Set(storyList.map((_,n) => n)); storyChanged(); renderStories();
+}
+async function saveStories() {
+  if (storyView.saving || !storyView.revision || !storyList.length || storyView.targetDirty || (!storyView.dirty && !storyView.job.unverified_selection)) return;
+  const file = state.file?.path, epoch = ++storyEpoch;
+  storyView.saving = true; renderStories();
+  try {
+    const job = await api('story-plan/save',{file,plan_revision:storyView.revision,stories:storyList.map(storyPayload)});
+    if (!storyCurrent(file,epoch)) return;
+    acceptStories(job,file); markMade();
+  } catch(e) { if (storyCurrent(file,epoch)) storyError(ckErr(e)); }
+  finally { if (storyCurrent(file,epoch)) { storyView.saving = false; renderStories(); } }
+}
 async function planStories(saved) {
   const box = document.getElementById('storyPlan');
-  if (!state.file) { box.textContent = '❌ ยังไม่ได้เลือกไฟล์'; return; }
-  const file = state.file.path;
+  if (storyView.saving) return;
+  if (!state.file) { box.textContent = 'ยังไม่ได้เลือกไฟล์'; return; }
+  const asked = state.file;
+  if (storyView.dirty && !await ckConfirm('อ่านรายการใหม่แทนเรื่องที่ยังไม่บันทึก?', {ok:'อ่านรายการใหม่', danger:true})) return;
+  if (storyView.saving || state.file !== asked) return;   // another file or a save started while the dialog was open
+  const file = state.file.path, epoch = ++storyEpoch;
   document.getElementById('planStoriesBtn').disabled = true;
+  document.getElementById('storyTarget').disabled = true;
   try {
     let job;
-    if (!saved) job = await api('story-plan', {file, brief: document.getElementById('brief').value});
-    else try { job = await api('story-plan?file=' + encodeURIComponent(file)); }
-    catch (e) { if (ckErr(e) === 'no plan started for this file') return; throw e; }
-    while (job.status === 'running' || job.status === 'waiting') {
-      if (job.status === 'running') box.innerHTML = '<span class="spin"></span> กำลัง' + job.step + '… (ไฟล์ยาวอาจใช้หลายนาที)';
-      else if (!box.querySelector('.agent-cmd')) box.innerHTML = webAiBox('stories', file, 'ถอดเสียงเสร็จแล้ว · กดปุ่มเพื่อเอาไฟล์ไปให้ AI แบ่งเรื่อง หน้านี้จะขึ้นรายการเองเมื่อเสร็จ');
-      await new Promise(r => setTimeout(r, 3000));
-      job = await api('story-plan?file=' + encodeURIComponent(file));
-      if (state.file.path !== file) return;  // another file was opened meanwhile
+    if (!saved) job = await api('story-plan',{file,brief:document.getElementById('brief').value,max_minutes:document.getElementById('storyTarget').value ? +document.getElementById('storyTarget').value : null});
+    else try { job = await api('story-plan?file='+encodeURIComponent(file)); }
+    catch(e) { if (ckErr(e) === 'no plan started for this file') { renderStories(); return; } throw e; }
+    while (storyCurrent(file,epoch) && (job.status === 'running' || job.status === 'waiting')) {
+      if (job.source_rows?.length && job.plan_revision && !box.querySelector('.agent-cmd')) {
+        acceptStories(job,file);
+        if (job.status === 'waiting') box.insertAdjacentHTML('beforeend',webAiBox('stories',file,'ถอดเสียงเสร็จแล้ว · ส่งให้ AI หรือเพิ่มเรื่องเอง'));
+      } else if (job.status === 'running' && !storyList.length) box.innerHTML = '<div aria-busy="true"><span class="hint">กำลังอ่านเนื้อหา…</span><div class="story-skeleton"></div><div class="story-skeleton short"></div></div>';
+      await new Promise(r => setTimeout(r,3000));
+      if (!storyCurrent(file,epoch)) return;
+      job = await api('story-plan?file='+encodeURIComponent(file));
     }
-    if (state.file.path !== file) return;
+    if (!storyCurrent(file,epoch)) return;
     if (job.status === 'error') throw new Error(job.error);
-    storyList = job.stories;
-    box.innerHTML = `<div style="font-weight:700;margin-bottom:6px">ได้ ${storyList.length} เรื่อง · ไฟล์ยาว ${mmss(job.duration)} · มีเสียงพูดรวม ${mmss(job.speech)}</div>`;
-    storyList.forEach((st, i) => {
-      const row = document.createElement('div');
-      row.className = 'story on';
-      row.innerHTML = `<label class="tick"><input type="checkbox" checked data-i="${i}"></label>
-        <div class="st-txt"><b></b><span class="hint"></span></div>
-        <span class="st-done" style="display:none"></span>
-        <span class="st-time" title="กดเพื่อฟังช่วงนี้">▶ ${mmss(st.start)}–${mmss(st.end)}</span>`;
-      row.querySelector('b').textContent = (i + 1) + '. ' + st.title;
-      row.querySelector('.hint').textContent = st.summary;
-      row.title = st.summary;
-      const cb = row.querySelector('input');
-      cb.onchange = () => { row.classList.toggle('on', cb.checked); storyNotes(); };
-      row.onclick = e => {
-        if (e.target.closest('.tick')) return;
-        const v = document.getElementById('clipVideo');
-        v.currentTime = st.start; v.play();
-        if (!state.focusManual) findFocus({start: st.start, end: st.end});  // crop box follows the story being viewed
-        v.ontimeupdate = () => { if (v.currentTime >= st.end) { v.pause(); v.ontimeupdate = null; } };
-      };
-      box.appendChild(row);
-    });
-    const all = document.createElement('label');
-    all.className = 'hint'; all.style.cssText = 'display:flex;gap:6px;align-items:center;cursor:pointer;margin:4px 0';
-    all.innerHTML = '<input type="checkbox" checked> เลือกทุกเรื่อง';
-    all.querySelector('input').onchange = e => box.querySelectorAll('.story input').forEach(c => { c.checked = e.target.checked; c.onchange(); });
-    box.insertBefore(all, box.children[1]);
-    storyNotes();
-    markMade();
-  } catch (e) {
-    box.textContent = '❌ ' + ckErr(e);
+    acceptStories(job,file); markMade();
+  } catch(e) {
+    if (!storyCurrent(file,epoch)) return;
+    if (!box.querySelector('#storyError')) renderStories();
+    storyError(ckErr(e));
   } finally {
-    document.getElementById('planStoriesBtn').disabled = false;
+    if (state.file?.path === file && !storyView.saving) {
+      document.getElementById('planStoriesBtn').disabled = false;
+      document.getElementById('storyTarget').disabled = false;
+    }
   }
 }
 
 async function markMade() {
   if (!storyList.length) return;
+  const file = state.file?.path, epoch = storyEpoch;
   // a failed read must not look like "nothing made yet": retry once, then say the check failed
   const twice = async f => { try { return await f(); } catch { return await f(); } };
   let cc, hf;
@@ -1911,9 +2139,11 @@ async function markMade() {
     [cc, hf] = await Promise.all([twice(() => api('drafts')),
       twice(() => fetch('/api/kit/hf-projects').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }))]);
   } catch (e) {
+    if (!storyCurrent(file,epoch)) return;
     document.querySelectorAll('#storyPlan .st-done').forEach(t => { t.style.display = ''; t.textContent = '? เช็กไม่ได้'; });
     return;
   }
+  if (!storyCurrent(file,epoch)) return;
   const norm = t => (t || '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   document.querySelectorAll('#storyPlan .story').forEach((row, i) => {
     const st = storyList[i], tail = norm((i + 1) + ' ' + st.title), range = `-${Math.trunc(st.start)}-${Math.trunc(st.end)}`;
@@ -1936,6 +2166,10 @@ function storyNotes() {
 // bottom buttons: no stories ticked = the whole clip; one = make it and open it; several = make them one by one
 async function makeChosen(kind) {
   const list = storyList.length ? chosenStories() : [];
+  if (storyView.dirty || storyView.saving || storyView.targetDirty || storyView.job.unverified_selection) {
+    storyError('บันทึกและตรวจรายการก่อนสร้างโปรเจกต์'); return;
+  }
+  if (storyList.length && !list.length) { storyError('เลือกอย่างน้อยหนึ่งเรื่องก่อนสร้างโปรเจกต์'); return; }
   state.via = kind === 'clipkit' ? 'clipkit' : 'capcut';
   if (!list.length) return kind === 'hyperframes' ? makeHyperframes() : makeDraft();
   const nameBox = document.getElementById('pname');
@@ -2485,9 +2719,19 @@ async function plLoad() {
   if (!PLMUSIC) PLMUSIC = api('music').then(d => d.music || []).catch(() => []);
   plDraw();
 }
+let plSaving = false;
 async function plSave() {
-  try { await api('draft/placed', {path: state.draft.path, ...PL}); document.getElementById('rvDirty').style.display = ''; }
-  catch (e) { toast('❌ ' + ckErr(e)); }
+  if (plSaving) return;
+  plSaving = true;
+  const payload = () => JSON.stringify({path: state.draft.path, ...PL});
+  try {
+    while (true) {
+      const sent = payload(), r = await api('draft/placed', JSON.parse(sent));
+      if (payload() !== sent) continue;
+      PL = r.placed; plDraw(); document.getElementById('rvDirty').style.display = ''; return;
+    }
+  } catch (e) { toast('❌ ' + ckErr(e)); }
+  finally { plSaving = false; }
 }
 function plDraw() {
   const box = document.getElementById('rvEdit');
@@ -2506,13 +2750,13 @@ function plDraw() {
     q.value = it.query || '';
     q.onchange = () => { it.query = q.value.trim(); plSave(); };
     row.querySelector('[data-a=del]').onclick = () => { PL.broll.splice(i, 1); plSave(); plDraw(); };
-    row.querySelector('[data-a="-"]').onclick = () => { it.start = Math.max(0, +(it.start - 0.5).toFixed(2)); plSave(); plDraw(); };
-    row.querySelector('[data-a="+"]').onclick = () => { it.start = +(it.start + 0.5).toFixed(2); plSave(); plDraw(); };
+    row.querySelector('[data-a="-"]').onclick = () => { it.start = Math.max(0, +(it.start - 0.5).toFixed(2)); it.anchor = {kind: 'timeline', start: it.start}; delete it.opportunity_id; plSave(); plDraw(); };
+    row.querySelector('[data-a="+"]').onclick = () => { it.start = +(it.start + 0.5).toFixed(2); it.anchor = {kind: 'timeline', start: it.start}; delete it.opportunity_id; plSave(); plDraw(); };
     row.querySelector('[data-a=dur]').onchange = e => { it.dur = +e.target.value; plSave(); plDraw(); };
     row.querySelector('[data-a=file]').onclick = async () => {
       const r = await fetch('/api/kit/browse-file', {method: 'POST'}).then(x => x.json());
       if (!r.path) return;
-      it.file = r.path; it.thumb = ''; it.query = it.query || '(ไฟล์ของเรา)'; plSave(); plDraw();
+      plCandidate(row, it, {file: r.path, thumb: '', query: it.query || '(ไฟล์ของเรา)', source_ref: {license_status: 'unverified'}});
     };
     row.querySelector('[data-a=find]').onclick = async () => {
       const alt = row.querySelector('.pl-alt');
@@ -2522,12 +2766,15 @@ function plDraw() {
         const r = await api('stock/free-search', {query: q.value.trim(), count: 6});
         alt.innerHTML = '';
         r.items.forEach(x => {
-          const im = document.createElement('img');
-          im.src = x.thumb; im.title = x.title;
+          const im = document.createElement('button');
+          im.textContent = x.title.slice(0, 30); im.title = x.title;
           im.onclick = async () => {
             alt.innerHTML = '<span class="spin"></span> กำลังโหลด…';
-            const d = await api('stock/free-download', {source: x.source, id: x.id, file: x.file});
-            Object.assign(it, {file: d.path, thumb: x.thumb, query: q.value.trim()}); plSave(); plDraw();
+            try {
+              const d = await api('stock/free-download', {source: x.source, id: x.id, file: x.file});
+              plCandidate(row, it, {file: d.path, thumb: x.thumb, query: q.value.trim(),
+                source_ref: {provider: x.source, id: x.id, page: x.url, license_status: 'unverified'}});
+            } catch (e) { alt.textContent = ckErr(e) + ' · กดเปลี่ยนภาพเพื่อลองใหม่'; }
           };
           alt.appendChild(im);
         });
@@ -2545,7 +2792,8 @@ function plDraw() {
     const sub = PLSUBS[+e.target.value];
     const r = await fetch('/api/kit/browse-file', {method: 'POST'}).then(x => x.json()).catch(() => ({}));
     if (!r.path) { e.target.value = ''; toast('เลือกไฟล์ภาพประกอบ หรือเพิ่มแล้วกด "เปลี่ยนภาพ" เพื่อค้นใน Pixabay'); return; }
-    PL.broll.push({start: sub.start, dur: 2, file: r.path, query: '(ไฟล์ของเรา)', thumb: ''});
+    PL.broll.push({start: sub.start, dur: 2, file: r.path, query: '(ไฟล์ของเรา)', thumb: '',
+      anchor: {kind: 'timeline', start: sub.start}, reason: 'ผู้ใช้เลือกภาพประกอบประโยคนี้'});
     PL.broll.sort((a, b) => a.start - b.start); plSave(); plDraw();
   };
   box.appendChild(add);
@@ -2580,6 +2828,15 @@ function plDraw() {
   svol.value = PL.sfx.volume; svol.onchange = () => { PL.sfx.volume = +svol.value; plSave(); };
   box.appendChild(m);
 }
+function plCandidate(row, item, candidate) {
+  const box = row.querySelector('.pl-alt'), media = document.createElement(/\.(png|jpe?g|webp)$/i.test(candidate.file) ? 'img' : 'video');
+  media.src = '/api/kit/media?path=' + encodeURIComponent(candidate.file); media.controls = true; media.muted = true;
+  media.style.width = '100%'; media.style.height = 'auto'; media.style.maxHeight = '220px'; media.style.objectFit = 'contain';
+  const note = document.createElement('div'); note.className = 'hint'; note.textContent = 'ดูภาพก่อนใช้ · สิทธิ์: unverified';
+  const apply = document.createElement('button'); apply.textContent = 'ใช้ภาพนี้';
+  apply.onclick = async () => { apply.disabled = true; delete item.asset_id; delete item.kind; Object.assign(item, candidate, {source_start: 0}); await plSave(); apply.disabled = false; };
+  box.replaceChildren(media, note, apply);
+}
 async function rePreview() {
   const busy = document.getElementById('rvBusy'), v = document.getElementById('rvVideo');
   busy.innerHTML = '<span class="spin"></span> กำลังทำตัวอย่างใหม่… (ราว 40 วินาที)';
@@ -2609,7 +2866,7 @@ async function autoRun() {
       `ภาพประกอบที่ใส่: ${p.broll.length ? p.broll.join(', ') : 'ไม่มี'}`, `เพลง: ${p.music || 'ไม่มี'}`,
       `เสียงเอฟเฟกต์ ${p.sfx} จุด`, p.karaoke_estimated ? `⚠️ ${p.karaoke_estimated} บรรทัดไม่มีเวลาของคำ` : ''].filter(Boolean).join(' · ');
     document.getElementById('rvAgent').innerHTML = r.punch_picked ? '' :
-      agentBox(r.agent_command, 'อยากได้คำเน้นที่ตรงใจความ + ภาพประกอบ ส่งคำสั่งนี้ให้ Claude แล้วกด "ทำให้ครบ" อีกครั้ง');
+      webAiBox('clip', state.draft.path, 'เลือกคำเน้นและหัวคลิปด้วย AI');
     renderGuide(state.draft);
     plLoad();
   } catch (e) { busy.textContent = '❌ ' + ckErr(e); }
@@ -2647,7 +2904,7 @@ async function ovLoad() {
       if (on) {
         const b = document.createElement('button');
         b.className = 'small'; b.textContent = '✓ ' + r.templates[on.template] + ' · เอาออก';
-        b.onclick = async () => { await api('draft/overlay-remove', {path: state.draft.path, start: s.start}); ovLoad(); };
+        b.onclick = async () => { await api('draft/overlay-remove', {path: state.draft.path, placement_id: on.placement_id, start: on.start}); ovLoad(); };
         row.appendChild(b);
       } else Object.entries(r.quick).forEach(([k, label]) => {  // number / infographic motion comes from the web AI or an agent
         const b = document.createElement('button');
@@ -2782,42 +3039,86 @@ function webAiBox(step, target, note) {
   setTimeout(() => {
     const el = k => document.getElementById(id + k);
     if (!el('dl')) return;
-    let polling = false;
-    const done = async r => {
+    let polling = false, importing = false, imported = false, generation = 0;
+    const review = step === 'clip' ? CKAIPlan.review(el('ta'), el('in'), el('plan'),
+      answer => api('web-ai/preview', {step, target, answer})) : null;
+    const current = g => g === generation && !!el('dl');
+    const done = async (r, g) => {
+      if (!current(g)) return;
       if (step === 'stories') { el('msg').textContent = '✓ นำเข้า ' + r.stories.length + ' เรื่อง'; return; }
-      el('msg').innerHTML = '<span class="spin"></span> นำเข้า ' + r.lines + ' บรรทัดแล้ว' + (r.cut ? ' · ตัดทิ้ง ' + r.cut + ' บรรทัด' : '') + ' · กำลังสร้างโปรเจกต์ CapCut ใหม่…';
-      const p = await api('draft/prepare', {path: target});  // the "· CapCut" copy is rebuilt with the AI's emphasis + title
-      el('msg').textContent = '✅ ' + p.steps.join(' · ') + ' · เปิด CapCut แล้วหาโปรเจกต์ชื่อลงท้าย "· CapCut"' + (r.same_text ? ' · ⚠️ ' + r.same_text : '');
+      el('msg').textContent = 'นำเข้าแล้ว · กำลังอัปเดตโปรเจกต์';
+      const timeline = await api('draft/timeline?path=' + encodeURIComponent(target));
+      if (!current(g)) return;
+      if (timeline.via !== 'clipkit') await api('draft/prepare', {path: target, capcut: true});
+      if (!current(g)) return;
+      const refreshed = await api('drafts');
+      if (!current(g)) return;
+      drafts = refreshed.drafts;
+      if (state.draft && state.draft.path === target) {
+        state.draft = drafts.find(d => d.path === target) || state.draft;
+        renderGuide(state.draft);
+        loadFilmstrip();
+      }
+      el('msg').textContent = (timeline.via === 'clipkit' ? 'นำเข้าแล้ว · ดูตัวอย่างก่อนส่งออก' : 'สร้างแล้ว · เปิดโปรเจกต์ลงท้าย · CapCut') + (r.same_text ? ' · ⚠️ ' + r.same_text : '');
     };
-    const poll = async () => {  // until the box is replaced or the saved answer is in
-      if (!el('dl')) return;
+    const submit = async (answer, g) => {
+      if (!current(g) || importing || imported) return;
+      importing = true;
+      el('in').disabled = true;
       try {
-        const r = await api('web-ai/import', {step, target, answer: ''});
-        if (!r.waiting) { polling = false; return done(r); }
-      } catch (e) { el('msg').textContent = '❌ ' + ckErr(e); }
-      setTimeout(poll, 3000);
+        if (answer.trim()) el('msg').textContent = '';
+        if (review && answer.trim() && !await review.check(answer)) return;
+        if (!current(g)) return;
+        el('ta').disabled = true;
+        const r = await api('web-ai/import', {step, target, answer});
+        if (!current(g) || r.waiting) return;
+        imported = true;
+        polling = false;
+        el('ta').value = ''; // A committed answer stays consumed even if refreshing the project fails.
+        await done(r, g);
+      } catch (e) {
+        if (current(g)) { if (review) review.clear(); el('msg').textContent = '❌ ' + ckErr(e); }
+      } finally {
+        if (current(g)) { importing = false; el('in').disabled = false; el('ta').disabled = false; }
+      }
+    };
+    const poll = async g => {  // Each export owns one poll chain; old responses cannot finish a newer request.
+      if (!current(g) || !polling || imported) return;
+      if (step === 'clip' && el('ta').value.trim()) { polling = false; return; }
+      await submit('', g);
+      if (current(g) && polling && !imported) setTimeout(() => poll(g), 3000);
     };
     el('dl').onclick = async () => {
+      if (el('dl').disabled) return;
+      const g = ++generation;
+      if (review) review.clear();
+      polling = false; imported = false; importing = true;
+      el('dl').disabled = true; el('in').disabled = true;
       try {
         const r = await api('web-ai/export', {step, target, max_minutes: step === 'clip' ? +el('max').value || null : null});
+        if (!current(g)) return;
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([r.text], {type: 'text/markdown'}));
         a.download = r.name; a.click();
-        navigator.clipboard.writeText('อ่านไฟล์นี้แล้วทำตาม: "' + r.file + '"').catch(() => {});
-        el('msg').textContent = 'บันทึกไว้ที่ ' + r.file + ' · Claude บนเครื่อง: วางข้อความที่คัดลอกให้แล้วในแชต หน้านี้จะนำเข้าเอง · AI บนเว็บ: อัปโหลดไฟล์นี้แล้ววางคำตอบ JSON ด้านล่าง';
-        if (!polling) { polling = true; setTimeout(poll, 3000); }
-      } catch (e) { el('msg').textContent = '❌ ' + ckErr(e); }
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        el('msg').textContent = 'แนบไฟล์ให้ AI บนเว็บได้เลย แล้ววาง JSON ด้านล่าง';
+        polling = true;
+        setTimeout(() => poll(g), 3000);
+      } catch (e) { if (current(g)) el('msg').textContent = '❌ ' + ckErr(e); }
+      finally {
+        if (current(g)) { importing = false; el('dl').disabled = false; el('in').disabled = false; }
+      }
     };
     el('in').onclick = async () => {
-      try { await done(await api('web-ai/import', {step, target, answer: el('ta').value})); }
-      catch (e) { el('msg').textContent = '❌ ' + ckErr(e); }
+      const answer = el('ta').value;
+      if (answer.trim()) await submit(answer, generation);
     };
   });
-  return '<div class="agent-cmd"><div class="hint">' + note + '</div>'
+  return '<div class="agent-cmd ai-review"><div class="hint">' + note + '</div>'
     + (step === 'clip' ? '<div class="hint">ให้คลิปยาวราว <input id="' + id + 'max" type="number" min="0.5" step="0.5" style="width:72px;display:inline-block"> นาที (ว่าง = ตัดแค่ส่วนเกิน · ใส่ก่อนกดปุ่มไฟล์)</div>' : '')
-    + '<button class="small primary" id="' + id + 'dl">⬇ ไฟล์ให้ AI</button>'
+    + '<button class="small" id="' + id + 'dl">⬇ ไฟล์ให้ AI</button>'
     + '<textarea id="' + id + 'ta" rows="4" style="width:100%" placeholder="AI บนเว็บ: วางคำตอบ JSON ที่นี่"></textarea>'
-    + '<button class="small" id="' + id + 'in">นำเข้าคำตอบ</button><div class="hint" id="' + id + 'msg"></div></div>';
+    + '<div id="' + id + 'plan"></div><button class="small primary" id="' + id + 'in">' + (step === 'clip' ? 'ตรวจแผน' : 'นำเข้าคำตอบ') + '</button><div class="hint" id="' + id + 'msg"></div></div>';
 }
 // plain white subtitles with the recommended look; English lines come from the agent (clipkit_subs_en.json)
 async function subsLang(lang) {
@@ -2847,7 +3148,7 @@ async function layoutSave() {
   } catch (e) { busy.textContent = '❌ ' + ckErr(e); }
 }
 </script>
-<script src="/shell.js?v=11"></script>
+<script src="/shell.js?v=12"></script>
 <script>
   document.querySelectorAll('[data-ic]').forEach(e => e.innerHTML = `<svg viewBox="0 0 24 24">${CLIPKIT_ICONS[e.dataset.ic]}</svg>`);
   function route() {

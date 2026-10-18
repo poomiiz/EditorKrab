@@ -1,0 +1,98 @@
+{
+  "date": "2026-10-16",
+  "task_id": "68bba7f8-5ea4-4451-a2bd-c6f1e7f0662d",
+  "scope": "EK08 partial required-translation gate shared by final CPU, HyperFrames and native delivery; repair preview remains available",
+  "source_sha256": {
+    "app/draft_quality.py": "6226a6c729b9cc1fc3c2b2d2a53757638160499f05ca94ab4e5dc9c048b5f9ae",
+    "app/render.py": "544d37ffaf6d7fbc5401b7d4f9a04bcb025f34acbc8c18b31702051353ee5fe0",
+    "app/hf_build.py": "4eabcb26055567e6ec90bf85e82fe4c78d533c8773f9aca86a557247fa69fb5c",
+    "app/capcut_build.py": "acde1f3643a24d1eeaf192686298e998bceabb3c43553e2af40129397e45d773",
+    "app/video_editor.py": "8eb75277a19bc9a913a9ef7c3d81f7391897fc4abba91ef8af5ff4ba86a20db8",
+    "scripts/caption_quality_test.py": "7cf7ddb835ea093553340c4e628967922a7909db87196ba8ebf4dbb34a89e211",
+    "scripts/hf_export_safety_test.py": "9a01f04e4f0f3d95b99fa89f97fb21514a0fa86d20edb29dff00854c966f96fd",
+    "scripts/capcut_build_safety_test.py": "bad617d6567892eba4f4ebc2c333d0cb86257e4fb685663a28cbd0b355c96642"
+  },
+  "changes": [
+    "Report missing, blank, non-string or wrong-occurrence required captions by retained cue and language; combine subphrase ranges without merging distinct repeated occurrences.",
+    "Use configured caption policy: disabled captions impose no translation requirement; explicit Thai source captions use source text without inventing a translation.",
+    "Final CPU export checks before encoding; HF final and native builds request the same final preflight before composition/proxy/native publication. Draft-quality previews retain caption errors and omit missing/invalid caption text instead of fabricating it.",
+    "HF preview exports explicitly retain repair semantics; final/preview routing is regression tested."
+  ],
+  "tests": {
+    "focused": {
+      "caption_quality_test.py": 4,
+      "subtitle_export_test.py": 15,
+      "plain_subtitle_test.py": 15,
+      "hf_export_safety_test.py": 16,
+      "capcut_build_safety_test.py": 15,
+      "draft_quality_test.py": 14,
+      "render_encoder_test.py": 6,
+      "cue_occurrence_test.py": 10,
+      "web_ai_transaction_test.py": 28
+    },
+    "total": 123,
+    "strong_guard_suites": 9,
+    "private_config_reads": 0,
+    "smoke_checks": 28,
+    "smoke_private_config_reads": 0,
+    "actual_adapters": "CPU/dry/HF/native and actual HF-export router reject incomplete fixture without launching subprocess; previous draft/MP4/preview bytes stay intact and no native revision is published.",
+    "ratios": "1080x1920,1920x1080,1080x1080 preview reports the exact missing cue while retaining human_audio_sync/capcut_open pending."
+  },
+  "actual_app_playwright": {
+    "media": "Generated synthetic fixture only; source has no human speech accuracy reference.",
+    "missing": "Preview loads; timeline quality reports cue0/en interval1-4s missing, no source-language substitute. Export button returns400 with missing cue. All seven input/prior-output hashes unchanged.",
+    "repair": "Select real timeline cue; fill existing translated-subtitle textbox; Save via /draft/phrases200. Quality errors empty. Existing manual save normalizes the punch-sidecar options; draft/source/word/style hashes remain unchanged.",
+    "export": "Click same Export button; actual pinned HF render returns200. Export response processing_seconds25.5 excludes setup, failed/missing attempts and human review; not a savings benchmark.",
+    "settled_preview": "Initial repaired screenshot was captured before latest composition completed and was not accepted as final proof. Corrected capture drains preview promise and requires new caption DOM, loaded fonts, inner time2.5, settled media and two paint frames; caption visible/opacity1 at2.5.",
+    "sampled_visual": "MP4 frame2.5 and settled HF preview show normal sample, orange keyword and separate white Synthetic caption one.; not all-frame/native/editorial acceptance.",
+    "unchanged_during_export": {
+      "clipkit_caption.json": true,
+      "clipkit_punch.json": true,
+      "clipkit_style.json": true,
+      "clipkit_words.json": true,
+      "draft_content.json": true,
+      "source.mp4": true
+    }
+  },
+  "artifact": {
+    "sha256": "939855c1a71247c1f34bbfc420dd746e0860dfab046b58cb019be88f2ee87423",
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_type": "video",
+          "width": 1080,
+          "height": 1920
+        },
+        {
+          "codec_type": "audio"
+        }
+      ],
+      "format": {
+        "duration": "8.000000"
+      }
+    },
+    "full_audio_video_decode_exit": 0,
+    "sampled_frame_sha256": "73dc4d8f97d38b63f2e5d18dd4138773d96b7bb437ff480bb2dac8dabe8e908e"
+  },
+  "prior_exact_ci": {
+    "head": "1c64a0f19eec2c60f88c5e84ee3328dbd27a52c9",
+    "run": 38794071706,
+    "conclusion": "success",
+    "jobs": [
+      "Windows",
+      "install",
+      "MacIntel",
+      "MacARM"
+    ]
+  },
+  "current_ci": "New source requires its own exact-head CI after push.",
+  "limits": [
+    "Caption presence does not validate translation meaning, real speech sync, story completeness or face occlusion.",
+    "Karaoke/rich text/nonuniform scale and native typography calibration remain open.",
+    "Installed CapCut open-save-reopen/playback, revision-specific human approval, watched pilot before batch, complete timing benchmark and EK01-EK12 goal remain pending.",
+    "Preview quality errors are available in timeline data and final-export error; no new persistent quality dashboard was added."
+  ],
+  "privacy": "Screenshots, DOM, local fixture/server paths and generated media remain private; public proof contains sanitized descriptions and hashes only."
+}

@@ -1,0 +1,177 @@
+{
+  "date": "2026-10-16",
+  "task_id": "68bba7f8-5ea4-4451-a2bd-c6f1e7f0662d",
+  "scope": "EK08 partial: actual selected music/SFX/native audio file identity, not complete runtime option/environment or human/native certification",
+  "source_head": "16809802e16cbe95815243bac9f3375f05cbf126",
+  "source_sha256": {
+    "app/web_ai_identity.py": "3edd8a8e343d00f9791760768e7f5b2436a2ed4f2af9ba31ad7f6c23dc409842",
+    "app/render.py": "2859af2101062ef95d91cb2bccdd2d92e8f445b53e3ba7311a83064dfde493cd",
+    "app/hf_build.py": "f354f0cd9001ce2ff853753d95d22f1df5021a451818312f08c135cafde39e3e",
+    "app/video_editor.py": "2485ea3643da65b815ccb7ebcc8e5a806ca31710559a2c5575ce25387c302f54",
+    "app/capcut_build.py": "a57d19a34e3130bc5cf4d6f306c0d047f339c2cab14f5aa3874e2b296eb06924",
+    "app/delivery_manifest.py": "8bec07a8e7c60d04938df72d799d27786fe05f18107343dbdb56c4f0778cad58",
+    "scripts/audio_identity_test.py": "1de25517bc183f3d14d3f32ef46ddc356c608d844cc6c511cf9a5db33505b5c7",
+    "scripts/hf_export_safety_test.py": "e9c70f45f87cba57c5f8b87f1d8883ebf9a5e2b6ffee2bb444b2ea5ab7568f65"
+  },
+  "behavior": [
+    "Extend the existing export guard with one per-export resolved-media registration. Capture chosen paths/content hashes, recheck before publication and include published paths in immutable private provenance. Rebinding changed bytes refuses.",
+    "CPU resolves/generates each used SFX once and registers music/SFX before encoding. HF resolves sound files once, registers before copying audio, and uses the pinned file for length and media. Native registers actual generated draft audio material references before publication, preserving the existing native sound selection/volume policy.",
+    "Record published path aliases separately from temporary read paths. Readback checks published files without selecting libraries or generating missing builtins. Disabled audio registers an empty dependency set. Packet snapshots remain read-only and do not resolve audio libraries."
+  ],
+  "tests": {
+    "suites": {
+      "audio_identity_test.py": 9,
+      "render_encoder_test.py": 7,
+      "hf_export_safety_test.py": 18,
+      "capcut_build_safety_test.py": 16,
+      "delivery_manifest_test.py": 11,
+      "web_ai_identity_test.py": 18,
+      "caption_quality_test.py": 4,
+      "motion_freshness_test.py": 13,
+      "insert_export_test.py": 16,
+      "capcut_font_test.py": 7,
+      "web_ai_transaction_test.py": 28,
+      "draft_quality_test.py": 14,
+      "subtitle_export_test.py": 15,
+      "plain_subtitle_test.py": 15
+    },
+    "total": 191,
+    "strong_guard_suites": 14,
+    "private_config_reads": 0,
+    "smoke_checks": 28,
+    "smoke_private_config_reads": 0,
+    "edges": [
+      "Same-size/same-mtime changed or deleted selected music/pop/whoosh is rejected.",
+      "Explicit/default music and custom SFX changes during CPU encode preserve old MP4; HF router mutation during render returns500 with old MP4/error diagnostics retained.",
+      "Real HF builder registers before audio copy; changing original after copy is caught. Native material audio is captured and later changes invalidate the record.",
+      "Actual first-use builtin generation is captured after creation; readback never regenerates deleted audio. Empty and published-stage alias binding and relative-path refusal are covered."
+    ],
+    "fixture_correction": "New Windows expectations use the existing canonical path convention, not raw mixed-case paths; no production identity tolerance was relaxed."
+  },
+  "actual_editor_playwright": {
+    "fixture": "Generated8s9:16 source plus generated local music220Hz/pop1100Hz/whoosh1300Hz. Stock-music and SFX config, MUSIC_DIRS and protected config IO are isolated; no user library/customer/paid media is read.",
+    "source_head": "16809802e16cbe95815243bac9f3375f05cbf126",
+    "export_status": 200,
+    "processing_seconds": 21.7,
+    "timing_scope": "One export only; preparation, retries, diagnostics and human/native acceptance are excluded. Not a benchmark or savings claim.",
+    "selected": "Default music is selected from the isolated library; sfx enabled, pop at2s. Manifest binds three files; whoosh is length-probed by existing HF behavior, with no B-roll insertion in this fixture.",
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_type": "video",
+          "width": 1080,
+          "height": 1920
+        },
+        {
+          "codec_type": "audio"
+        }
+      ],
+      "format": {
+        "duration": "8.000000"
+      }
+    },
+    "full_audio_video_decode_exit": 0,
+    "artifact_sha256": "6cd2f59d7eadd326ca47611befa95ee3ca1601de6fd6aca638199d0580eb82bc",
+    "manifest_id": "b93c77432544a3a36b3a63df968a9724ed9ae7871a1208caa1bc4955b65d7c18",
+    "manifest_sha256": "4d1e9d9fd3cce4d03dac6d58aa4b74c718ea52aabe5cda93b527489528a94f3c",
+    "resolved_asset_hashes": {
+      "music": "19cf8875d17b3ed8a294e05431c7d66afa61c72fe4a863ae6769097546a5fd40",
+      "pop": "6a35009725e77b81e6cc975634b0ee1a04fcf2932e5b37451abab230ae09573f",
+      "whoosh": "1b3f5738f957d98563b29a8dfa06030a85b5c7e50ef08c4682f26b6093132ff0"
+    },
+    "cli": {
+      "current": {
+        "exit": 0,
+        "current": true,
+        "inputs_match": true,
+        "artifact_matches": true,
+        "status": "pending_review",
+        "human_audio_sync": "pending",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending"
+      },
+      "changed-music": {
+        "exit": 2,
+        "current": false,
+        "inputs_match": false,
+        "artifact_matches": true,
+        "status": "stale",
+        "human_audio_sync": "pending",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending"
+      },
+      "changed-pop": {
+        "exit": 2,
+        "current": false,
+        "inputs_match": false,
+        "artifact_matches": true,
+        "status": "stale",
+        "human_audio_sync": "pending",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending"
+      },
+      "changed-whoosh": {
+        "exit": 2,
+        "current": false,
+        "inputs_match": false,
+        "artifact_matches": true,
+        "status": "stale",
+        "human_audio_sync": "pending",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending"
+      },
+      "restored": {
+        "exit": 0,
+        "current": true,
+        "inputs_match": true,
+        "artifact_matches": true,
+        "status": "pending_review",
+        "human_audio_sync": "pending",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending"
+      }
+    },
+    "original_nine_inputs_preserved": true,
+    "manifest_immutable": true,
+    "artifact_unchanged": true,
+    "test_tone_routing": {
+      "music": {
+        "hz": 220,
+        "sample_at": 1.5,
+        "normalized_amplitude": 0.016229656768473603,
+        "source_amplitude": 1.57636042896069e-05
+      },
+      "pop": {
+        "hz": 1100,
+        "sample_at": 2.05,
+        "normalized_amplitude": 0.1678497028016162,
+        "source_amplitude": 2.66239830479592e-06
+      }
+    },
+    "spectral_scope": "Sampled output contains220Hzmusic at1.5s and1100Hzpop at2.05s above the source baseline. This demonstrates synthetic stream routing only; it is not speech/intelligibility/editorial acceptance.",
+    "diagnostic": "Initial spectral extraction used .1 duration, rejected by FFmpeg. Corrected to0.1 without rerendering or changing source/MP4/manifest. Final extraction/full decode passed.",
+    "screens": "Private desktop1440x1000 and375x844 captures after loaded fonts, settled media and playhead2.5. No visual UI change or new visual acceptance claim."
+  },
+  "prior_ci": {
+    "head": "83253c53e01200cb4ad2b8f6f014442b743a2190",
+    "run": 38798032391,
+    "conclusion": "success",
+    "jobs": [
+      "Windows",
+      "install",
+      "MacIntel",
+      "MacARM"
+    ]
+  },
+  "current_ci": "New audio source/evidence requires exact-head CI after push.",
+  "limits": [
+    "Resolved-media registration binds the actual selected files, not every future default-library choice, global option, tool build, environment or render dependency.",
+    "Native sound policy remains unchanged and may use an installed native click rather than the HF builtin; no new native/HF sound equivalence is claimed.",
+    "Published-path alias support is a registration/readback test, not installed CapCut relocation/open/save/reopen acceptance.",
+    "CPU full audio/video decode before publication is still pending. Team-decision/manifest binding and native review UI remain open; human/native checks stay pending.",
+    "No real-speech reference, watched approved pilot, full timing baseline, installer/hardware certification, batch or release; full EK01-EK12 goal remains active."
+  ],
+  "privacy": "Only sanitized states/hashes/frequencies/probe dimensions are public. Absolute media paths, private manifests, CLI payloads, screenshots and generated media remain local; no automatic external reporting is added."
+}

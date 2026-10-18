@@ -1,0 +1,117 @@
+{
+  "date": "2026-10-16",
+  "scope": "Modern editor covers a new composition until pinned public painted readiness; not media timeout/all-seek/native quality acceptance",
+  "source_sha256": {
+    "app/static/editor.html": "e3c577fcf5e5f0809b81a1c37fd8900dc3b92a6b3399dadccc9ab9271107a435",
+    "scripts/preview_queue_test.cjs": "7d6a4a18e7a649dd726226b038a89457c6d03a3fd597217e7789bbfcadc05285",
+    "app/static/hyperframes-player.js": "5938bfed1df1d401f357e6e9977380a59be6f041cd11b5b53f61c0b2d267ff56"
+  },
+  "changes": [
+    "Keep iframe/player layout but hide its visibility and show existing loading text as a canvas cover before assigning new source.",
+    "Use bundled0.8.101 public painted event and next animation frame, not the earlier ready event, to reveal. Keep ready solely for restoring selected time.",
+    "Check current source URL and painted state inside the deferred reveal so an old callback cannot expose a replacement.",
+    "Expose loading/error through existing copy with status/polite semantics and aria-busy; reset previous error on next preview. No vendor modification/dependency/new screen copy."
+  ],
+  "tests": {
+    "expanded_node_regression": "Fails old behavior; covers ready-before-painted, stale deferred reveal, successful frame reveal, failed replacement/recovery plus previous coalesced queue/read-only export/cancel assertions.",
+    "node_suites": [
+      "preview_queue_test.cjs",
+      "subject_zones_ui_test.cjs",
+      "subtitle_ui_test.cjs",
+      "ai_plan_ui_test.js",
+      "insert_ui_test.cjs",
+      "web_ai_ui_test.js"
+    ],
+    "smoke_checks": 28,
+    "strong_private_config_guard_programs": 1,
+    "private_config_attempts": 0,
+    "raw_added_color_literals": 0
+  },
+  "actual_playwright": {
+    "fontsBlocked": {
+      "ready": true,
+      "assetsReady": false,
+      "painted": false,
+      "visible": "hidden",
+      "loading": "flex",
+      "busy": "true",
+      "fonts": "loading",
+      "time": 0
+    },
+    "mediaBlocked": {
+      "ready": true,
+      "assetsReady": false,
+      "painted": false,
+      "visible": "hidden",
+      "loading": "flex",
+      "busy": "true",
+      "fonts": "loaded",
+      "time": 0
+    },
+    "refreshBlocked": {
+      "ready": false,
+      "assetsReady": false,
+      "painted": false,
+      "visible": "hidden",
+      "loading": "flex",
+      "busy": "true",
+      "fonts": "loaded",
+      "time": 4.5
+    },
+    "ready": {
+      "ready": true,
+      "assetsReady": true,
+      "painted": true,
+      "visible": "visible",
+      "loading": "none",
+      "busy": "false",
+      "fonts": "loaded",
+      "time": 4.5
+    }
+  },
+  "fault_injection": {
+    "error": {
+      "message": "❌ Owned fixture preview failure",
+      "cover": "flex",
+      "busy": "false",
+      "previousSourceRetained": true
+    },
+    "recovered": {
+      "busy": "false",
+      "loading": "none",
+      "painted": true,
+      "time": 4.5
+    }
+  },
+  "input_preservation": {
+    "inputs": {
+      "source.mp4": true,
+      "draft_content.json": true,
+      "clipkit_words.json": true,
+      "clipkit_lines.json": true,
+      "clipkit_punch.json": true,
+      "clipkit_style.json": true,
+      "clipkit_overlays.json": true
+    },
+    "previous_mp4_unchanged": true,
+    "vendor_player_unchanged": true,
+    "raw_color_added": 0
+  },
+  "workflow": "Actual owned generated16:9 app project. Hold real font requests and real MP4/WebM requests separately; ready becomes true while assetsReady/painted false, canvas remains covered. Release resources then reveal. Repeat media hold on refresh at4.5s and verify restored inner timeline/media before final captures. Desktop1440x1000/375x844 inspected. Simulated HTTP409 preview failure retains current source and shows error; unroute and real rebuild recovers at4.5.",
+  "independent_review": "Scoped independent source/Node and five loading/refresh/ready desktop/mobile screenshots passed. No blocking finding within this slice; timeout/per-seek/native/human gates remain open. Error/recovery additionally exercised in browser after source review.",
+  "previous_ci": {
+    "head": "13eff6c76b18eb5ee7d428151118c1076373a18f",
+    "run": 38791461103,
+    "last_observed": "Completed success: Windows,MacIntel,MacARM,install all passed on exact13eff6c. No failed run restarted.",
+    "prior_kerning_hardware": "954c476/38789096899 all4success including both Macs.",
+    "new_source": "Requires its own exact-head CI after commit."
+  },
+  "limits": [
+    "Uses the pinned player painted contract, whose asset timeout behavior is unchanged. Missing/stuck resources, no painted event, CDN failure and all media-timeout cases are not certified; loading can remain until a further preview/reload.",
+    "No explicit Retry button added. Existing editing actions/reload can request another preview; this is not all error-UX completion.",
+    "Covers composition replacement/initial loading and restoring4.5s; it does not add a visual barrier for every later seek or flush pending debounce/form writes.",
+    "Actual app fixture is generated16:9; screenshots are sampled settled frames. This turn does not encode another MP4; prior generated HF MP4 remains byte-identical and its full-decode evidence stays separate.",
+    "No real speech/semantic placement, customer or paid media, installed CapCut/native control, watched approved pilot or full timing proof. No batch/release/stability/savings claim."
+  ],
+  "privacy": "Only sanitized states/hashes are public; screenshots, DOM, absolute paths and generated assets remain local."
+}

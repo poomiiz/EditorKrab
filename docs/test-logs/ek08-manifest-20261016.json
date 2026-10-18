@@ -1,0 +1,143 @@
+{
+  "date": "2026-10-16",
+  "task_id": "68bba7f8-5ea4-4451-a2bd-c6f1e7f0662d",
+  "scope": "EK08 partial local immutable delivery provenance and current/stale readback, not team approval integration or complete input-resolution/quality certification",
+  "source_head": "5d8cf587e574901d4fe90816fa852d73c6182e5a",
+  "source_sha256": {
+    "app/delivery_manifest.py": "c0372f10ee6040a6cc55254d8bf92f484cb99bd015d80aae35b90d1b65570677",
+    "app/web_ai_identity.py": "7ed272c5dee8cd67a10842a2228fb7215ce094c96d7f572716f43236e1cc34e6",
+    "app/render.py": "465393c2b4eae55e3f14a0ab04da7ffe6da3e7ddf362320656c7932e1114561a",
+    "app/video_editor.py": "e4e0bcc4cf64eced787789528dc450413c60a4a74d7f5fbd5429a9045947bf4c",
+    "app/capcut_build.py": "a5312484864a9af6a00c8d1a65bab9346bc76313798f16360b4cc739b3c8a447",
+    "scripts/quality_gate.py": "d7b5966170b1f8776d593e389a9c8bcea1a3e022eee9f4873663ad1460d49b2f",
+    "scripts/delivery_manifest_test.py": "6cec26017a8666f7ec585d144f9987560584d2088746296ffbe60754abed91d7",
+    "scripts/render_encoder_test.py": "fe832cb3e97f1114e2841e68140594308b3c73fa91ae6ba9f8c0a733a7cd5f9e",
+    "scripts/hf_export_safety_test.py": "3abee11d94d50a38cfe5ec3baf0dd56a8a53158e1a189a202e57b08f3973eddd",
+    "scripts/capcut_build_safety_test.py": "386a8cf153e30574eaad419852abddf08405a9be38d944b075bdee45a0fa604e",
+    "scripts/motion_freshness_test.py": "01fbba9353fe4c3ccc345fab58dce6cdb211143b2ce0f2e161d4a4a886d140e9"
+  },
+  "behavior": [
+    "Reuse the successful export CAS input snapshot, extra native metadata and motion-input hashes without hashing all source media again merely to capture metadata.",
+    "Write immutable private evidence before publishing CPU/HF/native output; preserve old output if manifest creation or publication fails. Failed publication may retain an unaccepted orphan manifest.",
+    "Bind MP4 bytes or native directory file tree, exact HEAD, actual dependency fingerprints, output/project IDs, backend options and checks actually run. Include draft_quality and delivery_manifest policy code in shared identity.",
+    "Readback compares current snapshot/metadata/media/font/code inputs and artifact bytes/tree. Changed/tampered/foreign evidence never grants current approval. Missing Git remains explicit pending provenance.",
+    "Human/audio/editorial/native checks remain pending. Existing team authority and disabled legacy approval endpoints are unchanged; no human decision is written."
+  ],
+  "tests": {
+    "suites": {
+      "delivery_manifest_test.py": 11,
+      "render_encoder_test.py": 7,
+      "hf_export_safety_test.py": 17,
+      "capcut_build_safety_test.py": 16,
+      "motion_freshness_test.py": 13,
+      "caption_quality_test.py": 4,
+      "insert_export_test.py": 16,
+      "capcut_font_test.py": 7,
+      "web_ai_transaction_test.py": 28,
+      "draft_quality_test.py": 14,
+      "web_ai_identity_test.py": 18,
+      "subtitle_export_test.py": 15,
+      "plain_subtitle_test.py": 15
+    },
+    "total": 181,
+    "strong_guard_suites": 13,
+    "private_config_reads": 0,
+    "smoke_checks": 28,
+    "smoke_private_config_reads": 0,
+    "failure_edges": "CPU/HF/native manifest write failures preserve previous outputs; record-write failure preserves old manifest. Same-size output changes, source/style/native metadata, custom-font/quality-code changes, native edits/additions, tampering, foreign output, missing Git, immutable repeated records and CLI0/2 are covered. Linked manifest directory rejection uses a filesystem-boundary mock."
+  },
+  "actual_editor_playwright": {
+    "source_head": "5d8cf587e574901d4fe90816fa852d73c6182e5a",
+    "kind": "generated fixture, no customer/paid media or human speech reference",
+    "action": "Real Export button -> HF-export200 -> MP4 and delivery_manifest returned.",
+    "processing_seconds": 21.3,
+    "timing_scope": "One generated export only, excluding preparation, prior attempts, human/native review and baseline; no savings claim.",
+    "artifact_sha256": "d5fbc1e5b918638a59544b31a8e8adfd63b3abf7f17faf142f8318306b83b80b",
+    "manifest_id": "1ea5a85a416b657246da1df36a196a9324019b7bfcdcb16d675f68fb94a2a4e7",
+    "manifest_sha256": "5583d52f71ba9fb9677ecd6403445b1ece94c39df36760e1464ddf64a7bc8750",
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_type": "video",
+          "width": 1080,
+          "height": 1920
+        },
+        {
+          "codec_type": "audio"
+        }
+      ],
+      "format": {
+        "duration": "8.000000"
+      }
+    },
+    "full_audio_video_decode_exit": 0,
+    "cli_readback": {
+      "current": {
+        "exit": 0,
+        "current": true,
+        "inputs_match": true,
+        "artifact_matches": true,
+        "status": "pending_review",
+        "commit_provenance": "recorded",
+        "human_audio_sync": "pending",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending"
+      },
+      "changed-output": {
+        "exit": 2,
+        "current": false,
+        "inputs_match": true,
+        "artifact_matches": false,
+        "status": "stale",
+        "commit_provenance": "recorded",
+        "human_audio_sync": "pending",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending"
+      },
+      "changed-input": {
+        "exit": 2,
+        "current": false,
+        "inputs_match": false,
+        "artifact_matches": true,
+        "status": "stale",
+        "commit_provenance": "recorded",
+        "human_audio_sync": "pending",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending"
+      },
+      "restored": {
+        "exit": 0,
+        "current": true,
+        "inputs_match": true,
+        "artifact_matches": true,
+        "status": "pending_review",
+        "commit_provenance": "recorded",
+        "human_audio_sync": "pending",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending"
+      }
+    },
+    "original_six_inputs_preserved": true,
+    "manifest_immutable": true,
+    "artifact_restored": true
+  },
+  "prior_ci": {
+    "head": "87d8fe9126d8336c6077e4cfd6ee43be336462a7",
+    "run": 38795447992,
+    "conclusion": "failure",
+    "install": "success",
+    "Windows_MacIntel_MacARM": "Each failed native test expected unresolved temporary path and motion-freshness fixture missing unrelated cue1 caption. Production gate was not weakened; native expectation now uses resolve(), fixture retains complete cue1 caption while changing cue0."
+  },
+  "current_ci": "New source/evidence needs exact-head CI after push; old failed run will not be restarted as proof.",
+  "limits": [
+    "No new team approval UI/RPC or local human-verdict recorder; approval authority remains existing team review. Correlation of team decisions with these exact manifests is still open.",
+    "Captures the existing export snapshot, not a complete inventory of every runtime auto-selected music/SFX/tool/environment dependency. Input completeness and resolved font/media review remain open.",
+    "CPU manifests explicitly retain full_av_decode pending because that path does not yet run the HF full-decode gate. Native manifests retain native_playback pending. CLI0 means current matching bytes and structural pass, never human approval.",
+    "Native build keeps its source-compatible path/warnings tuple; manifests are local in the output parent ledger, with review-UI discovery/link still open.",
+    "MP4 publication and ledger record are separate files. A failed publication can leave an immutable orphan that fails artifact-current validation; it is not accepted delivery.",
+    "No installed CapCut open/save/reopen/playback, watched real pilot, semantic/audio/translation acceptance, full timing or installer/hardware certification. Full EK08/EK01-EK12 remain open."
+  ],
+  "privacy": "Public proof contains only sanitized states/hashes/probe dimensions. Local private manifests, CLI JSON, screenshots/DOM, original filenames and absolute paths remain local; no external sync/report is added."
+}

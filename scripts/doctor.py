@@ -125,7 +125,7 @@ def asr():
     wav = Path(tempfile.gettempdir()) / "clipkit_doctor.wav"
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=f=440:d=3", str(wav)], check=True, timeout=60)
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / "clipkit.py"), "transcribe", str(wav), "--out",
-                        str(wav.with_suffix(".json"))], capture_output=True, text=True, timeout=300)
+                        str(wav.with_suffix(".json")), "--language", "en"], capture_output=True, text=True, timeout=300)
     # a pure tone has no speech: "no speech found" proves the model loaded and ran
     if r.returncode != 0 and "no speech found" not in r.stderr:
         raise RuntimeError(r.stderr.strip().splitlines()[-1] if r.stderr else "transcribe failed")

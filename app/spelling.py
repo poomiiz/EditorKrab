@@ -1,9 +1,4 @@
-"""Words the speech model keeps getting wrong, learned from this person's own fixes.
-
-Every time a subtitle line is changed by hand (capcut_edit.set_line_text), the words that changed are kept in
-corrections.json beside ClipKit (this machine only, never synced to the team). New transcripts get them fixed
-before anyone sees them. Only whole words are swapped, so "กอ" -> "ก็" never touches "กอง".
-"""
+"""Project corrections override retained machine rules; machine learning is an explicit opt-in."""
 from __future__ import annotations
 
 import atomic
@@ -20,30 +15,53 @@ def _words(text: str) -> list[str]:
     return word_tokenize(text, keep_whitespace=True)
 
 
-def load() -> dict[str, dict]:
-    """{wrong: {"right": ..., "n": times fixed}}; a broken file raises."""
-    if not FILE.is_file():
+def _file(project: str | Path | None) -> Path:
+    return Path(project) / "clipkit_corrections.json" if project is not None else FILE
+
+
+def _read(file: Path) -> dict[str, dict]:
+    if not file.is_file():
         return {}
-    data = json.loads(FILE.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"{FILE} is not a JSON object")
+    data = json.loads(file.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or any(
+        not isinstance(wrong, str) or not wrong.strip() or not isinstance(rule, dict)
+        or not isinstance(rule.get("right"), str) or not rule["right"].strip()
+        or isinstance(rule.get("n"), bool) or not isinstance(rule.get("n"), int) or rule["n"] < 1
+        for wrong, rule in data.items()
+    ):
+        raise ValueError(f"{file.name} must contain word corrections with right and a positive n")
     return data
 
 
-def learn(old: str, new: str) -> list[tuple[str, str]]:
-    """Keep the words changed between a heard line and its fixed version; returns the pairs learned."""
+def load(project: str | Path | None = None) -> dict[str, dict]:
+    """Read retained machine rules, overlaid by this project's rules when requested."""
+    data = _read(FILE)
+    if project is not None:
+        data.update(_read(_file(project)))
+    return data
+
+
+def _updated(old: str, new: str, data: dict[str, dict]) -> tuple[dict[str, dict], list[tuple[str, str]]]:
+    """Prepare learning before an edit writes anything."""
     a, b = _words(old), _words(new)
     pairs = []
     for op, i1, i2, j1, j2 in difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes():
         wrong, right = "".join(a[i1:i2]).strip(), "".join(b[j1:j2]).strip()
         if op == "replace" and wrong and right and wrong != right and max(i2 - i1, j2 - j1) <= MAX_WORDS:
             pairs.append((wrong, right))
+    data = dict(data)
+    for wrong, right in pairs:
+        seen = data.get(wrong)
+        data[wrong] = {"right": right, "n": seen["n"] + 1 if seen and seen["right"] == right else 1}
+    return data, pairs
+
+
+def learn(old: str, new: str, project: str | Path | None = None) -> list[tuple[str, str]]:
+    """Explicit learning: a project writes locally; no project explicitly targets machine rules."""
+    file = _file(project)
+    data, pairs = _updated(old, new, _read(file))
     if pairs:
-        data = load()
-        for wrong, right in pairs:
-            seen = data.get(wrong)
-            data[wrong] = {"right": right, "n": seen["n"] + 1 if seen and seen["right"] == right else 1}
-        atomic.write_text(FILE, json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        atomic.write_text(file, json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     return pairs
 
 

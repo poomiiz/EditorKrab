@@ -1,0 +1,42 @@
+[
+  {
+    "id": "source-2",
+    "duration_s": 6675.179683,
+    "exit": 2,
+    "elapsed_s": 354.449,
+    "peak_tree_rss_bytes": 3549917184,
+    "lines": 2242,
+    "invalid_phrase_times": 0,
+    "final_sha256": "88c123f591db3b3f93c85d05aaf08c6535020729a024739309be38ecf45824d5"
+  },
+  {
+    "id": "source-3",
+    "duration_s": 3270.251973,
+    "exit": 2,
+    "elapsed_s": 262.753,
+    "peak_tree_rss_bytes": 3970478080,
+    "lines": 1214,
+    "invalid_phrase_times": 1,
+    "final_sha256": "4cbe3c716ddbcecf109ccc0adec484949b27f5333fd107b8d2f32926f19889b8"
+  },
+  {
+    "id": "source-1",
+    "duration_s": 3117.766531,
+    "exit": 1,
+    "elapsed_s": 43.494,
+    "peak_tree_rss_bytes": 3718574080,
+    "lines": 0,
+    "invalid_phrase_times": 0,
+    "final_sha256": null
+  },
+  {
+    "id": "source-4",
+    "duration_s": 1755.498231,
+    "exit": 15,
+    "elapsed_s": 522.214,
+    "peak_tree_rss_bytes": 4041990144,
+    "lines": 0,
+    "invalid_phrase_times": 0,
+    "final_sha256": null
+  }
+]

@@ -1,0 +1,192 @@
+{
+  "date": "2026-10-16",
+  "task_id": "68bba7f8-5ea4-4451-a2bd-c6f1e7f0662d",
+  "scope": "EK08/EK01 partial: validate staged CPU/HF MP4 before publishing, not human/native/editorial acceptance",
+  "source_head": "dc8f7dcf35fcbbe07e6283b54ab9ef2e2b8060e4",
+  "source_sha256": {
+    "app/render.py": "20f92e5cd50973eeb5ff62c97ede1bddbae36e43a333364399da33c0009e8e02",
+    "app/video_editor.py": "8611c5fa34d0414fded1b7c5326c983efce4fbd584b6eb153fc91e3201a33a71",
+    "scripts/render_encoder_test.py": "0c053c7fa96a2817ceb1eb063565755ff822cffeeba2bdb9431251b7757fe80e",
+    "scripts/hf_export_safety_test.py": "f01ae6ad5c7637ca0bcf32987c82b9fd28a02f7d8f832d1ff80b10baff5af362",
+    "scripts/render_validation_test.py": "f3a3e16699c3cb9547b0f97507be1e74713c2575ca1b4a7d319ef4cf9670bb7c"
+  },
+  "behavior": [
+    "Reuse one staged-output validator for CPU and HF: finite positive dimensions/duration, actual video/audio codecs, expected full-size dimensions or preview aspect ratio, expected duration and full decode of primary video/audio streams.",
+    "CPU validates before immutable manifest and atomic replace, and returns the already validated staged metadata instead of probing the target after replacement. Input/resolved-media/target CAS runs after encode and after validation/publication preparation.",
+    "HF keeps its post-normalization validation and failed-stage decode/error logs through the shared function. Existing .1s duration and .005 preview-ratio tolerances remain unchanged. Human/native states are never promoted by decode."
+  ],
+  "tests": {
+    "regression_before_fix": "The new CPU invalid-output test failed on eleven simulated bad metadata/probe/decode/timeout cases before the fix; no validation error was raised.",
+    "suites": {
+      "render_encoder_test.py": 10,
+      "render_validation_test.py": 5,
+      "hf_export_safety_test.py": 18,
+      "audio_identity_test.py": 9,
+      "insert_export_test.py": 16,
+      "delivery_manifest_test.py": 11,
+      "capcut_build_safety_test.py": 16,
+      "web_ai_identity_test.py": 18,
+      "caption_quality_test.py": 4,
+      "motion_freshness_test.py": 13,
+      "capcut_font_test.py": 7,
+      "web_ai_transaction_test.py": 28,
+      "draft_quality_test.py": 14,
+      "subtitle_export_test.py": 15,
+      "plain_subtitle_test.py": 15
+    },
+    "total": 199,
+    "strong_guard_suites": 15,
+    "private_config_reads": 0,
+    "smoke_checks": 28,
+    "smoke_private_config_reads": 0,
+    "cases": [
+      "CPU thirteen invalid-output cases plus valid/wrong-ratio preview and source/style/target changes during decode preserve the prior output.",
+      "Real FFmpeg valid primary streams pass without changing bytes; missing audio/video, wrong size/duration and a truncated faststart MP4 whose metadata remains valid are refused.",
+      "HF missing-video fixture now represents its codec explicitly; real normalization/probe/decode and preservation regressions pass."
+    ],
+    "smoke_retry": "First smoke ran concurrently with imports and encountered WinError5 on a .pyc rename. That run completed with1failure. After other test processes terminated, serialized smoke passed all28; no source compiler check was removed or relaxed."
+  },
+  "actual_editor_playwright": {
+    "fixture": "Isolated real editor/router and generated8s9:16 source plus generated tone music/SFX; no customer or paid media.",
+    "failure": {
+      "method": "Fixture truncates the real CPU encoded MP4 after FFmpeg exits0; shared probe/decode and API handler remain real.",
+      "http_status": 400,
+      "reason": "Full decode found a corrupt input packet in the audio stream. Container metadata still reports8s1080x1920 with audio and video.",
+      "all_ten_hashes_preserved": true,
+      "manifest_not_created": true,
+      "corruption": {
+        "real_encode_exit": 0,
+        "original_bytes": 221526,
+        "truncated_bytes": 110763,
+        "truncated_sha256": "e592a7879d62bef04c60c16b1c44309301303d1a3fc28f5b4efc090746b7e485"
+      },
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1080,
+            "height": 1920
+          },
+          {
+            "codec_type": "audio"
+          }
+        ],
+        "format": {
+          "duration": "8.000000"
+        }
+      }
+    },
+    "cpu_final": {
+      "http_status": 200,
+      "source_head": "dc8f7dcf35fcbbe07e6283b54ab9ef2e2b8060e4",
+      "artifact_sha256": "53313330076bd8c46789e7594d78238654801bd91af58a6bacb6d300cfdc859c",
+      "manifest_sha256": "fa114757e3d394fcb70847af9c76d5c345fb4004112c9c101eb3ca587bf5fa08",
+      "manifest_id": "31239c308e2578ae505926707ee909b544ea60cdc5dbae916b96e5bb6c1cf4ab",
+      "checks": {
+        "full_av_decode": "passed",
+        "dimensions": "passed",
+        "duration": "passed",
+        "audio": "passed"
+      },
+      "probe": {
+        "width": 1080,
+        "height": 1920,
+        "duration": 8.0,
+        "video_codec": "h264",
+        "audio_codec": "aac"
+      },
+      "resolved_audio_count": 2,
+      "current": true
+    },
+    "after": {
+      "hf": {
+        "cli_exit": 0,
+        "current": true,
+        "inputs_match": true,
+        "artifact_matches": true,
+        "status": "pending_review",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending",
+        "artifact_sha256": "a1b6733e220d4d6af15d43080022d1b2078669add6893374d12d254008c18f5c",
+        "manifest_id": "38c2730f86949ca1def821fd3200188d9c7b4d77bcee521176cb8ad45e42b88a",
+        "manifest_sha256": "c806e65560bc648f571653589a96e919d851019f8173756f4e750f60995f1661",
+        "source_head": "dc8f7dcf35fcbbe07e6283b54ab9ef2e2b8060e4",
+        "full_decode_exit": 0,
+        "probe": {
+          "width": 1080,
+          "height": 1920,
+          "duration": 8.0,
+          "video_codec": "h264",
+          "audio_codec": "aac"
+        },
+        "checks": {
+          "full_av_decode": "passed",
+          "dimensions": "passed",
+          "duration": "passed",
+          "audio": "passed"
+        }
+      },
+      "cpu-preview": {
+        "cli_exit": 0,
+        "current": true,
+        "inputs_match": true,
+        "artifact_matches": true,
+        "status": "pending_review",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending",
+        "artifact_sha256": "6e3b1c6ea064419909328386bd8eeda156cffa78e0f36c53f468401acf5683f8",
+        "manifest_id": "d624f537e4c172f60f1d272952cb38df8c9cae338b88bcac8b3bb73fa2723ec9",
+        "manifest_sha256": "b506fbae30c97f41041cb01846242d95e79a3570fcb35451fa42753025b233c8",
+        "source_head": "dc8f7dcf35fcbbe07e6283b54ab9ef2e2b8060e4",
+        "full_decode_exit": 0,
+        "probe": {
+          "width": 540,
+          "height": 960,
+          "duration": 8.0,
+          "video_codec": "h264",
+          "audio_codec": "aac"
+        },
+        "checks": {
+          "full_av_decode": "passed",
+          "dimensions": "passed",
+          "duration": "passed",
+          "audio": "passed"
+        }
+      },
+      "old-cpu-after-hf": {
+        "cli_exit": 2,
+        "current": false,
+        "inputs_match": true,
+        "artifact_matches": false,
+        "status": "stale",
+        "human_editorial_review": "pending",
+        "capcut_open": "pending"
+      }
+    },
+    "all_nine_inputs_preserved": true,
+    "routes": "CPU final/preview are exercised through Playwright HTTP requests to the actual API; HF is exercised through the real Export button. CPU full and HF are1080x1920; CPU preview540x960; each is8s and records full_av_decode passed.",
+    "timing_scope": "CPU response encode_seconds excludes validation/setup/failure/review; HF22.4s is one generated export. No timing baseline, approval duration or savings claim.",
+    "artifact_storage": "The fixture retained its intentionally truncated MP4 for inspection. Production CPU temporary-stage cleanup is unchanged; HF retains its failure stages/logs."
+  },
+  "prior_ci": {
+    "head": "89e8cfb3f6a48ce0d16ba63bf73fa7b4d357ee54",
+    "run": 38800860128,
+    "conclusion": "success",
+    "jobs": [
+      "Windows",
+      "install",
+      "MacIntel",
+      "MacARM"
+    ]
+  },
+  "current_ci": "New source/evidence requires exact-head CI after push.",
+  "limits": [
+    "Primary-stream decode and metadata agreement do not prove spoken-word sync, translation meaning, complete stories, visual quality or human approval.",
+    "Native open/save/reopen/playback, team-manifest approval binding, full runtime/global-option/environment coverage, a watched real pilot and full timing/installer/hardware gates remain open.",
+    "This slice does not implement the complete error/warning/pending quality dashboard or guarantee repair previews for every legacy overflow/clock error; audit those plan requirements before treating EK08 as complete.",
+    "Full EK01-EK12 goal remains active; no batch, release, merge or stability/savings claim."
+  ],
+  "privacy": "Only sanitized states, hashes, codec/dimension metadata and controlled corruption sizes are public. Private manifests, paths, CLI/server logs and generated artifacts stay local."
+}

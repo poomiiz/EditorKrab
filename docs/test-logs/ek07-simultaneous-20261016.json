@@ -1,0 +1,150 @@
+{
+  "date": "2026-10-16",
+  "scope": "Measured concurrent-motion gate, independent export tracks, independently selectable timeline bars and owned-preview child enumeration race",
+  "source_sha256": {
+    "app/motion_plan.py": "2dea64b1c4e0028a49b569671c21f1f288dc7ff17750286ea03a517d7d91e8cc",
+    "app/video_editor.py": "3e16ac2d2ece31c6ee58f8e66cb5a2e70888464c0bb008d56be0b0ea2d4e513c",
+    "app/render.py": "5b5ba20cd003a931433a14c6f9b5f7b71020fbd8c517bc3210b6fec1bd50725b",
+    "app/hf_build.py": "eab01436f5fa8c1a203e690c33a88eed84b37350faff3b18660d08ac2ad83b43",
+    "app/capcut_build.py": "182ad2e137a01391b21ac21f289bf3cf01813652f0f6ee0fdb878b7d30873554",
+    "app/static/editor.html": "d412c5ca55b2c661ae22c9d5f450b89e4905057c28c86379b757e9bc3a1757fb",
+    "app/host_platform.py": "e0a722c03d133a743cf2cf7f4fcfaa011dd6e83a5fc91d480dfc9aee903ce54f",
+    "scripts/motion_layout_test.py": "41c22df8f63da169262678861ab205a11bcf81aac343406ee02d98e0c000469e",
+    "scripts/motion_api_test.py": "e18fcdddeed412adbc1a302242e550a4637fcbd0989621fdc629d997f77cd488",
+    "scripts/motion_handoff_test.py": "69d2f28b47d02b935614c824195da025e2045e7d781d977eeb17ced4e219dff7",
+    "scripts/subtitle_ui_test.cjs": "f996cb2317fdc1928a97fc88f1197aedcaa6e44980e4bab126db0b6eedfeecc9",
+    "scripts/platform_test.py": "f5cb97260b15fafa6665f91a7bf8a300d8b450e488f9db04553ee64bc27867b8"
+  },
+  "verification": {
+    "motion_python_cases": {
+      "motion_layout": 12,
+      "motion_api": 15,
+      "motion_handoff": 15,
+      "motion_plan": 7,
+      "motion_freshness": 13,
+      "subject_zones": 9,
+      "motion_cut": 22,
+      "web_ai_transaction": 28,
+      "manual_cut_transaction": 7,
+      "capcut_build_safety": 15,
+      "hf_export_safety": 15,
+      "render_encoder": 6
+    },
+    "motion_python_passed": 164,
+    "platform_python_reported": 46,
+    "platform_python_passed": 45,
+    "platform_python_skipped": 1,
+    "total_reported": 210,
+    "total_passed": 209,
+    "strong_guard_programs": 13,
+    "private_config_attempts": 0,
+    "node_suites_pass": [
+      "subtitle_ui",
+      "subject_zones_ui",
+      "web_ai_ui",
+      "ai_plan_ui"
+    ]
+  },
+  "actual_app": {
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "duration": 8.0,
+    "mp4_sha256": "9d94ec29920c3c80b7aac61c764b9df67c3b19ffc154d112c2ccc1ee7e050c84",
+    "full_audio_video_decode": true,
+    "motions": [
+      {
+        "text": "LEFT",
+        "start": 0.5,
+        "duration": 2.0,
+        "bounds": [
+          408.2314526112186,
+          162.0,
+          743.7685473887814,
+          324.0
+        ],
+        "bright_pixels_at_1_3s": 1251,
+        "media_sha256": "548ac4a888bba3f88b6ca353d1db85629e2eba2b0471b921acfe706af8206778",
+        "alpha_decode": true
+      },
+      {
+        "text": "RIGHT",
+        "start": 0.5,
+        "duration": 2.0,
+        "bounds": [
+          1146.6272843326885,
+          162.0,
+          1541.3727156673112,
+          324.0
+        ],
+        "bright_pixels_at_1_3s": 1651,
+        "media_sha256": "a0f336ac7bce58a18dc1e1d7d23090411f816b4455350009a5e8ed83c446148d",
+        "alpha_decode": true
+      }
+    ],
+    "all_motion_count": 3,
+    "collision_status": 409,
+    "frame_sha256": "7dbbfdae7e26e13b262c6720d3975ce937ce9119c788a74e665d0a4c17ac1df6",
+    "final_backend_reloaded": true,
+    "final_timeline_recipe_errors": [],
+    "final_export_status": 200,
+    "final_hf_build_status": 200,
+    "hf_tracks": [
+      "8",
+      "9",
+      "10"
+    ],
+    "hf_browser_seek": {
+      "global_seconds": 1.3,
+      "concurrent_media_seconds": 0.8,
+      "both_ready_state_at_least": 2,
+      "both_visible_in_inspected_screenshot": true
+    }
+  },
+  "timeline_ui": {
+    "viewports": [
+      [
+        1440,
+        1000
+      ],
+      [
+        375,
+        844
+      ]
+    ],
+    "mobile_body_width": 375,
+    "motion_buttons": {
+      "minimum_height": 44,
+      "minimum_width": 44,
+      "measured_widths": [
+        78,
+        78,
+        70
+      ],
+      "row_pitch": 48
+    },
+    "left_right_independently_clicked": true,
+    "keyboard_space_selects_left_without_playback": true,
+    "tab_reaches_right_and_enter_selects": true,
+    "focus_retained_after_redraw": true,
+    "screenshots": "Private only"
+  },
+  "independent_review": "Scoped generated HTML/frame, timeline source/desktop375 captures and narrow keyboard source follow-up PASS; reviewer independently ran Node and guarded handoff15cases. Actual browser keyboard proof by root.",
+  "ci_observed": {
+    "head": "000299610b8cd0d8c77891545b441ff60f540ca7",
+    "run": 38776792952,
+    "conclusion": "failure",
+    "windows_install_mac_intel": "success",
+    "mac_arm": "Owned preview child became zombie during identity enumeration; fixed by skipping NoSuchProcess (including ZombieProcess), retaining AccessDenied refusal and identity rechecks. New exact-head CI required."
+  },
+  "limits": [
+    "Actual media/browser fixture is generated gray+sine16:9 only, two generic hook-title motions plus earlier synthetic sentence-pair.",
+    "Gate uses measured conservative animated/role boxes, not decoded alpha-pixel collision detection or semantic placement.",
+    "Native output independent tracks tested with synthetic probe fixture; no native CapCut opened/saved/played.",
+    "Mac child-race regression uses mocked process boundary on Windows; actual Mac CI must confirm.",
+    "No real speech, watched pilot, quality or time-to-approval acceptance; new UI remains draft.",
+    "Legacy/stale or conflicting stored motion cannot be silently accepted for concurrent placement.",
+    "No customer media, paths, private screenshots, profiles or downloaded AI packet contents published."
+  ]
+}

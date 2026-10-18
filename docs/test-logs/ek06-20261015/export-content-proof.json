@@ -1,0 +1,47 @@
+{
+  "frames": [
+    {
+      "at_s": 3.9,
+      "rgb": [
+        128,
+        128,
+        128
+      ],
+      "blue_insert_expected": false,
+      "pass": true
+    },
+    {
+      "at_s": 4.1,
+      "rgb": [
+        0,
+        0,
+        254
+      ],
+      "blue_insert_expected": true,
+      "pass": true
+    },
+    {
+      "at_s": 4.7,
+      "rgb": [
+        0,
+        0,
+        254
+      ],
+      "blue_insert_expected": true,
+      "pass": true
+    },
+    {
+      "at_s": 4.9,
+      "rgb": [
+        128,
+        128,
+        128
+      ],
+      "blue_insert_expected": false,
+      "pass": true
+    }
+  ],
+  "primary_audio_peak_hz": 440.0,
+  "full_decode": "pass",
+  "scope": "Generated grey/blue media and440Hz tone, not real speech or editorial relevance"
+}

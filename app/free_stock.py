@@ -1,9 +1,11 @@
-"""Free stock video from Pixabay (free for commercial use, no credit needed).
+"""Pixabay search candidates; the user must check each item's source and license.
 Needs a free API key in config.json: pixabay_key (Settings > เครื่องนี้).
 """
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -12,6 +14,24 @@ from typing import Any
 from video_edit import VideoEditError
 
 SIGNUP = {"pixabay": "https://pixabay.com/api/docs/"}
+
+
+def _file_url(url: str) -> None:
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        host = (parsed.hostname or "").lower()
+        valid = (parsed.scheme == "https" and not parsed.username and not parsed.password
+                 and parsed.port in (None, 443) and (host == "pixabay.com" or host.endswith(".pixabay.com")))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise VideoEditError("ลิงก์ดาวน์โหลดต้องเป็น HTTPS ของ Pixabay")
+
+
+class _StockRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _file_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def _get(url: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
@@ -56,17 +76,25 @@ def download(folder: str, source: str, item_id: str, file_url: str) -> str:
     """Save one clip into <stock_video>/free (kept once; the same clip is not downloaded twice)."""
     if source not in SIGNUP or not item_id.isdigit():
         raise VideoEditError("unknown free stock item")
-    host = urllib.parse.urlparse(file_url).hostname or ""
-    if not host.endswith("pixabay.com"):
-        raise VideoEditError(f"not a Pixabay file: {host}")
+    _file_url(file_url)
     out = Path(folder) / "free"
     out.mkdir(parents=True, exist_ok=True)
     target = out / f"{source}-{item_id}.mp4"
     if not target.is_file():
         req = urllib.request.Request(file_url, headers={"User-Agent": "ClipKit"})
-        part = target.with_suffix(".part")
-        with urllib.request.urlopen(req, timeout=120) as r, open(part, "wb") as f:
-            while chunk := r.read(1 << 20):
-                f.write(chunk)
-        part.replace(target)
+        fd, temporary = tempfile.mkstemp(dir=out, prefix=target.name + ".", suffix=".part")
+        part = Path(temporary)
+        try:
+            with os.fdopen(fd, "wb") as f, urllib.request.build_opener(_StockRedirect()).open(req, timeout=120) as r:
+                _file_url(r.geturl())
+                while chunk := r.read(1 << 20):
+                    f.write(chunk)
+                f.flush()
+                os.fsync(f.fileno())
+            part.replace(target)
+        except Exception as exc:
+            part.unlink(missing_ok=True)
+            if isinstance(exc, VideoEditError):
+                raise
+            raise VideoEditError(f"ดาวน์โหลด Pixabay ไม่สำเร็จ: {exc}") from exc
     return str(target)

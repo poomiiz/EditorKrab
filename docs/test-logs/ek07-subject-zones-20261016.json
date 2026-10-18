@@ -1,0 +1,129 @@
+{
+  "date": "2026-10-16",
+  "scope": "Generated fixture subject-region editing and Browser AI handoff; not editorial acceptance",
+  "source_sha256": {
+    "app/motion_plan.py": "31176cc77b9b7f21945001b2b6c87569df24bd84923d1f0af1671f9af8cacade",
+    "app/video_editor.py": "0392f996907aba9ca1280e6b202d6b3dc2e30e0f65200be6ce220f4ccee1daed",
+    "app/web_ai_json.py": "e273b3f71d4e42051aa6548eed78571e334d9bf46d013916775dc8c945e89954",
+    "app/static/editor.html": "17bfcfb92ec07035c3015b0a98c5f7a8d1afbdf614d27bb8792044142f80f104",
+    "prompts/web_ai/clip.md": "6fe455f3688083c19ea589463dc6541b5cfa58926646c544e037e36788a4388a",
+    "prompts/web_ai/schema.md": "088f61cc340bbc38196eaf1daebeb6a2c0f2da0bcb83dccf79a2724760ddee3a",
+    "scripts/subject_zones_test.py": "a6e78b3460d35fb573cee6ad5ea687d0689f41c3495758bbcc4575264d07443f",
+    "scripts/subject_zones_ui_test.cjs": "1f1532a134de4d744e9a2cc8e46bb9adfb11dedd9e28cb4320c3fc1b13ea5fef",
+    "scripts/web_ai_ui_test.js": "40a18d4cedd6b74c0162122291561d6b6adb2a127bfacf2052678b51f3ae0060"
+  },
+  "python_cases": {
+    "subject_zones": 9,
+    "motion_layout": 9,
+    "motion_plan": 7,
+    "motion_api": 13,
+    "motion_handoff": 14,
+    "motion_freshness": 13,
+    "motion_cut": 22,
+    "web_ai_transaction": 28,
+    "manual_cut_transaction": 7,
+    "subtitle_plan": 28,
+    "web_ai_identity": 18,
+    "capcut_build_safety": 15,
+    "hf_export_safety": 15,
+    "render_encoder": 6
+  },
+  "python_total": 204,
+  "strong_guard_programs": 14,
+  "private_config_attempts": 0,
+  "node_suites_pass": [
+    "subject_zones_ui",
+    "subtitle_ui",
+    "ai_plan_ui",
+    "web_ai_ui"
+  ],
+  "playwright": {
+    "safe_save": "accepted; existing motion no longer subject-review-pending over full covered interval",
+    "conflicting_save": "truthful region persisted; existing motion rejected and HF rebuild HTTP400",
+    "stale_save": "HTTP409; typed values retained",
+    "delayed_reload": "navigation and same-panel typing retained; obsolete response discarded",
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "viewports": [
+      [
+        1440,
+        1000
+      ],
+      [
+        375,
+        844
+      ]
+    ],
+    "mobile_body_width": 375,
+    "minimum_new_control_height": 44,
+    "mobile_frame_rect": {
+      "x": 10,
+      "y": 181.65625,
+      "w": 355,
+      "h": 199.6875
+    },
+    "mobile_region_rect": {
+      "x": 45.5,
+      "y": 201.625,
+      "w": 106.5,
+      "h": 79.875
+    },
+    "source_and_media_readback": {
+      "original_hashes": {
+        "source.mp4": "bcc5e8927ece7d0e26de3fa8d97ca01023ffaab2ce8a836500438167ba55a1de",
+        "seed.mov": "e8a7fcfdffb38c3bdb4a33eae7844ad7f45e39825c8d90442cbcef3de8ff342c",
+        "draft_content.json": "d9b66d4273e957a4692384040934e114fa03c30a5407871604a297df42887215",
+        "clipkit_overlays.json": "a20b49a72664f9d59f6647c2a3d32338df0ae447f8d578a5f34301fc697eeaf8",
+        "clipkit_words.json": "8657acf8ea0bb9516fd936ce8659a9022f1e7c5b11a6d65cc2ff212383422579"
+      },
+      "journal_count": 4,
+      "all_committed": true,
+      "regions": [
+        {
+          "start": 0,
+          "end": 8,
+          "x": 0.1,
+          "y": 0.1,
+          "w": 0.3,
+          "h": 0.4
+        }
+      ]
+    },
+    "downloaded_browser_packet": {
+      "sha256": "479f0f584cc7672aa350b74b35c49dbf780f377f0c306504a22c8c1bdb6fd8ed",
+      "regions": [
+        {
+          "start": 0,
+          "end": 8,
+          "x": 0.1,
+          "y": 0.1,
+          "w": 0.3,
+          "h": 0.4
+        }
+      ],
+      "canvas": {
+        "width": 1920,
+        "height": 1080
+      },
+      "packet_version": 2,
+      "no_extra_typing": true
+    }
+  },
+  "independent_ui_review": "Scoped source, deferred reload regression, desktop/375 screenshots PASS after stale-response fix",
+  "prior_exact_ci": {
+    "head": "1e7c3bc67987302f322deda272286b9f8ae0f2f2",
+    "run": 38772639856,
+    "conclusion": "success",
+    "jobs": 4
+  },
+  "limits": [
+    "Manually specified time/rectangles do not detect or track faces and do not certify human review.",
+    "Actual browser fixture is generated 16:9 only; other ratios/fullscreen not certified by this round.",
+    "Existing MOV bytes reused, not newly encoded by region saving.",
+    "No customer media, screenshots, DOM, packet text or private paths published.",
+    "No real speech, alpha-ink/contrast, native CapCut, watched pilot or time-to-approval acceptance.",
+    "New UI/copy remains draft; full EK01-EK12 goal and EK07 remain active."
+  ]
+}

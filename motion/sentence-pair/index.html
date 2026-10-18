@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=1080, height=1920">
 <!--
   ClipKit motion stock #1 - "sentence pair"
-  White lead types in (double cursor), blue punch snaps in with a horizontal smear, both end together.
+  White lead appears first, blue punch pops on the actual spoken word; both end together.
   Copied from hand-made CapCut edits: white size 25 x0.91 y-0.37 "เคอร์เซอร์คู่" 0.5 s,
   blue rgb(5,17,146) size 30 x1.35 y-0.50 white stroke "คลื่นเสียง" 0.17 s.
   Edit PAIRS below (seconds from the start of this layer). Background: transparent for CapCut overlay;
@@ -13,22 +13,19 @@
 -->
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
 <style>
+  :root {
+    /* Existing pair colours stay unchanged while layout is fitted to the safe box. */
+    --pair-normal: #fff;
+    --pair-emphasis: rgb(5,17,146);
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 1080px; height: 1920px; overflow: hidden; background: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
   #root { position: absolute; inset: 0; }
   #bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  .pair { position: absolute; left: 0; right: 0; top: 0; opacity: 0; }
-  .lead, .punch { position: absolute; white-space: nowrap; font-family: var(--font, "Sukhumvit Set", "DB Heavent", sans-serif); font-weight: 700; }
-  .lead {
-    left: 92px; top: 1250px; font-size: 70px; color: #fff;
-    text-shadow: 0 0 2px #000, 0 4px 10px rgba(0,0,0,.75);
-  }
-  .lead .cur { display: inline-block; width: 5px; height: 62px; margin-left: 6px; background: #fff; vertical-align: -6px; box-shadow: 8px 0 0 #fff; }
-  .punch {
-    left: 50%; top: 1340px; font-size: 150px; color: rgb(5,17,146);
-    -webkit-text-stroke: 9px #fff; paint-order: stroke fill;
-    filter: drop-shadow(0 6px 10px rgba(0,0,0,.55));
-  }
+  .pair { position: absolute; inset: 0; }
+  .event-text { position:absolute; white-space:nowrap; font-weight:700; paint-order:stroke fill; }
+  /* The app copies the measured font bytes into rendered projects. Standalone demo uses a local preview font. */
+  @font-face { font-family:"Kanit"; src:local("Kanit"); }
 </style>
 <!-- ClipKit motion page reads this: label, the form fields, and how the clip length is found
      ("duration" field, or "pairs" = end of the last pair). Copy this block into a new template. -->
@@ -37,7 +34,12 @@
    "fields": [{"key": "pairs", "label": "ประโยค (บรรทัดละคู่: ตัวขาว / คำเน้น)", "type": "pairs",
                "default": "ผู้รับเหมาก็จะ / ถูกกดดัน\nเรื่องงานที่ต้องเสร็จ / ตามกำหนดเวลา\nเพื่อตอบสนอง / โจทย์ผู้บริโภค",
                "each": 2.5, "delay": 0.8},
-              {"key": "font", "label": "ฟอนต์", "type": "font", "default": ""}]}
+              {"key": "font", "label": "ฟอนต์", "type": "font", "default": ""},
+              {"key": "normal_size", "label": "ขนาดซับ", "type": "number", "default": 70},
+              {"key": "punch_size", "label": "ขนาดตัวเน้น", "type": "number", "default": 150},
+              {"key": "normal_top", "label": "แนวซับ", "type": "number", "default": 1210},
+              {"key": "punch_top", "label": "แนวตัวเน้น", "type": "number", "default": 1300},
+              {"key": "sizing", "label": "ขนาดข้อความ", "type": "select", "default": "fit", "options": [["fit", "ปรับให้พอดี"], ["fixed", "คงที่ตาม preset"]]}]}
 </script>
 </head>
 <body>
@@ -45,62 +47,105 @@
   <img id="bg" class="clip" data-start="0" data-duration="8" data-track-index="0" alt="" style="display:none">
 </div>
 <script>
-  // [start, end, white lead, blue punch, punch delay after lead]
-  const DEMO = [
-    [0.0, 2.5, "ผู้รับเหมาก็จะ", "ถูกกดดัน", 1.0],
-    [2.5, 5.0, "เรื่องงานที่ต้องเสร็จ", "ตามกำหนดเวลา", 0.6],
-    [5.0, 8.0, "เพื่อตอบสนอง", "โจทย์ผู้บริโภค", 1.0],
-  ];
-  // values come from ?key=... in the preview URL, or window.KIT injected by the ClipKit app before render
+  // Display geometry and timing belong to the measured event plan. Legacy pairs need actual ASR word clocks.
   const ARGS = { ...Object.fromEntries(new URLSearchParams(location.search)), ...(window.KIT || {}) };
-  // ARGS.pairs = JSON array in the same shape, e.g. [[0,2.5,"ผู้รับเหมาก็จะ","ถูกกดดัน",1]]
-  const PAIRS = ARGS.pairs ? (typeof ARGS.pairs === "string" ? JSON.parse(ARGS.pairs) : ARGS.pairs) : DEMO;
-  const TOTAL = Math.max(...PAIRS.map(p => p[1]));
-  if (ARGS.font) document.documentElement.style.setProperty("--font", `"${ARGS.font}", "Sukhumvit Set", sans-serif`);
-  // SPEED 2 = typing, punch delay and smear twice as fast as the original CapCut edit; ?speed= overrides.
-  // Pair start/end stay as written (they follow the speech).
-  const SPEED = parseFloat(ARGS.speed) || 2;
-  const TYPE = 0.5 / SPEED, SMEAR = 0.17 / SPEED;
-
-  const bg = ARGS.bg;
-  document.getElementById("root").dataset.duration = TOTAL; document.getElementById("bg").dataset.duration = TOTAL;
-  if (bg) { const im = document.getElementById("bg"); im.src = bg; im.style.display = "block"; }
-
-  const seg = (s) => [...new Intl.Segmenter("th", { granularity: "grapheme" }).segment(s)].map(x => x.segment);
+  const jsonValue = v => typeof v === "string" ? JSON.parse(v) : v;
+  const finite = v => typeof v === "number" && Number.isFinite(v);
+  const tight = text => text.replace(/\s/g, "");
+  const W = Number(ARGS.width || ARGS.canvas?.width || 1080), H = Number(ARGS.height || ARGS.canvas?.height || 1920);
+  if (![W,H].every(v => finite(v) && v > 0 && v <= 8192)) throw new Error("Invalid canvas width/height");
   const root = document.getElementById("root");
-  const tl = gsap.timeline({ paused: true });
+  root.dataset.width = W; root.dataset.height = H;
+  Object.assign(root.style, {width:W+"px", height:H+"px"});
+  const bg = document.getElementById("bg");
+  if (ARGS.bg) { bg.src = ARGS.bg; bg.style.display = "block"; }
+  if (ARGS.font) document.documentElement.style.setProperty("--font", `"${ARGS.font}", sans-serif`);
 
-  PAIRS.forEach(([start, end, lead, punch, delay], i) => {
-    const p = document.createElement("div");
-    p.className = "pair clip"; p.id = "pair" + i;
-    p.dataset.start = start; p.dataset.duration = end - start; p.dataset.trackIndex = 1 + i;
-    const chars = seg(lead);
-    p.innerHTML = `<div class="lead">${chars.map(c => `<span class="ch">${c}</span>`).join("")}<span class="cur"></span></div><div class="punch">${punch}</div>`;
-    root.appendChild(p);
-    const cur = p.querySelector(".cur"), pu = p.querySelector(".punch");
-    // keep both lines inside the frame whatever the font (punch is centred, lead starts at 92 px)
-    const fit = () => [[pu, 960], [p.querySelector(".lead"), 900]].forEach(([el, max]) => {
-      el.style.fontSize = "";
-      if (el.offsetWidth > max) el.style.fontSize = parseFloat(getComputedStyle(el).fontSize) * max / el.offsetWidth + "px";
+  // This data is an illustrative preview only; user-supplied pairs never inherit its sample delays.
+  const DEMO = [[0,2.5,"ประโยคปกติ","คำสำคัญ",1], [2.5,5,"เนื้อหาถัดไป","อีกประเด็น",.6], [5,8,"ข้อความสุดท้าย","จบเรื่อง",1]];
+  function legacyEvents(args, width, height) {
+    const supplied = !!args.pairs, pairs = supplied ? jsonValue(args.pairs) : DEMO;
+    const clocks = args.word_times ? jsonValue(args.word_times) : null;
+    if (!Array.isArray(pairs) || !pairs.length) throw new Error("pairs must contain source ranges");
+    return pairs.flatMap((pair, index) => {
+      const [start,end,lead,punch] = pair;
+      if (![start,end].every(finite) || start < 0 || end <= start || typeof lead !== "string" || typeof punch !== "string")
+        throw new Error(`pair ${index}: invalid text/range`);
+      let hit = start;
+      if (punch) {
+        if (!supplied) hit += pair[4];
+        else {
+          const words = clocks?.[index];
+          if (!Array.isArray(words) || !words.length) throw new Error(`pair ${index}: missing actual word_times for emphasis`);
+          let previous = 0, position = 0, found = false;
+          const boundary = tight(lead).length;
+          for (const word of words) {
+            if (!Array.isArray(word) || !word.slice(0,2).every(finite) || word[0] < previous || word[1] < word[0] || word[1] > end-start || typeof word[2] !== "string")
+              throw new Error(`pair ${index}: invalid source word clock`);
+            if (position === boundary) {hit = start + word[0]; found = true;}
+            position += tight(word[2]).length; previous = word[1];
+          }
+          if (!found || tight(words.map(w => w[2]).join("")) !== tight(lead+punch))
+            throw new Error(`pair ${index}: emphasis must begin at a source word boundary`);
+        }
+      }
+      const ratio = height / 1920;
+      const make = (role,text,a,size,top,effect) => ({role,cue_id:`pair-${index}`,text,start:a,end,
+        size_px:size*ratio,center_x_px:width/2,center_y_px:top/1920*height,rotation:0,
+        fill:role === "normal" ? [1,1,1] : [5/255,17/255,146/255],stroke:role === "normal" ? [0,0,0] : [1,1,1],
+        outline_px:(role === "normal" ? 2 : 4.5)*ratio,shadow:2, fixed_size:args.sizing === "fixed",effect});
+      return [lead && make("normal",lead,start,Number(args.normal_size || 70),Number(args.normal_top || 1130),"fade"),
+              punch && make("emphasis",punch,hit,Number(args.punch_size || 100),Number(args.punch_top || 1335),"pop")].filter(Boolean);
     });
-    fit(); document.fonts.ready.then(fit);
-
-    tl.set(p, { opacity: 1 }, start);
-    // typewriter: graphemes appear one by one (Thai vowels/tone marks stay with their consonant).
-    // display toggles instead of callbacks so seeking to any frame (renderer) gives the same picture.
-    const spans = p.querySelectorAll(".ch");
-    tl.set(spans, { display: "none" }, 0);
-    spans.forEach((s, k) => tl.set(s, { display: "inline" }, start + TYPE * (k + 1) / spans.length));
-    tl.set(cur, { opacity: 0 }, start + TYPE + 0.15 / SPEED);
-    // punch: smear in from the left, squash back to normal
-    gsap.set(pu, { xPercent: -50 });
-    tl.fromTo(pu, { opacity: 0, x: -160, scaleX: 1.9, filter: "blur(10px) drop-shadow(0 6px 10px rgba(0,0,0,0))" },
-                  { opacity: 1, x: 0, scaleX: 1, filter: "blur(0px) drop-shadow(0 6px 10px rgba(0,0,0,.55))", duration: SMEAR, ease: "power2.out" }, start + delay / SPEED);
-    tl.set(p, { opacity: 0 }, end);
+  }
+  const EVENTS = ARGS.subtitle_events ? jsonValue(ARGS.subtitle_events) : legacyEvents(ARGS,W,H);
+  if (!Array.isArray(EVENTS) || !EVENTS.length) throw new Error("subtitle_events must not be empty");
+  const TOTAL = Math.max(...EVENTS.map(e => e.end));
+  root.dataset.duration = TOTAL; bg.dataset.duration = TOTAL;
+  const tl = gsap.timeline({paused:true});
+  window.__sentencePairPlan = {events:EVENTS,width:W,height:H,legacyEvents};
+  const rgb = values => `rgb(${values.map(v => Math.round(v*255)).join(",")})`;
+  const nodes = EVENTS.map((event,index) => {
+    if (![event.start,event.end,event.size_px,event.center_x_px,event.center_y_px,event.rotation,event.outline_px,event.shadow].every(finite)
+        || event.start < 0 || event.end <= event.start || event.size_px <= 0 || typeof event.text !== "string")
+      throw new Error(`cue ${event.cue_id}: invalid measured event`);
+    const outer = document.createElement("div"), text = document.createElement("div");
+    outer.id = `event-${index}`; outer.className = "clip pair";
+    outer.dataset.start = event.start; outer.dataset.duration = event.end-event.start; outer.dataset.trackIndex = index+1;
+    text.className = "event-text"; text.style.width = "max-content"; text.textContent = event.text;
+    Object.assign(text.style,{left:event.center_x_px+"px",top:event.center_y_px+"px",fontSize:event.size_px+"px",lineHeight:"1.2",
+      fontFamily:ARGS.font || event.font_family || "Kanit, sans-serif", color:rgb(event.fill),
+      webkitTextStroke:`${event.outline_px*2}px ${rgb(event.stroke)}`,textShadow:`0 ${event.shadow}px ${event.shadow*2}px rgba(0,0,0,.7)`});
+    outer.appendChild(text); root.appendChild(outer);
+    return {event,text};
   });
-
+  for (const {event,text} of nodes) {
+    tl.set(text,{xPercent:-50,yPercent:-50,rotation:event.rotation},0);
+    if (event.effect === "pop") tl.fromTo(text,{scale:1.3},{scale:1,duration:Math.min(.14,event.end-event.start),ease:"none"},event.start);
+    else if (event.effect === "fade") tl.fromTo(text,{opacity:0},{opacity:1,duration:Math.min(.08,event.end-event.start),ease:"none"},event.start);
+  }
   window.__timelines = window.__timelines || {};
-  window.__timelines["main"] = tl;
+  window.__timelines.main = tl;
+  const families = [...new Set(EVENTS.map(event => ARGS.font || event.font_family || 'Kanit'))];
+  window.__clipkitMotionReady = Promise.all(families.map(family => document.fonts.load(`700 20px ${JSON.stringify(family)}`))).then(() => document.fonts.ready).then(() => {
+    for (const {event,text} of nodes) {
+      const peak = event.effect === "pop" ? 1.3 : 1, angle = Math.abs(event.rotation)*Math.PI/180;
+      const padding = 2*(event.outline_px+event.shadow), room = W*.78 - Math.abs(event.center_x_px-W/2)*2-padding;
+      const measure = () => {
+        const style = getComputedStyle(text), width = parseFloat(style.width), height = parseFloat(style.height);
+        return {w:(width*Math.cos(angle)+height*Math.sin(angle))*peak+padding,
+                h:(height*Math.cos(angle)+width*Math.sin(angle))*peak+padding};
+      };
+      let box = measure();
+      if (!ARGS.subtitle_events && !event.fixed_size && box.w > room) {
+        text.style.fontSize = event.size_px*room/box.w+"px"; box = measure();
+      }
+      if (box.w > W*.78+.05 || event.center_x_px-box.w/2 < W*.11-.05 || event.center_x_px+box.w/2 > W*.89+.05
+          || event.center_y_px-box.h/2 < H*.11-.05 || event.center_y_px+box.h/2 > H*.77+.05)
+        throw new Error(`cue ${event.cue_id} / ${event.role}: fixed text or animation exceeds safe area; shorten show or adjust preset`);
+    }
+  });
+  window.__clipkitMotionReady.catch(error => { setTimeout(() => { throw error; }, 0); });
 </script>
 </body>
 </html>

@@ -1,0 +1,7 @@
+/target/
+node_modules/
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.bin

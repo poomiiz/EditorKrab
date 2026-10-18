@@ -15,17 +15,19 @@ button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:
 button:disabled{opacity:.5;cursor:wait}
 input,select{background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:inherit}
 .top{display:flex;gap:6px;align-items:center;padding:8px 14px;min-height:48px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.top button,.ck-dlg .ck-dlg-row button{min-height:44px}
 .top h1{font-size:14.5px;font-weight:600;margin:0 8px 0 0;flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mid{display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,380px);gap:10px;padding:10px;min-height:0}
 .player{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0;background:#000;border-radius:10px;position:relative}
 .player hyperframes-player{border-radius:10px;overflow:hidden}
-.player .empty{color:var(--mut);text-align:center;padding:30px}
+.player .empty{position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--mut);text-align:center;padding:30px}
 .side{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow:auto;min-height:0}
 .side h3{margin:0 0 8px;font-size:14px;font-weight:600}.side h4{margin:16px 0 6px;font-size:11.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--mut)}
 .hint{color:var(--mut);font-size:12.5px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
 .row label{min-width:86px;color:var(--sub)}
 .row input[type=range]{flex:1}
+#pl,#pp,#po,#pq,#pc,#ps,#pm,#pcut{min-height:44px}
 .looks{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .look{border:2px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;background:#000;padding:0;text-align:center}
 .look img{width:100%;display:block;aspect-ratio:9/16;object-fit:cover}
@@ -51,6 +53,7 @@ input,select{background:var(--card2);color:var(--txt);border:1px solid var(--lin
 .blk.br{background:#11463a;color:#c9f7e6;display:flex;gap:4px;align-items:center}
 .blk.br img{height:100%;border-radius:4px}
 .blk.mo{background:#4a2a6e;color:#eadcff}
+.lane.motion .blk{height:44px;bottom:auto;min-width:44px}
 .blk.mu{background:#3a3220;color:#f3e1b5;cursor:default}
 .blk.sel{border-color:#fff;box-shadow:0 0 0 2px var(--acc)}
 .blk .rz{position:absolute;right:0;top:0;bottom:0;width:8px;cursor:ew-resize;background:rgba(255,255,255,.15)}
@@ -63,21 +66,47 @@ input,select{background:var(--card2);color:var(--txt);border:1px solid var(--lin
 #adv{margin-top:14px;border-top:1px solid var(--line);padding-top:8px}#adv summary{cursor:pointer;font-weight:600;color:var(--sub);padding:4px 0}
 .agent{border:1px dashed var(--acc);border-radius:10px;padding:10px;margin-top:8px}
 .agent code{display:block;background:#0e0f12;border-radius:8px;padding:8px;margin:6px 0;word-break:break-all;font-size:12.5px}
+.ai-answer{width:100%;min-height:88px;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;resize:vertical}
+.ai-actions button,.ai-actions summary{min-height:44px}
+.insert-panel input,.insert-panel select,.insert-panel button,.insert-panel summary{min-height:44px;max-width:100%}
+.insert-panel input,.insert-panel select{min-width:0}
+.insert-panel a{display:inline-flex;align-items:center;min-height:44px}
+.insert-panel video,.insert-panel img{width:100%;max-height:220px;object-fit:contain}
+.insert-panel .hint{overflow-wrap:anywhere}
+.insert-panel .reason{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.motion-editor input:not([type=checkbox]),.motion-editor select,.motion-editor button,.motion-editor summary,.motion-editor .role{min-height:44px;max-width:100%}
+.motion-editor input,.motion-editor select{min-width:0;flex:1}
+.motion-editor .role{display:inline-flex;align-items:center;gap:8px}
+.motion-editor .role input{flex:none}
+.motion-editor{overflow-wrap:anywhere}
+.phrase-editor input,.phrase-editor select,.phrase-editor button,.phrase-editor summary{min-height:44px;max-width:100%}
+.phrase-editor input,.phrase-editor select{min-width:0}
+.phrase-editor .source-copy,.phrase-editor .repair-message{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.repair-badge{color:var(--warn);border:1px solid var(--warn);border-radius:7px;padding:4px 8px}
+.subject-box{position:absolute;pointer-events:none;z-index:5;border:2px dashed var(--warn);color:var(--warn);font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .ov{position:absolute;pointer-events:none;z-index:4;background:rgba(5,7,12,.55)}.ov[hidden]{display:none}
 .ov .safe{position:absolute;border:1.5px dashed rgba(255,196,0,.85);border-radius:4px}
 .ov .col{position:absolute;right:0;bottom:0;background:rgba(239,68,68,.22);border-left:1.5px dashed rgba(239,68,68,.8)}
 .ov .otxt{position:absolute;text-align:center;font-weight:700;line-height:1.2;transform:translateY(-50%);font-family:"Kanit","Leelawadee UI",sans-serif;paint-order:stroke fill}
 .opt{display:block;margin:5px 0;cursor:pointer}.prob{color:var(--warn);font-size:12.5px;margin:2px 0}
-@media (max-width:900px){.mid{grid-template-columns:1fr}.player{min-height:300px}}
+@media (max-width:900px){
+  main{height:auto;min-height:100vh;width:100%;grid-template-rows:auto auto auto;grid-template-columns:minmax(0,1fr)}
+  .mid{grid-template-columns:minmax(0,1fr);min-width:0}
+  .side{min-width:0;overflow:visible}
+  .player{min-height:240px;height:300px}
+  .tl{min-width:0}.tlbar{flex-wrap:wrap}.scroll{min-width:0}.tracks{grid-template-columns:84px minmax(0,1fr)}
+}
   body.simple .media { display: none !important; }
 </style>
 <link rel="stylesheet" href="/shell.css?v=8">
-<script src="/ui.js?v=2"></script></head>
+<link rel="stylesheet" href="/ai-plan.css?v=1"><script src="/ai-plan.js?v=1"></script>
+<script src="/ui.js?v=3"></script></head>
 <body>
 <main>
   <div class="top">
     <button onclick="location.href='/video-editor.html'">‹</button>
     <h1 id="title" translate="no">กำลังโหลด…</h1>
+    <span id="repairStatus" class="repair-badge" role="status" hidden>ต้องแก้ซับ</span>
     <button class="pri" id="bAuto" title="ถอดเสียง ตัดเงียบ ซับ ภาพประกอบ เพลง เอฟเฟกต์ ให้ครบในครั้งเดียว">ทำให้ครบ</button>
     <button id="bCover">ปก</button>
     <button id="bExport" class="pri">ส่งออก</button>
@@ -85,9 +114,9 @@ input,select{background:var(--card2);color:var(--txt);border:1px solid var(--lin
     <span class="busy" id="busy"></span>
   </div>
   <div class="mid">
-    <div class="player" id="player"><div class="empty" id="empty">กำลังเตรียมตัวเล่น…</div>
+    <div class="player" id="player"><div class="empty" id="empty" role="status" aria-live="polite">กำลังเตรียมตัวเล่น…</div>
       <hyperframes-player id="v" controls style="display:none;width:100%;height:100%"></hyperframes-player>
-      <div class="ov" id="ov" hidden><div class="safe" id="osafe"></div><div class="col" id="ocol"></div><div class="otxt" id="otxt"></div></div></div>
+      <div class="subject-box" id="subjectBox" hidden>พื้นที่ที่ระบุ</div><div class="ov" id="ov" hidden><div class="safe" id="osafe"></div><div class="col" id="ocol"></div><div class="otxt" id="otxt"></div></div></div>
     <div class="side" id="side"></div>
   </div>
   <div class="tl">
@@ -96,7 +125,7 @@ input,select{background:var(--card2);color:var(--txt);border:1px solid var(--lin
       <button id="bAddBr" class="media">+ ภาพประกอบตรงเส้นแดง</button>
       <span class="hint">คลิกชิ้นไหนเพื่อแก้ทางขวา · ลากภาพประกอบเพื่อเลื่อน ลากขอบขวาเพื่อยืด · Space เล่น/หยุด · Delete ลบ</span></div>
     <div class="tracks" id="tracks">
-      <div><div style="height:18px"></div><div class="lab">ข้อความ</div><div class="lab media">ภาพประกอบ</div><div class="lab">ข้อความใหญ่</div><div class="lab media">เพลง</div></div>
+      <div><div style="height:18px"></div><div class="lab">ข้อความ</div><div class="lab media">ภาพประกอบ</div><div class="lab" id="motionLabel">ข้อความใหญ่</div><div class="lab media">เพลง</div></div>
       <div class="scroll" id="scroll"><div class="inner" id="inner" translate="no"></div></div>
     </div>
   </div>
@@ -104,7 +133,7 @@ input,select{background:var(--card2);color:var(--txt);border:1px solid var(--lin
 <script>
 const $ = id => document.getElementById(id);
 const PATH = new URLSearchParams(location.search).get('path');
-let T = null, PL = null, SEL = null, PX = 40, MUSIC = null;
+let T = null, PL = null, SEL = null, PX = 40, MUSIC = null, zonePreview = null;
 const mm = t => Math.floor(t / 60) + ':' + (t % 60).toFixed(1).padStart(4, '0');
 async function api(path, body) {
   const r = await fetch('/api/video/' + path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
@@ -116,30 +145,54 @@ function say(html) { $('busy').innerHTML = html; }
 
 fetch('/api/video/config').then(r => r.json()).then(c => document.body.classList.toggle('simple', !!c.simple)).catch(() => {});
 
-async function load() {
-  T = await api('draft/timeline?path=' + encodeURIComponent(PATH));
+async function load(accept = () => true) {
+  const timeline = await api('draft/timeline?path=' + encodeURIComponent(PATH));
+  if (!accept()) return false;
+  T = timeline;
   $('title').textContent = T.name;
+  $('repairStatus').hidden = !(T.quality?.layout_errors?.length);
   document.title = T.name + ' · ตัดต่อ';
   PL = {broll: T.broll.map(b => ({...b})), music: {...T.music}, sfx: {...T.sfx}};
   drawTL(); side();
   live();
+  return true;
 }
 let building = null, again = false;
+const PLAYER_LOADING = $('empty').textContent;
 async function live() {
-  if (building) { again = true; return; }
+  if (building) { again = true; return building; }
   const v = $('v'), at = v.currentTime || 0;
   building = api('draft/hf-build', {path: PATH}).then(r => {
-    v.setAttribute('src', r.url + '?t=' + Date.now());
-    v.style.display = 'block'; $('empty').style.display = 'none';
-    v.addEventListener('ready', () => { try { v.seek(at); } catch {} }, {once: true});
-  }).catch(e => { $('empty').style.display = ''; $('empty').textContent = '❌ ' + ckErr(e); })
-    .finally(() => { building = null; if (again) { again = false; live(); } });
+    const src = r.url + '?t=' + Date.now(), empty = $('empty');
+    v.style.visibility = 'hidden'; $('player').setAttribute('aria-busy', 'true');
+    empty.textContent = PLAYER_LOADING; empty.style.display = '';
+    v.addEventListener('ready', () => { if (v.getAttribute('src') === src) { try { v.seek(at); } catch {} } }, {once: true});
+    v.addEventListener('painted', () => requestAnimationFrame(() => {
+      if (v.getAttribute('src') !== src || !v.painted) return;
+      v.style.visibility = 'visible'; empty.style.display = 'none'; $('player').setAttribute('aria-busy', 'false');
+    }), {once: true});
+    v.setAttribute('src', src); v.style.display = 'block';
+  }).catch(e => { $('player').setAttribute('aria-busy', 'false'); $('empty').style.display = ''; $('empty').textContent = '❌ ' + ckErr(e); })
+    .finally(() => { building = null; if (again) { again = false; return live(); } });
   return building;
 }
 // one save for b-roll / music / effects (the export follows this list exactly)
+let savingPL = false;
 async function savePL() {
-  try { await api('draft/placed', {path: PATH, ...PL, broll: PL.broll.filter(b => b.file)}); say(''); live(); }
-  catch (e) { say('❌ ' + ckErr(e)); }
+  if (savingPL) return false;
+  savingPL = true;
+  const payload = () => JSON.stringify({path: PATH, ...PL, broll: PL.broll.filter(b => b.file)});
+  try {
+    while (true) {
+      const sent = payload(), selected = SEL?.type === 'broll' ? PL.broll[SEL.i] : null;
+      const r = await api('draft/placed', JSON.parse(sent));
+      if (payload() !== sent) continue; // A newer manual edit must finish before adopting canonical rows.
+      PL = r.placed;
+      if (selected) { const i = PL.broll.findIndex(b => selected.placement_id ? b.placement_id === selected.placement_id : b.start === selected.start); SEL = i < 0 ? null : {type: 'broll', i, key: 'b' + i}; }
+      say('บันทึกแล้ว'); drawTL(); side(); live(); return true;
+    }
+  } catch (e) { say('❌ ' + ckErr(e)); return false; }
+  finally { savingPL = false; }
 }
 
 // ── timeline ──
@@ -155,16 +208,21 @@ function drawTL() {
   const lSub = lane(), lBr = lane(), lMo = lane(), lMu = lane();
   lBr.classList.add('media'); lMu.classList.add('media');
   const blk = (laneEl, cls, a, b, html, sel) => {
-    const d = document.createElement('div');
+    const d = document.createElement(cls === 'mo' ? 'button' : 'div');
     d.className = 'blk ' + cls + (SEL && SEL.key === sel.key ? ' sel' : '');
     d.style.left = a * PX + 'px'; d.style.width = Math.max(6, (b - a) * PX - 2) + 'px';
     d.innerHTML = html;
-    d.onclick = e => { if (d._moved) return; SEL = sel; seek(a); drawTL(); side(); e.stopPropagation(); };
+    d.onclick = e => {
+      if (d._moved) return;
+      const focused = document.activeElement === d;
+      SEL = sel; seek(a); drawTL(); side(); e.stopPropagation();
+      if (focused && cls === 'mo') inner.querySelector('.blk.mo.sel')?.focus({preventScroll:true});
+    };
     laneEl.appendChild(d);
     return d;
   };
   T.phrases.forEach((p, i) => {
-    const last = !T.phrases[i + 1] || T.phrases[i + 1].line !== p.line;
+    const last = !T.phrases[i + 1] || T.phrases[i + 1].cue_id !== p.cue_id;
     const d = blk(lSub, 'sub', p.start, p.end, `${esc(p.lead)} <b>${esc(p.punch)}</b>${last ? '<div class="rz"></div>' : ''}`, {type: 'phrase', key: 'p' + i, i});
     dragLine(d, p);
   });
@@ -172,7 +230,18 @@ function drawTL() {
     const d = blk(lBr, 'br', b.start, b.start + b.dur, `${b.thumb ? `<img src="${b.thumb}">` : '🎞️'}<span>${esc(b.query || 'ไฟล์ของเรา')}</span><div class="rz"></div>`, {type: 'broll', key: 'b' + i, i});
     dragBlock(d, b);
   });
-  T.motions.forEach((m, i) => blk(lMo, 'mo', m.start, m.start + m.duration, '⚡ ' + esc(m.text || ''), {type: 'motion', key: 'm' + i, i}));
+  lMo.classList.add('motion');
+  const motionEnds = [];
+  T.motions.map((m, i) => ({m, i})).sort((a, b) => a.m.start - b.m.start || a.i - b.i).forEach(({m, i}) => {
+    const left = m.start * PX, width = Math.max(44, m.duration * PX - 2);
+    let row = motionEnds.findIndex(end => end <= left);
+    if (row < 0) row = motionEnds.length;
+    motionEnds[row] = left + width + 2;
+    const d = blk(lMo, 'mo', m.start, m.start + m.duration, '⚡ ' + esc(m.text || ''), {type: 'motion', key: 'm' + i, i});
+    d.style.top = (3 + row * 48) + 'px';
+    d.style.width = width + 'px';
+  });
+  lMo.style.height = $('motionLabel').style.height = (Math.max(1, motionEnds.length) * 48 + 2) + 'px';
   if (PL.music.file) blk(lMu, 'mu', 0, dur, '🎵 ' + esc(PL.music.file.split(/[\\/]/).pop()) + ` · ${Math.round(PL.music.volume * 100)}%`, {type: 'music', key: 'mu'});
   else blk(lMu, 'mu', 0, Math.min(dur, 6), '🎵 ไม่มีเพลง · คลิกเพื่อเลือก', {type: 'music', key: 'mu'});
   const ph = document.createElement('div'); ph.className = 'ph'; ph.id = 'ph'; inner.appendChild(ph);
@@ -187,8 +256,8 @@ function dragBlock(d, b) {
     const move = ev => {
       const dt = (ev.clientX - x0) / PX;
       if (Math.abs(ev.clientX - x0) > 3) d._moved = true;
-      if (resize) b.dur = Math.max(0.5, Math.min(10, +(d0 + dt).toFixed(2)));
-      else b.start = Math.max(0, Math.min(T.duration - 0.5, +(s0 + dt).toFixed(2)));
+      if (resize) b.dur = Math.max(0.1, +(d0 + dt).toFixed(2));
+      else { b.start = Math.max(0, +(s0 + dt).toFixed(2)); b.anchor = {kind: 'timeline', start: b.start}; delete b.opportunity_id; }
       d.style.left = b.start * PX + 'px'; d.style.width = Math.max(6, b.dur * PX - 2) + 'px';
     };
     const up = () => { d.removeEventListener('pointermove', move); d.removeEventListener('pointerup', up);
@@ -199,10 +268,10 @@ function dragBlock(d, b) {
 // a subtitle line moves as one piece (all its phrases); its last phrase's right edge sets where it ends
 function dragLine(d, p) {
   d.addEventListener('pointerdown', e => {
-    const sub = T.subs.find(s => s.text === p.line);
+    const sub = T.subs.find(s => s.id === p.cue_id);
     if (!sub) return;
     const resize = e.target.classList.contains('rz'), x0 = e.clientX;
-    const mates = [...document.querySelectorAll('.blk.sub')].filter((_, k) => T.phrases[k].line === p.line);
+    const mates = [...document.querySelectorAll('.blk.sub')].filter((_, k) => T.phrases[k].cue_id === p.cue_id);
     const lefts = mates.map(m => parseFloat(m.style.left)), w0 = parseFloat(d.style.width);
     d.setPointerCapture(e.pointerId); d._moved = false;
     let dt = 0;
@@ -217,7 +286,7 @@ function dragLine(d, p) {
       if (!d._moved) return;
       const start = resize ? sub.start : Math.max(0, +(sub.start + dt).toFixed(2));
       const end = resize ? Math.max(sub.start + 0.3, +(sub.end + dt).toFixed(2)) : +(sub.end + (start - sub.start)).toFixed(2);
-      try { await api('draft/line-time', {path: PATH, line: p.line, start, end}); await reload(); say(''); }
+      try { await api('draft/line-time', {path: PATH, line: p.line, cue_id: p.cue_id, start, end}); await reload(); say(''); }
       catch (err) { say('❌ ' + ckErr(err)); drawTL(); }
       setTimeout(() => d._moved = false, 0);
     };
@@ -226,13 +295,14 @@ function dragLine(d, p) {
 }
 function seek(t) { const v = $('v'); try { v.seek(Math.max(0, t)); } catch {} placePH(t); }
 function placePH(t) { const p = $('ph'); if (p) p.style.left = t * PX + 'px'; $('tc').textContent = mm(t) + ' / ' + mm(T.duration).replace(/\.\d$/, ''); }
-function tick() { placePH($('v').currentTime || 0); }
+function tick() { placePH($('v').currentTime || 0); if (zonePreview) zonePreview(); }
 (function loop() { if (T) tick(); requestAnimationFrame(loop); })();
 $('zoom').oninput = e => { PX = +e.target.value; drawTL(); };
 
 // ── right panel: the selected piece, or the whole clip's settings ──
 const LOOKS = [['pair', 'ข้อความปกติ + ข้อความเน้น'], ['none', 'ซับธรรมดา'], ['pop', 'ซับเด้งเข้า'], ['karaoke', 'ไล่สีทีละคำ']];
 function side() {
+  zonePreview = null; $('subjectBox').hidden = true;
   const s = $('side');
   if (!SEL) return sideClip(s);
   if (SEL.type === 'phrase') return sidePhrase(s, T.phrases[SEL.i]);
@@ -241,10 +311,180 @@ function side() {
   if (SEL.type === 'music') return sideMusic(s);
 }
 function back() { return '<button onclick="SEL=null;drawTL();side()">‹ ตั้งค่าทั้งคลิป</button>'; }
+let aiReview;
+async function downloadAi() {
+  aiReview.clear();
+  const button = $('aiDownload');
+  button.disabled = true;
+  try {
+    const r = await api('web-ai/export', {step: 'clip', target: PATH});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([r.text], {type: 'text/markdown'}));
+    a.download = r.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    $('aiMessage').textContent = 'แนบไฟล์ให้ AI แล้ววาง JSON ด้านล่าง';
+  } catch (e) { $('aiMessage').textContent = ckErr(e); }
+  finally { button.disabled = false; }
+}
+async function importAi() {
+  const button = $('aiImport'), answer = $('aiAnswer').value;
+  if (!answer.trim()) { $('aiMessage').textContent = 'วางคำตอบ JSON ก่อน'; return; }
+  $('aiMessage').textContent = '';
+  button.disabled = true;
+  try {
+    if (!await aiReview.check(answer)) return;
+    button.textContent = 'กำลังใช้…'; $('aiAnswer').disabled = true;
+    await api('web-ai/import', {step: 'clip', target: PATH, answer});
+    $('aiAnswer').value = ''; // imported cuts must not be submitted again if refresh fails
+    SEL = null;
+    await load();
+    say('นำเข้าแล้ว · ดูตัวอย่างก่อนส่งออก');
+  } catch (e) { aiReview.clear(); $('aiMessage').textContent = ckErr(e); }
+  finally { button.disabled = false; $('aiAnswer').disabled = false; }
+}
+function insertAiPanel() {
+  let folder = '', reviewed = '';
+  const message = text => { $('insertMessage').textContent = text; };
+  $('insertFolder').onclick = async () => {
+    try {
+      const r = await fetch('/api/kit/browse', {method: 'POST'}).then(x => x.json());
+      if (!r.path) return;
+      folder = r.path; $('insertFolderName').textContent = folder.split(/[\\/]/).pop(); $('insertFolderName').title = folder; $('insertDownload').disabled = false;
+    } catch (e) { message(ckErr(e)); }
+  };
+  $('insertDownload').onclick = async () => {
+    const button = $('insertDownload'); button.disabled = true;
+    try {
+      const r = await api('web-ai/export', {step: 'clip', operation: 'inserts', target: PATH, folder});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([r.text], {type: 'text/markdown'})); a.download = r.name; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      const sheet = document.createElement('a'); sheet.href = '/api/kit/media?path=' + encodeURIComponent(r.sheet.file); sheet.download = r.sheet.name; sheet.textContent = 'ดาวน์โหลดภาพรวม';
+      $('insertPlan').replaceChildren(sheet); reviewed = '';
+      message('แนบไฟล์คำสั่งและภาพรวมให้ AI แล้ววางคำตอบ');
+    } catch (e) { message(ckErr(e)); }
+    finally { button.disabled = false; }
+  };
+  $('insertAnswer').oninput = () => { reviewed = ''; $('insertPlan').replaceChildren(); };
+  $('insertFile').onchange = async event => {
+    const file = event.target.files[0]; if (!file) return;
+    try { const text = await file.text(); $('insertAnswer').value = text; $('insertAnswer').oninput(); message('อ่านไฟล์แล้ว · ตรวจแผนก่อนใช้'); }
+    catch (e) { message(ckErr(e)); }
+  };
+  $('insertPreview').onclick = async () => {
+    const answer = $('insertAnswer').value, button = $('insertPreview'); button.disabled = true;
+    try {
+      const result = await api('web-ai/preview', {step: 'clip', operation: 'inserts', target: PATH, answer});
+      reviewed = answer; showInsertPlan($('insertPlan'), result.broll);
+      const apply = document.createElement('button'); apply.textContent = 'ใช้แผนนี้'; apply.className = 'pri';
+      apply.onclick = async () => {
+        if (reviewed !== $('insertAnswer').value) { message('คำตอบเปลี่ยนแล้ว — ตรวจแผนใหม่'); return; }
+        apply.disabled = true;
+        try { await api('web-ai/import', {step: 'clip', operation: 'inserts', target: PATH, answer: reviewed}); await reload(); say('บันทึกภาพแทรกแล้ว · ดูตัวอย่างก่อนส่งออก'); }
+        catch (e) { message(ckErr(e)); apply.disabled = false; }
+      };
+      $('insertPlan').appendChild(apply); message(result.broll.length ? 'เลือกแต่ละช่วงเพื่อดูภาพ เวลา และเหตุผล' : 'แผนนี้ล้างภาพแทรกทั้งหมด');
+    } catch (e) { reviewed = ''; message(ckErr(e)); }
+    finally { button.disabled = false; }
+  };
+}
+function showInsertPlan(box, rows) {
+  box.replaceChildren();
+  if (!rows.length) return;
+  const select = document.createElement('select'), preview = document.createElement('div');
+  select.setAttribute('aria-label', 'ช่วงภาพแทรก');
+  rows.forEach((row, i) => { const option = document.createElement('option'); option.value = i; option.textContent = `${mm(row.start)} · ${row.dur} วิ · ${row.file.split(/[\\/]/).pop().slice(0, 24)}`; select.appendChild(option); });
+  const show = () => {
+    const row = rows[+select.value], media = document.createElement(row.kind === 'image' ? 'img' : 'video');
+    media.src = '/api/kit/media?path=' + encodeURIComponent(row.file);
+    if (row.kind !== 'image') { media.controls = true; media.muted = true; media.onloadedmetadata = () => { media.currentTime = row.source_start || 0; }; }
+    const text = document.createElement('div'); text.className = 'hint reason'; text.textContent = row.reason; text.title = row.reason;
+    const source = document.createElement('div'); source.className = 'hint'; source.textContent = `${row.source_ref?.provider || 'ไฟล์ของเรา'} · สิทธิ์: ${row.source_ref?.license_status || 'unverified'} · ช่วงต้นฉบับ ${row.source_start || 0} วิ`;
+    preview.replaceChildren(media, text, source);
+  };
+  select.onchange = show; box.append(select, preview); show();
+}
+function sideSubjectZones(s) {
+  let expected = structuredClone(T.style.motion_subject_zones || []), zones = structuredClone(expected), busy = false;
+  s.innerHTML = `<div class="motion-editor">${back()}<h3>พื้นที่คน/สินค้า</h3>
+    <p class="hint">กรอบใช้ตรวจตำแหน่ง motion · ต้องดูภาพจริง</p>
+    <label for="zSelect">ช่วงเวลา</label><select id="zSelect"></select>
+    ${['start','end','x','y','w','h'].map((key,i)=>`<div class="row"><label for="z${key}">${['เริ่ม (วินาที)','จบ (วินาที)','ซ้าย (%)','บน (%)','กว้าง (%)','สูง (%)'][i]}</label><input id="z${key}" type="number" required min="${i > 3 ? 0.00001 : 0}" max="${i<2?T.duration:100}" step="any"></div>`).join('')}
+    <div class="row"><button id="zAdd">เพิ่มพื้นที่</button><button id="zRemove">ลบพื้นที่</button><button id="zSeek">ดูช่วงนี้</button><button id="zReload">โหลดใหม่</button></div>
+    <div class="hint" id="zMessage" role="status" aria-live="polite"></div>
+    <p class="hint">กรอบปรากฏเฉพาะช่วงที่ระบุ เมื่อตัวเล่นพร้อม</p>
+    <button class="pri" id="zSave">บันทึกพื้นที่</button></div>`;
+  const panel=s.firstElementChild, select=$('zSelect'), message=$('zMessage'), save=$('zSave'), keys=['start','end','x','y','w','h'], fields=keys.map(key=>$('z'+key));
+  const dirty=()=>{message.textContent='ยังไม่บันทึก';};
+  const fill=()=>{
+    const row=zones[+select.value];fields.forEach((input,i)=>{input.disabled=!row;input.value=row?(i<2?row[keys[i]]:row[keys[i]]*100):'';});
+    $('zRemove').disabled=$('zSeek').disabled=!row;
+  };
+  const list=(index=0)=>{
+    select.replaceChildren();zones.forEach((row,i)=>{const option=document.createElement('option');option.value=i;option.textContent=`${mm(row.start)}–${mm(row.end)}`;select.appendChild(option);});
+    select.disabled=!zones.length;select.value=String(Math.min(index,zones.length-1));fill();
+    if (!zones.length) message.textContent='ยังไม่มีพื้นที่ · เลือกเพิ่มพื้นที่';
+  };
+  select.onchange=fill;
+  fields.forEach((input,i)=>input.oninput=()=>{
+    const row=zones[+select.value];if(!row)return;
+    row[keys[i]]=input.valueAsNumber/(i<2?1:100);
+    select.children[+select.value].textContent=Number.isFinite(row.start)&&Number.isFinite(row.end)?`${mm(row.start)}–${mm(row.end)}`:'ตรวจช่วงเวลา';dirty();
+  });
+  $('zAdd').onclick=()=>{const start=Math.max(0,Math.min($('v').currentTime || 0,T.duration-.1));zones.push({start,end:Math.min(T.duration,start+1),x:.1,y:.1,w:.3,h:.4});list(zones.length-1);dirty();};
+  $('zRemove').onclick=async()=>{const index=+select.value,row=zones[index];if(row && await ckConfirm(`ลบพื้นที่ ${mm(row.start)}–${mm(row.end)}?`)){zones.splice(index,1);list(index);dirty();}};
+  $('zSeek').onclick=()=>{const row=zones[+select.value];if(row)seek(row.start);};
+  $('zReload').onclick=async()=>{
+    if(busy)return;
+    busy=true;const button=$('zReload');button.disabled=save.disabled=true;
+    try{
+      if(JSON.stringify(zones)!==JSON.stringify(expected) && !await ckConfirm('โหลดใหม่และทิ้งพื้นที่ที่ยังไม่บันทึก?'))return;
+      const sent=JSON.stringify(zones);
+      const adopted=await load(()=>panel.isConnected && JSON.stringify(zones)===sent);
+      if(adopted)sideSubjectZones($('side'));else if(panel.isConnected)dirty();
+    }catch(e){message.textContent=ckErr(e);}finally{busy=false;button.disabled=save.disabled=false;}
+  };
+  save.onclick=async()=>{
+    if(busy)return;
+    if(fields.some(input=>!input.checkValidity())){message.textContent='ตรวจเวลาและขนาดพื้นที่';return;}
+    const sent=JSON.stringify(zones);busy=true;save.disabled=true;message.textContent='กำลังบันทึก…';
+    try{
+      const result=await api('draft/subject-zones',{path:PATH,previous:expected,zones:JSON.parse(sent)});
+      expected=structuredClone(result.style.motion_subject_zones);T.style=result.style;T.motion_recipe_errors=result.motion_recipe_errors;setMotions(result.motions);drawTL();live();
+      message.textContent=JSON.stringify(zones)!==sent?'ยังไม่บันทึก':result.motion_recipe_errors.length?'บันทึกแล้ว · motion ต้องแก้':'บันทึกแล้ว';
+    }catch(e){message.textContent=ckErr(e);}finally{busy=false;save.disabled=false;}
+  };
+  zonePreview=()=>{
+    // shortcut: pinned HyperFrames 0.8.101 iframe bounds; recheck when upgrading the player.
+    const row=zones[+select.value],player=$('v'),frame=player.shadowRoot?.querySelector('iframe.hfp-iframe'),box=$('subjectBox'),at=player.currentTime || 0;
+    box.hidden=true;
+    if(!row || !player.ready || !frame || player.compositionWidth!==T.width || player.compositionHeight!==T.height || !keys.every(key=>Number.isFinite(row[key])) || at<row.start || at>=row.end || Math.min(row.x,row.y)<0 || Math.min(row.w,row.h)<=0 || row.x+row.w>1 || row.y+row.h>1)return;
+    const canvas=frame.getBoundingClientRect(),parent=$('player').getBoundingClientRect();
+    if(!canvas.width || !canvas.height)return;
+    Object.assign(box.style,{left:canvas.left-parent.left+row.x*canvas.width+'px',top:canvas.top-parent.top+row.y*canvas.height+'px',width:row.w*canvas.width+'px',height:row.h*canvas.height+'px'});box.hidden=false;
+  };
+  list();
+}
 function sideClip(s) {
   const st = T.style || {}, c = st.color || {brightness: 0, contrast: 1, saturation: 1, warmth: 0};
   s.innerHTML = `<h3>⚙️ ตั้งค่าทั้งคลิป</h3>
     <div class="steps"><b>ทำคลิปใน 3 ขั้น</b><ol><li>กด <b>ทำให้ครบ</b> ด้านบน แล้วรอ ระบบตัด ใส่ซับ ใส่หัวคลิปให้เอง</li><li>ดูคลิปทางซ้าย ซับผิดตรงไหน กดข้อความบนแถบล่างแล้วแก้ทางขวา</li><li>กด <b>ส่งออก</b> ได้ไฟล์วิดีโอพร้อมโพสต์</li></ol></div>
+    <details class="ai-actions" ${T.punch_picked ? '' : 'open'}><summary>คำเน้นและหัวคลิปด้วย AI</summary>
+    <div class="hint">${T.punch_picked ? 'มีคำเน้นแล้ว · ปรับเพิ่มได้' : 'ดาวน์โหลดไฟล์ให้ AI บนเว็บ'}</div>
+    <div class="row"><button id="aiDownload">ไฟล์ให้ AI</button></div>
+    <label for="aiAnswer">คำตอบ JSON</label><textarea class="ai-answer" id="aiAnswer" rows="4"></textarea>
+    <div id="aiPlan"></div><div class="row"><button id="aiImport">ตรวจแผน</button></div><div class="hint" id="aiMessage" role="status" aria-live="polite"></div>
+    <details><summary>ใช้ agent ในเครื่อง</summary><div class="agent"><code>${esc(T.agent_command)}</code><button id="cp">คัดลอกคำสั่ง</button></div></details></details>
+    <details class="ai-actions insert-panel media"><summary>คัดภาพแทรกด้วย AI</summary>
+    <div class="hint">เลือกโฟลเดอร์ภาพ แล้วส่งไฟล์คำสั่งพร้อมภาพรวมให้ AI</div>
+    <div class="row"><button id="insertFolder">เลือกโฟลเดอร์</button><button id="insertDownload" disabled>ไฟล์ให้ AI</button></div>
+    <div class="hint" id="insertFolderName"></div>
+    <label for="insertFile">ไฟล์คำตอบจาก AI หรือ agent</label><input id="insertFile" type="file" accept="application/json,.json">
+    <label for="insertAnswer">คำตอบ JSON</label><textarea class="ai-answer" id="insertAnswer" rows="4"></textarea>
+    <div class="row"><button id="insertPreview">ตรวจแผน</button></div>
+    <div id="insertPlan"></div><div class="hint" id="insertMessage" role="status" aria-live="polite"></div>
+    </details>
+    <div class="motion-editor"><button id="subjectAreas">พื้นที่คน/สินค้า</button></div>
     <h4>หน้าตาซับ</h4><div class="looks">${LOOKS.map(([k, t]) => `<button class="look${T.look === k ? ' on' : ''}" data-k="${k}"><img src="/looks/${k}.jpg"><span>${t}</span></button>`).join('')}</div>
     <h4>หัวคลิป (4 วินาทีแรก)</h4>
     ${[0, 1].map(n => `<div class="row"><input id="hk${n}" style="flex:1" placeholder="${n ? 'บรรทัด 2 (ไม่ใส่ก็ได้)' : 'บรรทัด 1 เช่น ธุรกิจสะดุด'}">
@@ -279,18 +519,18 @@ function sideClip(s) {
     <h4 id="coverH">ปก</h4>
     ${st.cover ? `<img src="/api/kit/media?path=${encodeURIComponent(st.cover)}&t=${Date.now()}" style="width:140px;border-radius:10px;display:block">` : '<div class="hint">ยังไม่มีปก · กด "ทำให้ครบ" ระบบทำปกจากชื่อเรื่องให้</div>'}
     <div class="row"><button id="cAuto">✨ ทำปกใหม่อัตโนมัติ</button><button id="cEdit">แก้ปกเอง</button></div>
-    <h4>คำเน้น</h4>
-    <div class="hint">${T.punch_picked ? 'Claude เลือกคำเน้นและคำค้นภาพแล้ว' : 'ยังใช้คำเน้นอัตโนมัติ (คำท้ายช่วง) · อยากได้คำที่ตรงใจความ + ภาพประกอบ ส่งคำสั่งนี้ให้ Claude'}</div>
-    <div class="agent"><code>${esc(T.agent_command)}</code><button id="cp">คัดลอกคำสั่ง</button></div>
     <h4 class="media">เสียงเอฟเฟกต์</h4>
     <div class="row media"><label><input type="checkbox" id="fx" ${PL.sfx.on ? 'checked' : ''}> pop ตอนคำเน้น · whoosh ตอนภาพประกอบ</label></div>
     <div class="row media"><label for="fxv">ความดัง</label><input type="range" id="fxv" min="0" max="2" step="0.1" value="${PL.sfx.volume}"></div>
     </details>`;
+  $('subjectAreas').onclick = () => sideSubjectZones(s);
   try { $('adv').open = localStorage.getItem('ck_adv') === '1'; } catch {}
   $('adv').ontoggle = () => { try { localStorage.setItem('ck_adv', $('adv').open ? '1' : '0'); } catch {} };
   s.querySelectorAll('.look').forEach(b => b.onclick = async () => { await api('draft/look', {path: PATH, style: {anim: b.dataset.k}}); await reload(); });
+  const preset = $('preset');
   fetch('/api/video/subtitle-presets').then(r => r.json()).then(r => {
-    $('preset').innerHTML = r.presets.map(n => `<option${n === (st.preset || 'default') ? ' selected' : ''}>${esc(n)}</option>`).join('');
+    if (!preset.isConnected) return;
+    preset.innerHTML = r.presets.map(n => `<option${n === (st.preset || 'default') ? ' selected' : ''}>${esc(n)}</option>`).join('');
   });
   textPanel(st);
   $('preset').onchange = async e => { await api('draft/look', {path: PATH, style: {preset: e.target.value}}); T.style.preset = e.target.value; live(); };
@@ -328,77 +568,194 @@ function sideClip(s) {
   $('cAuto').onclick = () => run(null, 'กำลังทำปก… (ราว 30 วิ)', async () => { const r = await api('draft/auto-cover', {path: PATH}); T.style.cover = r.file; side(); say('✅ ทำปกแล้ว: ' + esc(r.file)); });
   $('cEdit').onclick = () => { location.href = '/cover.html?' + new URLSearchParams({src: T.source || '', l1: T.name.replace(/^.* - \d+ /, '')}); };
   $('cp').onclick = () => navigator.clipboard.writeText(T.agent_command).then(() => $('cp').textContent = '✓ คัดลอกแล้ว');
+  $('aiDownload').onclick = downloadAi;
+  $('aiImport').onclick = importAi;
+  aiReview = CKAIPlan.review($('aiAnswer'), $('aiImport'), $('aiPlan'),
+    answer => api('web-ai/preview', {step:'clip', target:PATH, answer}));
+  insertAiPanel();
   $('fx').onchange = e => { PL.sfx.on = e.target.checked; savePL(); };
   $('fxv').onchange = e => { PL.sfx.volume = +e.target.value; savePL(); };
 }
 function sidePhrase(s, p) {
-  const line = T.phrases.filter(x => x.line === p.line);
+  const line = T.phrases.filter(x => x.cue_id === p.cue_id);
+  const shown = p.opts?.show || [p.lead, p.punch];
+  const issues = (T.quality?.layout_errors || []).filter(x => x.cue_id === p.cue_id || x.other_cue_id === p.cue_id);
+  s.classList.add("phrase-editor");
   s.innerHTML = `${back()}<h3>💬 ข้อความ ${mm(p.start)}</h3>
-    <div class="hint">ประโยค: ${esc(p.line)}</div>
-    <div class="row"><label for="pl">ตัวขาว</label><input id="pl" style="flex:1"></div>
-    <div class="row"><label for="pp">คำเน้น</label><input id="pp" style="flex:1"></div>
+    ${issues.length ? `<div class="repair-badge" role="status">ต้องแก้ซับ</div><div class="hint repair-message">ย่อข้อความบนจอ หรือปรับพรีเซ็ตก่อนส่งออก</div>` : ""}
+    <div class="hint source-copy">คำพูดต้นฉบับ: ${esc(p.line)}</div>
+    <div class="row"><label for="pl">คำพูดปกติ</label><input id="pl" style="flex:1"></div>
+    <div class="row"><label for="pp">คำพูดที่เน้น</label><input id="pp" style="flex:1"></div>
     <div class="row"><label for="po">แบบ</label><select id="po" style="flex:1">
       <option value="pair">ขาว + สี</option><option value="white">ขาวอย่างเดียว</option><option value="color">สีอย่างเดียว</option>
       <option value="red">ขาว + แดง (จุดแรงสุด)</option><option value="hold">ขาวค้างจากท่อนก่อน + สี (ลิสต์)</option><option value="skip">ไม่ขึ้นซับ</option></select></div>
+    <details ${T.look === 'pair' ? '' : 'hidden'}><summary>ข้อความบนจอ</summary>
+      <label class="row"><input id="pShow" type="checkbox">ใช้ข้อความย่อ</label>
+      <div class="row"><label for="pNormal">ตัวปกติ</label><input id="pNormal" style="flex:1"></div>
+      <div class="row"><label for="pEmphasis">ตัวเน้น</label><input id="pEmphasis" style="flex:1"></div>
+      <div class="hint">คงคำพูดต้นฉบับและเวลาคำ</div>
+    </details>
     <div class="row media"><label for="pq">หาภาพประกอบ</label><input id="pq" style="flex:1" placeholder="คำค้นอังกฤษ เช่น coffee cup"></div>
     <div class="row"><label for="pc">ซับแปล (ทั้งประโยค)</label><input id="pc" style="flex:1" placeholder="ตัวเล็กด้านล่าง ถ้าพรีเซ็ตมีซับแปล"></div>
-    <div class="row"><button class="pri" id="ps">บันทึก</button><button id="pm">⚡ ทำเป็นข้อความใหญ่กลางจอ</button></div>
-    <div class="row"><button id="pcut" style="color:#fca5a5">✂️ ตัดประโยคนี้ออกจากคลิป</button><span class="hint">ย้อนได้ที่ ตั้งค่าทั้งคลิป</span></div>
+    <div class="row"><button class="pri" id="ps">บันทึก</button><button id="pm">ตรวจ motion</button></div>
+    <div id="phraseError" class="prob" style="overflow-wrap:anywhere" role="alert"></div>
+    <div id="phraseMotionPlan" class="ai-plan" role="status" aria-live="polite"></div>
+    <div class="row"><button id="pcut" style="color:var(--warn)">✂️ ตัดประโยคนี้ออกจากคลิป</button><span class="hint">ย้อนได้ที่ ตั้งค่าทั้งคลิป</span></div>
     <div class="hint">แก้คำได้เลย (แก้ในซับด้วย) · ย้ายคำระหว่างตัวขาวกับคำเน้นได้ · ใส่คำค้นแล้วบันทึก ระบบหาภาพประกอบให้ตอน "ทำให้ครบ" หรือกดหาเองในแถบภาพประกอบ</div>`;
-  $('pl').value = p.lead; $('pp').value = p.punch; $('pq').value = p.query || ''; $('po').value = (p.opts || {}).look || 'pair'; $('pc').value = (T.caption_en || {})[p.line] || '';
+  $('pl').value = p.lead; $('pp').value = p.punch; $('pq').value = p.query || ''; $('po').value = (p.opts || {}).look || 'pair'; $('pc').value = (T.caption_en || {})[p.cue_id ? "cue:" + p.cue_id : p.line] || '';
+  $('pShow').checked = !!p.opts?.show;
+  $('pNormal').value = shown[0]; $('pEmphasis').value = shown[1];
+  $('pShow').onchange = () => { $('pNormal').disabled = $('pEmphasis').disabled = !$('pShow').checked; };
+  $('pShow').onchange();
+  const save = $('ps'), error = $('phraseError');
   $('ps').onclick = async () => {
+    if (save.disabled) return;
     const opts = {...(p.opts || {}), look: $('po').value};
+    if ($('pShow').checked) opts.show = [$('pNormal').value.trim(), $('pEmphasis').value.trim()];
+    else delete opts.show;
     const pairs = line.map(x => x === p ? [$('pl').value.trim(), $('pp').value.trim(), $('pq').value.trim(), opts] : [x.lead, x.punch, x.query || '', x.opts])
-      .map(([l, k, q, o]) => [l, k, ...(q ? [q] : []), ...(o && (o.show || (o.look && o.look !== 'pair')) ? [o] : [])]);
+      .map(([l, k, q, o]) => [l, k, ...(q ? [q] : []), ...(o && Object.keys(o).some(key => key !== 'look' || o.look !== 'pair') ? [o] : [])]);
+    const fields = ['pl','pp','po','pq','pc','pShow','pNormal','pEmphasis','ps','pm','pcut'].map(id => $(id));
+    const disabled = fields.map(field => field.disabled);
+    fields.forEach(field => field.disabled = true);
+    save.textContent = 'กำลังบันทึก…'; error.textContent = '';
     try {
-      if ($('pc').value.trim() !== ((T.caption_en || {})[p.line] || '')) await api('draft/caption', {path: PATH, line: p.line, text: $('pc').value});
-      await api('draft/phrases', {path: PATH, line: p.line, pairs}); await reload(); say('บันทึกแล้ว');
-    } catch (e) { say('❌ ' + ckErr(e)); }
+      const caption = $('pc').value.trim() === ((T.caption_en || {})[p.cue_id ? "cue:" + p.cue_id : p.line] || '') ? {} : {caption: $('pc').value};
+      const sourceText = pairs.map(([lead, punch]) => [lead, punch].filter(Boolean).join(' ')).join(' ');
+      const correction = sourceText.replace(/\s/g, '') === p.line.replace(/\s/g, '') ? {} : {source_text: sourceText};
+      await api('draft/phrases', {path: PATH, line: p.line, cue_id: p.cue_id, pairs, ...correction, ...caption});
+      if ($('ps') === save && await load(() => $('ps') === save)) say('บันทึกแล้ว');
+    } catch (e) {
+      error.textContent = ckErr(e);
+      if ($('ps') === save) say('❌ ' + ckErr(e));
+    } finally {
+      fields.forEach((field, i) => field.disabled = disabled[i]);
+      save.textContent = 'บันทึก';
+    }
   };
   $('pcut').onclick = async () => {
-    const sub = (T.subs || []).find(x => x.text === p.line);
+    const sub = (T.subs || []).find(x => x.id === p.cue_id);
     if (!sub) return say('❌ หาประโยคนี้ในซับไม่เจอ');
+    const cue = (T.motion_cues || []).find(x => x.cue_id === p.cue_id);
     if (!await ckConfirm('ตัดประโยคนี้ออกจากคลิป?\n' + p.line)) return;
     say('<span class="spin"></span> กำลังตัด…');
-    try { const r = await api('draft/cut', {path: PATH, start: sub.start, end: sub.end}); SEL = null; await reload(); live(); say('ตัดแล้ว · คลิปยาว ' + mm(r.length)); }
+    try { const r = await api('draft/cut', {path: PATH, start: sub.start, end: Math.max(sub.end, cue?.end ?? sub.end)}); SEL = null; await reload(); live(); say('ตัดแล้ว · คลิปยาว ' + mm(r.length)); }
     catch (e) { say('❌ ' + ckErr(e)); }
   };
-  $('pm').onclick = async () => {
-    say('<span class="spin"></span> กำลังทำข้อความใหญ่… (ราว 30 วิ)');
-    try { await api('draft/overlay', {path: PATH, template: 'hook-title', start: p.start, end: p.end, text: (p.lead + ' ' + p.punch).trim()}); await reload(); say('ใส่แล้ว'); }
-    catch (e) { say('❌ ' + ckErr(e)); }
-  };
+  CKAIPlan.motion($('pm'), $('phraseMotionPlan'), () => {
+    if ($('pShow').checked !== !!p.opts?.show || ($('pShow').checked && ($('pNormal').value !== shown[0] || $('pEmphasis').value !== shown[1])) || $('pl').value !== p.lead || $('pp').value !== p.punch || $('po').value !== ((p.opts || {}).look || 'pair') ||
+        $('pc').value !== ((T.caption_en || {})[p.cue_id ? 'cue:' + p.cue_id : p.line] || '')) throw Error('บันทึกข้อความก่อนตรวจ motion');
+    const cue = (T.motion_cues || []).find(item => item.cue_id === p.cue_id);
+    if (!cue) throw Error('ไม่พบช่วงข้อความ · โหลด Timeline ใหม่');
+    return {path: PATH, template: 'sentence-pair', start: cue.start, end: cue.end, cue_id: cue.cue_id, text: cue.text};
+  }, request => api('draft/overlay-preview', request), async request => {
+    const result = await api('draft/overlay', request);
+    setMotions(result.overlays); drawTL(); live(); say('ใส่แล้ว');
+  }, ckErr);
 }
 function sideBroll(s, b, i) {
-  s.innerHTML = `${back()}<h3>🖼️ ภาพประกอบ ${mm(b.start)}</h3>
-    ${b.thumb ? `<img src="${b.thumb}" style="width:100%;border-radius:10px">` : `<div class="hint">${esc(b.file)}</div>`}
+  const attr = text => esc(text).replace(/"/g, '&quot;');
+  s.innerHTML = `${back()}<div class="insert-panel"><h3>ภาพแทรก ${mm(b.start)}</h3>
+    <div id="bPreview"></div>
     <div class="row"><label for="bs">เริ่ม (วิ)</label><input type="number" step="0.1" id="bs" value="${b.start}" style="width:90px"><label style="min-width:auto">ยาว</label><input type="number" step="0.5" id="bd" value="${b.dur}" style="width:80px"></div>
-    <div class="row"><label for="bq">คำค้น</label><input id="bq" style="flex:1" value="${esc(b.query)}"><button id="bf">ค้น Pixabay</button></div>
+    <label for="ba">จุดคำพูด</label><select id="ba"><option value="">กำหนดเวลาเอง</option></select>
+    <div class="row"><label for="bo">ต้นฉบับเริ่ม (วิ)</label><input type="number" min="0" step="0.1" id="bo" value="${b.source_start || 0}"></div>
+    <details><summary>ตำแหน่งครอป</summary><div class="row"><label for="bx">ซ้าย–ขวา</label><input type="range" id="bx" min="0" max="1" step="0.01" value="${b.focus_x ?? .5}"></div><div class="row"><label for="by">บน–ล่าง</label><input type="range" id="by" min="0" max="1" step="0.01" value="${b.focus_y ?? .5}"></div></details>
+    <label for="br">เหตุผล</label><input id="br" maxlength="500" value="${attr(b.reason || 'ผู้ใช้เลือกภาพและตำแหน่ง')}">
+    <div class="row"><label for="bq">คำค้น</label><input id="bq" style="flex:1" value="${attr(b.query)}"><button id="bf">ค้น Pixabay</button></div>
     <div class="grid" id="bg"></div>
-    <div class="row"><button id="bown">ใช้ไฟล์ของเรา</button><button id="bdel" style="color:#fca5a5">ลบ</button></div>`;
-  const up = () => { b.start = +$('bs').value; b.dur = +$('bd').value; savePL(); drawTL(); };
-  $('bs').onchange = up; $('bd').onchange = up;
+    <div class="row"><button id="bown">เลือกไฟล์</button><button id="bdel">ลบภาพ</button></div>
+    <div class="row"><button class="pri" id="bSave">บันทึกภาพ</button></div><div class="hint" id="bMessage" role="status" aria-live="polite"></div></div>`;
+  const up = () => { b.start = +$('bs').value; b.dur = +$('bd').value; b.anchor = {kind: 'timeline', start: b.start}; delete b.opportunity_id; $('ba').value = ''; drawTL(); };
+  $('bs').onchange = up; $('bd').onchange = () => { b.dur = +$('bd').value; drawTL(); };
+  $('bo').onchange = () => { b.source_start = +$('bo').value; };
+  $('bx').onchange = () => { b.focus_x = +$('bx').value; }; $('by').onchange = () => { b.focus_y = +$('by').value; };
+  $('br').onchange = () => { b.reason = $('br').value; };
+  $('bSave').onclick = async () => { b.reason = $('br').value; await savePL(); };
+  const preview = () => {
+    const box = $('bPreview'); box.replaceChildren();
+    if (!b.file) { box.textContent = 'ยังไม่มีภาพ — เลือกไฟล์หรือค้น Pixabay'; return; }
+    const media = document.createElement(b.kind === 'image' || /\.(png|jpe?g|webp)$/i.test(b.file) ? 'img' : 'video');
+    media.src = '/api/kit/media?path=' + encodeURIComponent(b.file); media.controls = true; media.muted = true;
+    media.onloadedmetadata = () => { media.currentTime = b.source_start || 0; }; box.appendChild(media);
+    const source = document.createElement('div'); source.className = 'hint'; source.textContent = `${b.source_ref?.provider || 'ไฟล์ของเรา'} · สิทธิ์: ${b.source_ref?.license_status || 'unverified'}`; box.appendChild(source);
+  };
+  preview();
+  api('draft/placed?path=' + encodeURIComponent(PATH)).then(r => {
+    const select = $('ba'); if (!select) return;
+    (r.opportunities || []).forEach(point => { const option = document.createElement('option'); option.value = point.opportunity_id; option.textContent = `${mm(point.start)} ${point.lead || ''} ${point.punch || ''}`.slice(0, 60); select.appendChild(option); });
+    select.value = b.opportunity_id || '';
+    select.onchange = () => { const point = r.opportunities.find(x => x.opportunity_id === select.value); if (!point) { up(); return; } b.anchor = {kind: point.punch ? 'keyword' : 'phrase', cue_id: point.cue_id, phrase: point.phrase}; b.start = point.punch ? point.hit : point.start; b.opportunity_id = point.opportunity_id; $('bs').value = b.start; drawTL(); };
+  }).catch(e => { if ($('bMessage')) $('bMessage').textContent = ckErr(e); });
   $('bdel').onclick = () => del();
   $('bown').onclick = async () => { const r = await fetch('/api/kit/browse-file', {method: 'POST'}).then(x => x.json()).catch(() => ({})); if (!r.path) return;
-    Object.assign(b, {file: r.path, thumb: '', query: 'ไฟล์ของเรา'}); savePL(); drawTL(); side(); };
+    delete b.asset_id; delete b.source_ref; delete b.kind; Object.assign(b, {file: r.path, thumb: '', query: 'ไฟล์ของเรา', source_start: 0}); $('bo').value = 0; preview(); };
   $('bf').onclick = async () => {
     const g = $('bg'); g.innerHTML = '<span class="spin"></span>';
     try {
-      const r = await api('stock/free-search', {query: $('bq').value.trim(), count: 9});
+      const r = await api('stock/free-search', {query: $('bq').value.trim(), count: 6});
       g.innerHTML = '';
-      r.items.forEach(x => { const im = document.createElement('img'); im.src = x.thumb; im.title = x.title;
-        im.onclick = async () => { g.innerHTML = '<span class="spin"></span> กำลังโหลด…';
-          const d = await api('stock/free-download', {source: x.source, id: x.id, file: x.file});
-          Object.assign(b, {file: d.path, thumb: x.thumb, query: $('bq').value.trim()}); savePL(); drawTL(); side(); };
-        g.appendChild(im); });
+      r.items.forEach(x => { const button = document.createElement('button'); button.textContent = x.title.slice(0, 30); button.title = x.title;
+        button.onclick = async () => { button.disabled = true;
+          try { const d = await api('stock/free-download', {source: x.source, id: x.id, file: x.file}); delete b.asset_id; delete b.kind;
+            Object.assign(b, {file: d.path, thumb: x.thumb, query: $('bq').value.trim(), source_start: 0, source_ref: {provider: x.source, id: x.id, page: x.url, license_status: 'unverified'}}); $('bo').value = 0; preview(); }
+          catch (e) { $('bMessage').textContent = ckErr(e); } finally { button.disabled = false; } };
+        g.appendChild(button); });
       if (!r.items.length) g.textContent = 'ไม่เจอ ลองคำอื่น';
     } catch (e) { g.textContent = '❌ ' + ckErr(e); }
   };
 }
 function sideMotion(s, m) {
-  s.innerHTML = `${back()}<h3>🔠 ข้อความใหญ่กลางจอ ${mm(m.start)}</h3><div class="hint">${esc(m.text)}</div>
-    <div class="row"><button id="mdel" style="color:#fca5a5">ลบ</button></div>`;
-  $('mdel').onclick = () => del();
+  const pair = m.template === 'sentence-pair', params = m.params || {}, attr = value => esc(String(value ?? '')).replace(/"/g,'&quot;');
+  const editable = m.placement_id && m.recipe?.version === 1 && ['sentence-pair','hook-title','stat-number'].includes(m.template);
+  const input = (key,label,value) => `<div class="row"><label for="m${key}">${label}</label><input id="m${key}" maxlength="500" value="${attr(value)}"></div>`;
+  const number = (key,label,value,max) => `<div class="row"><label for="m${key}">${label}</label><input type="number" min="0" max="${max}" step="any" id="m${key}" value="${attr(value)}"></div>`;
+  s.innerHTML = `${back()}<div class="motion-editor" id="motionEditor"><h3>แก้ motion</h3>
+    <details><summary class="ai-plan-excerpt">${esc(m.text || m.template || 'Motion เดิม')}</summary><p>${esc(m.text || '')}</p></details>
+    ${editable ? (pair ? '<div class="row"><label for="mCue">ข้อความ</label><select id="mCue"></select></div><div id="mRoles" class="row"></div><div class="hint">ขนาดและตำแหน่งตามสไตล์ซับของคลิป</div>' :
+      (m.template === 'hook-title' ? input('key','คำเด่น',params.key) + input('sub','คำรอง',params.sub) :
+        input('number','ตัวเลข',params.number) + input('unit','หน่วย',params.unit) + input('label','คำอธิบาย',params.label)) +
+      number('Start','เริ่ม (วินาที)',m.start,T.duration) + number('End','จบ (วินาที)',m.start+m.duration,T.duration) +
+      '<div class="row"><label for="mAnchor">จุดเริ่ม</label><select id="mAnchor"><option value="keep">จุดอ้างอิงเดิม</option><option value="time">ตามเวลาที่เลือก</option></select></div>' +
+      '<details><summary>พื้นที่และฟอนต์</summary>' + ['x','y','w','h'].map((key,i)=>number(key,['ซ้าย (%)','บน (%)','กว้าง (%)','สูง (%)'][i],(m.recipe.placement?.[key] ?? {x:.11,y:.15,w:.78,h:.3}[key])*100,100)).join('') +
+      '<div class="row"><label for="mFont">ฟอนต์</label><select id="mFont"><option value="keep">ฟอนต์เดิม</option><option value="default">ฟอนต์ของแอป</option></select></div></details>') +
+      input('Reason','เหตุผล',m.reason) : '<p class="hint">ข้อมูลเดิมไม่ครบ · เลือกซับเพื่อสร้าง motion ใหม่</p>'}
+    <div id="mPlan" class="ai-plan" role="status" aria-live="polite"></div>
+    <div class="row"><button class="pri" id="mSave" ${editable?'':'disabled'}>ตรวจ motion</button><button id="mdel">ลบ motion</button></div></div>`;
+  const editor = $('motionEditor'), box = $('mPlan'), error = (T.motion_recipe_errors || []).find(e=>e.placement_id===m.placement_id);
+  box.textContent = error ? 'ต้องสร้างใหม่ · ' + error.error : 'ยังไม่ได้ตรวจแผน';
+  $('mdel').onclick = async () => { if (await ckConfirm('ลบ motion นี้?\n' + (m.text || m.template || ''))) { try { await removeMotion(m); } catch (e) { say('❌ ' + ckErr(e)); } } };
+  if (!editable) return;
+  const roles = {normal:'ปกติ',emphasis:'คำเน้น',caption:'ซับแปล',second:'บรรทัดสอง'};
+  if (pair) {
+    for (const cue of T.motion_cues || []) { const option=document.createElement('option'); option.value=cue.cue_id; option.textContent=`${mm(cue.start)} ${cue.text}`.slice(0,60); $('mCue').appendChild(option); }
+    $('mCue').value = m.cue_id || m.ownership?.targets?.[0]?.cue_id || '';
+    const showRoles = () => {
+      const cue=(T.motion_cues || []).find(c=>c.cue_id===$('mCue').value), selected=m.ownership?.targets?.find(target=>target.cue_id===cue?.cue_id)?.roles;
+      $('mRoles').innerHTML=Object.entries(roles).filter(([role])=>cue?.roles?.[role]).map(([role,label])=>`<label class="role"><input type="checkbox" data-role="${role}" ${selected?.includes(role)?'checked':''}>${label}</label>`).join('');
+    };
+    showRoles(); $('mCue').onchange=showRoles;
+  }
+  const review=CKAIPlan.motion($('mSave'), box, () => {
+    const request={path:PATH,template:m.template,placement_id:m.placement_id,text:m.text || '',reason:$('mReason').value};
+    if (pair) {
+      const cue=(T.motion_cues || []).find(c=>c.cue_id===$('mCue').value), selected=[...$('mRoles').querySelectorAll('input:checked')].map(input=>input.dataset.role);
+      if (!cue || !selected.length) throw Error('เลือกข้อความและบทบาทก่อนตรวจ');
+      request.start=Math.min(...selected.map(role=>cue.roles[role].start)); request.end=Math.max(...selected.map(role=>cue.roles[role].end));
+      Object.assign(request,{cue_id:cue.cue_id,text:cue.text,anchor:{kind:'timeline',start:request.start},ownership:{mode:'replace',targets:[{cue_id:cue.cue_id,roles:selected}],caption_policy:selected.includes('caption')?'replace':'preserve'}});
+    } else {
+      request.start=+$('mStart').value; request.end=+$('mEnd').value;
+      Object.assign(request,{ownership:m.ownership,anchor:$('mAnchor').value==='time'?{kind:'timeline',start:request.start}:m.anchor,
+        params:{...params,duration:request.end-request.start},placement:Object.fromEntries(['x','y','w','h'].map(key=>[key,+$('m'+key).value/100]))});
+      for (const key of m.template==='hook-title'?['key','sub']:['number','unit','label']) request.params[key]=$('m'+key).value;
+      if ($('mFont').value==='default') delete request.params.font;
+    }
+    return request;
+  }, request=>api('draft/overlay-preview',request), async request=>{
+    const result=await api('draft/overlay',request); setMotions(result.overlays);
+    T.motion_recipe_errors=(T.motion_recipe_errors || []).filter(e=>e.placement_id!==m.placement_id); drawTL(); live(); say('บันทึก motion แล้ว');
+  },ckErr);
+  editor.oninput=review.clear;
 }
 function sideMusic(s) {
   const q = encodeURIComponent((T.style && T.style.music_mood) || 'corporate background');
@@ -422,10 +779,24 @@ function sideMusic(s) {
   $('mv').oninput = e => { $('mvt').textContent = Math.round(e.target.value * 100) + '%'; };
   $('mv').onchange = e => { PL.music.volume = +e.target.value; savePL(); drawTL(); };
 }
+function setMotions(items) {
+  const motionSelected = SEL?.type === 'motion', selected = motionSelected ? T.motions[SEL.i] : null;
+  T.motions = items;
+  if (motionSelected) {
+    const matches = items.map((m,i) => ({m,i})).filter(({m}) => selected && (selected.placement_id ? m.placement_id === selected.placement_id : m.file === selected.file && m.start === selected.start && m.duration === selected.duration));
+    SEL = matches.length === 1 ? {type:'motion',i:matches[0].i,key:'m'+matches[0].i} : null;
+  }
+}
+async function removeMotion(m) {
+  const result = await api('draft/overlay-remove', {path:PATH,placement_id:m.placement_id,start:m.start});
+  setMotions(result.overlays);
+  T.motion_recipe_errors = (T.motion_recipe_errors || []).filter(e => e.placement_id !== m.placement_id);
+  drawTL(); if (!SEL) side(); live();
+}
 async function del() {
   if (!SEL) return;
   if (SEL.type === 'broll') { PL.broll.splice(SEL.i, 1); savePL(); }
-  else if (SEL.type === 'motion') { await api('draft/overlay-remove', {path: PATH, start: T.motions[SEL.i].start}); await reload(); }
+  else if (SEL.type === 'motion') return removeMotion(T.motions[SEL.i]);
   else return;
   SEL = null; drawTL(); side();
 }
@@ -442,7 +813,7 @@ $('bAddBr').onclick = () => {
 async function run(btn, text, fn) {
   document.querySelectorAll('.top button').forEach(b => b.disabled = true);
   say('<span class="spin"></span> ' + text);
-  try { await fn(); } catch (e) { say('❌ ' + ckErr(e)); }
+  try { while (building) await building; await fn(); } catch (e) { say('❌ ' + ckErr(e)); }
   document.querySelectorAll('.top button').forEach(b => b.disabled = !!b.dataset.off);
 }
 $('bAuto').onclick = () => run($('bAuto'), 'กำลังทำทุกขั้น… (1–3 นาที)', async () => {
@@ -528,13 +899,11 @@ async function textPanel(st) {
     } catch (e) { say('❌ ' + ckErr(e)); }
   };
 }
-// before an export: long lines tidied the chosen way, then a last look at lines outside the safe zone
+// Export checks are read-only; subtitle tidying remains an explicit editor action.
 async function checkText(label) {
   const c = await api('draft/text-check?path=' + encodeURIComponent(PATH));
   if (!c.look) return true;
-  await api('draft/tidy', {path: PATH, mode: (T.style || {}).tidy || 'lines'});
-  const c2 = await api('draft/text-check?path=' + encodeURIComponent(PATH));
-  if (!c2.problems.length || await ckConfirm(`ยังมี ${c2.problems.length} บรรทัดโดนปุ่มหรือแคปชันของแอป\n\n${c2.problems.slice(0, 5).map(p => p.replace(/[a-z][a-z /]+[a-z]/g, w => WHERE[w] || w)).join('\n')}\n\nกด OK เพื่อ${label}ต่อ · Cancel เพื่อไปแก้ที่ ตั้งค่าทั้งคลิป > ข้อความ`)) return true;
+  if (!c.problems.length || await ckConfirm(`ยังมี ${c.problems.length} บรรทัดโดนปุ่มหรือแคปชันของแอป\n\n${c.problems.slice(0, 5).map(p => p.replace(/[a-z][a-z /]+[a-z]/g, w => WHERE[w] || w)).join('\n')}\n\nกด OK เพื่อ${label}ต่อ · Cancel เพื่อไปแก้ที่ ตั้งค่าทั้งคลิป > ข้อความ`)) return true;
   SEL = null; drawTL(); side(); $('adv').open = true; setTimeout(() => $('txtH') && $('txtH').scrollIntoView({behavior: 'smooth'}), 300);
   return false;
 }
@@ -549,10 +918,11 @@ $('bCapcut').onclick = () => run($('bCapcut'), 'กำลังจัดซั�
 $('bCover').onclick = () => { SEL = null; drawTL(); side(); $('adv').open = true; $('coverH').scrollIntoView({behavior: 'smooth'}); };
 document.addEventListener('keydown', e => {
   if (e.target.closest && e.target.closest('input,select,textarea')) return;
+  if (e.key === ' ' && e.target.closest?.('button')) return;
   if (e.key === ' ') { e.preventDefault(); const v = $('v'); v.paused ? v.play() : v.pause(); }
   if (e.key === 'Delete') del();
   if (SEL && SEL.type === 'broll' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-    const b = PL.broll[SEL.i]; b.start = Math.max(0, +(b.start + (e.key === 'ArrowLeft' ? -0.1 : 0.1)).toFixed(2)); drawTL(); clearTimeout(window._sv); window._sv = setTimeout(savePL, 400);
+    const b = PL.broll[SEL.i]; b.start = Math.max(0, +(b.start + (e.key === 'ArrowLeft' ? -0.1 : 0.1)).toFixed(2)); b.anchor = {kind: 'timeline', start: b.start}; delete b.opportunity_id; drawTL(); clearTimeout(window._sv); window._sv = setTimeout(savePL, 400);
   }
 });
 // a project this page cannot open: say why where the player would be, and leave only Back and CapCut usable
@@ -565,6 +935,6 @@ function broken(msg) {
 if (!PATH) broken('ไม่ได้ระบุโปรเจกต์'); else load().catch(e => broken(ckErr(e)));
 </script>
 <script src="/hyperframes-player.js"></script>
-<script src="/shell.js?v=11"></script>
+<script src="/shell.js?v=12"></script>
 </body>
 </html>

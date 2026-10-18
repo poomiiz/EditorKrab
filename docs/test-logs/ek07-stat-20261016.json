@@ -1,0 +1,81 @@
+{
+  "date": "2026-10-16",
+  "scope": "Actual stat-number API create and existing-item UI preview/apply/MP4/HF on generated16:9 fixture, plus smoke fixture correction",
+  "source_sha256": {
+    "app\\video_editor.py": "6f2bad29300c0d7742721f5a273373d6afbe1478e1920394f4e5be8d514d9888",
+    "app\\render.py": "a1871036edcf4c0478fdf9ed3014672a97954ffc82ba9ea6430a4ecf551c0165",
+    "app\\hf_build.py": "327e4ba610674f7edbe7548bfcec82a183199f1634ce4c3222195b6a3e075217",
+    "app\\motion_plan.py": "2dea64b1c4e0028a49b569671c21f1f288dc7ff17750286ea03a517d7d91e8cc",
+    "motion\\stat-number\\index.html": "3796e7c91360369e74f0343ddd847572b1d23d4ea5a772d6bbeb511dd45f7c31",
+    "app\\static\\editor.html": "d412c5ca55b2c661ae22c9d5f450b89e4905057c28c86379b757e9bc3a1757fb",
+    "scripts\\smoke_test.py": "cb4927ad6e5c31d4cc1f1ea6c81d58db5ff14580918a7db776a9f455bf8e8883"
+  },
+  "smoke": {
+    "successful_checks": 28,
+    "strong_private_config_guard": true,
+    "private_config_attempts": 0,
+    "fix": "Synthetic native text fixture now declares required uniform X/Y scale. No production validation relaxed; actual Browser/local answer assertions retained."
+  },
+  "actual_editor": {
+    "canvas": [
+      1920,
+      1080
+    ],
+    "duration": 8,
+    "full_av_decode": true,
+    "number": "1,250.50",
+    "ownership": {
+      "mode": "decorate",
+      "targets": [],
+      "caption_policy": "preserve"
+    },
+    "stable_id": true,
+    "previous_motion_media_unchanged": true,
+    "source_metadata_unchanged": {
+      "source.mp4": true,
+      "draft_content.json": true,
+      "clipkit_style.json": true,
+      "clipkit_words.json": true,
+      "clipkit_punch.json": true,
+      "clipkit_lines.json": true
+    },
+    "media_sha256": "911a6eafba99b36ffb37032154a2a93b0e5cbee86017ba03a0797f883cd003bb",
+    "mp4_sha256": "b464d5611706b6c7e0e22c8e1d211124699b658cc572ae85ef6f289d355d4a89",
+    "sampled_frame": {
+      "seconds": 4.5,
+      "gold_pixels": 2500,
+      "gold_outside_bounds_2px": 0,
+      "green_normal_pixels": 56792,
+      "sha256": "f91a7fd54c801e0bc046376b8cf0fe9b50921e2adcd3505ce7e6a2d6ffd603be"
+    },
+    "bounds": [
+      211.20000000000002,
+      325.8196871891713,
+      595.2,
+      646.1803128108286
+    ],
+    "subject_review_pending": true
+  },
+  "workflow": {
+    "initial_create": "Actual app HTTP through Playwright: read-only overlay-preview200, explicit reviewed apply200, real3s1920x1080alphaMOV. No full manual-new-motion UI or external AI acceptance claim.",
+    "ui_edit": "Selected existing stat timeline button, edited number87.50→1,250.50, clicked check and explicit apply. Before apply old87.50/ID/media stayed unchanged. After apply exactlyone item with same placementID, new MOV; old MOV retained.",
+    "visibility": "Decoration ownership targets[]/caption_policy preserve; both normal green Thai events remain2.25..6.0, next6..8.0. MP4 and HF at4.5s inspected and display1,250.50 with normal text.",
+    "desktop_mobile": "1440x1000 and375x844 screenshots inspected. Mobile scrollWidth360<=viewport375; local captures omitted from GitHub.",
+    "initial_attempts": "Automation first used wrong route and zero-based word index; no mutation. A too-small explicit placement correctly returned400. Successful fixture uses chosen timeline anchor2.25, not word-clock acceptance.",
+    "writer_conflict": "First export immediately after UI apply raced asynchronous HF rebuild and returned409 without output. Confirmed preview finished; same live project/export retried once and returned200. No server/renderer restart.",
+    "render": "Bundled pinned HyperFrames0.8.101 and app motion/media checks; no new dependency or customer/paid asset."
+  },
+  "previous_ci": {
+    "head": "6a7d6fc177663f4dae9e0ac1d9feafefa98e7281",
+    "run": 38785817102,
+    "observed": "Install success; Windows and MacARM Python failed only smoke web_ai_answers_are_checked missing scale. MacIntel still live when recorded. Same run observed; no rerun.",
+    "local_fix": "Strict full smoke28 checks now pass with0private-config reads. New exact commit needs own CI."
+  },
+  "limits": [
+    "Generated gray/sine fixture, not real statistic/speech/contextual suitability. Subject review remains pending.",
+    "One sampled settled MP4 frame: green/gold pixels are visibility/containment evidence, not OCR or all-frame/contrast/semantic certification.",
+    "Native CapCut, external Browser AI use, real pilot/human approval and full time-to-approval remain open.",
+    "Karaoke/rich/nonuniform native formatting and broader measured geometry remain incomplete; no batch/release/stability/savings claim.",
+    "Existing asynchronous HF writer may require export retry after409; automatic waiting/UI retry improvement remains open."
+  ]
+}

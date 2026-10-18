@@ -72,8 +72,15 @@
   const card = h.querySelector(".card"), big = h.querySelector(".big"), num = h.querySelector(".num");
   const unit = h.querySelector(".unit"), bar = h.querySelector(".bar"), label = h.querySelector(".label");
   const chars = label.querySelectorAll(".ch");
+  const layout = ARGS.layout;
+  [card, big, unit, label].forEach(node => node.setAttribute('data-motion-box', ''));
+  const check = layout ? window.clipkitMotionLayout(h, layout) : null;
   // the final (widest) number and a long label must stay inside the 900 px card
   const fit = () => {
+    if (layout) {
+      num.style.fontSize = `${layout.font_sizes.number * layout.scale}px`; unit.style.fontSize = `${layout.font_sizes.unit * layout.scale}px`;
+      label.style.fontSize = `${layout.font_sizes.label * layout.scale}px`; return;
+    }
     num.style.fontSize = "260px"; unit.style.fontSize = "130px"; label.style.fontSize = "74px";
     const shown = num.textContent; num.textContent = fmt(NUM);   // size for the final (widest) value
     const k = Math.min(1, 820 / big.offsetWidth);
@@ -81,22 +88,26 @@
     num.style.fontSize = 260 * k + "px"; unit.style.fontSize = 130 * k + "px";
     if (label.scrollWidth > 820) label.style.fontSize = 74 * 820 / label.scrollWidth + "px";
   };
-  fit(); document.fonts.ready.then(fit);
+  fit(); if (!layout) document.fonts.ready.then(fit);
 
-  const T = (s) => s / SPEED;
+  const T = (s) => s * Math.min(1, DUR / 2.4) / SPEED;
+  const PX = layout?.scale || 1;
   const tl = gsap.timeline({ paused: true });
   gsap.set(card, { xPercent: -50 });
   tl.set(h, { opacity: 1 }, 0);
-  tl.fromTo(card, { y: 120, opacity: 0, scale: 0.92 }, { y: 0, opacity: 1, scale: 1, duration: T(0.35), ease: "back.out(1.6)" }, 0);
+  tl.fromTo(card, { y: 120 * PX, opacity: 0, scale: 0.92 }, { y: 0, opacity: 1, scale: 1, duration: T(0.35), ease: "back.out(1.6)" }, 0);
   // count-up: the shown value is a pure function of time, so any seek draws the same frame
   const c = { v: 0 };
-  tl.fromTo(c, { v: 0 }, { v: NUM, duration: T(1.2), ease: "power2.out", onUpdate: () => { num.textContent = fmt(c.v); } }, T(0.2));
+  tl.fromTo(c, { v: 0 }, { v: NUM, duration: T(1.2), ease: "power2.out", onUpdate: () => {
+    num.textContent = layout && c.v >= NUM ? layout.number_text : fmt(c.v);
+  } }, T(0.2));
   tl.fromTo(unit, { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: T(0.25), ease: "back.out(2)" }, T(1.25));
-  tl.fromTo(bar, { width: 0 }, { width: 520, duration: T(0.5), ease: "power2.out" }, T(0.3));
+  tl.fromTo(bar, { width: 0 }, { width: 520 * PX, duration: T(0.5), ease: "power2.out" }, T(0.3));
   tl.set(chars, { visibility: "hidden" }, 0);   // not display: the label keeps its width (centred, measurable)
   chars.forEach((ch, k) => tl.set(ch, { visibility: "visible" }, T(1.0) + T(0.6) * (k + 1) / chars.length));
-  tl.to(card, { opacity: 0, y: -40, duration: T(0.25), ease: "power2.in" }, Math.max(T(1.8), DUR - 0.3));
+  tl.to(card, { opacity: 0, y: -40 * PX, duration: T(0.25), ease: "power2.in" }, Math.max(T(1.8), DUR - T(0.3)));
   tl.set(h, { opacity: 0 }, DUR);
+  if (check) tl.eventCallback('onUpdate', check);
 
   window.__timelines = window.__timelines || {};
   window.__timelines["main"] = tl;

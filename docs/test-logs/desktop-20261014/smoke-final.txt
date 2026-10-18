@@ -1,0 +1,38 @@
+ok   python_compiles
+ok   pages_parse
+ok   json_files_valid
+ok   capcut_ids_unique_and_synced
+ok   outside_edit_is_caught
+ok   edits_are_logged
+ok   broken_draft_is_not_written
+ok   capcut_saves_are_recorded
+ok   autosave_profile_reads_the_log
+ok   pictures_are_stills
+ok   subtitles_stay_on_one_line
+ok   hand_fixes_are_learned
+ok   stories_are_not_transcribed_twice
+ok   transcription_detects_the_source_language
+ok   uncertain_turbo_language_uses_an_installed_model
+ok   legacy_cli_uses_the_shared_language_detector
+{"step": "ถอดเสียงทั้งไฟล์"}
+{"took": "ถอดเสียง", "s": 0.1}
+{"took": "อ่านผลเลือกเรื่อง", "s": 0.0}
+ok   run_clip_follows_speech_language
+{"took": "step", "s": 0.0}
+ok   run_clip_logs_step_times_for_the_benchmark
+{"trial_id": "cli-trial", "run_id": "b4ec4213d22b403e8781d9083427534b"}
+{"took": "stub", "s": 0.0}
+{"trial_id": "cli-trial", "run_id": "29ab857429d34785b9e7e119d1b88ff4"}
+{"took": "stub", "s": 0.0}
+ok   benchmark_measurements_are_isolated
+ok   saved_stories_come_back_after_restart
+ok   name_check_works
+ok   preset_pack_roundtrip
+ok   style_lab_previews_and_keeps
+ok   new_clip_keeps_its_own_sound
+ok   web_ai_answers_are_checked
+ok   progress_bar_fills_over_the_clip
+ok   emoji_pops_on_keywords
+ok   speed_ramp_eases_into_normal_speed
+
+all checks passed

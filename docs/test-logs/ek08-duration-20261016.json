@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-16",
+  "task_id": "68bba7f8-5ea4-4451-a2bd-c6f1e7f0662d",
+  "scope": "EK08 partial structural gate: declared duration must match the contiguous main-video timeline; no human/native acceptance",
+  "source_sha256": {
+    "app/draft_quality.py": "7188a9bea9592d924a1d0955da9eea4467cbaa4e80ce7b3d9eb3064cb2468dc4",
+    "scripts/draft_quality_test.py": "c667b591b5e7781bb0587e5dbd547634198e4b9758cb6218678c1e6e93de5502"
+  },
+  "behavior": [
+    "Compare validated native microsecond endpoints directly, avoiding seconds roundoff at the tolerance boundary.",
+    "Reject mismatches greater than one microsecond before media probing/encoding/composition writes/native publication.",
+    "Keep one-microsecond tolerance and legacy drafts without a top-level duration. Do not rewrite the draft or infer speech accuracy."
+  ],
+  "verification": {
+    "regression_before_fix": "New mismatch tests failed on the previous production code: mismatches were accepted and adapters reached media probing.",
+    "focused_tests": {
+      "draft_quality_test.py": 14,
+      "render_encoder_test.py": 6,
+      "hf_export_safety_test.py": 15,
+      "capcut_build_safety_test.py": 15
+    },
+    "total": 50,
+    "private_config_read_attempts": 0,
+    "smoke": "All 28 checks passed.",
+    "integration": "Real CPU export, dry timeline, HyperFrames build and native build entry points reject the inconsistent draft; no subprocess launched, source/previous MP4/preview bytes unchanged, no native revision published. Process enumeration mocked only to avoid controlling user apps.",
+    "boundaries": "Reject shorter/longer metadata including +/-2 microseconds; accept exact and +/-1 microsecond, and legacy absent duration."
+  },
+  "prior_ci": {
+    "head": "880296a98e4131adb3bf490ababdf81d57ffe343",
+    "run": 38792934436,
+    "conclusion": "success",
+    "jobs": [
+      "Windows tests",
+      "install",
+      "Mac Intel",
+      "Mac ARM"
+    ]
+  },
+  "current_ci": "Requires its own exact-head CI after push; prior CI does not certify this change.",
+  "limits": [
+    "No new media render or browser/native editor control in this slice.",
+    "Structural agreement does not establish subtitle/audio sync, semantic story completeness, motion placement or human approval.",
+    "Revision-specific human review receipts and the remainder of EK08/EK01-EK12 remain open."
+  ],
+  "privacy": "Generated temporary fixtures only; no customer media, screenshots, absolute local paths or prompt contents published."
+}

@@ -34,6 +34,10 @@ Measure two things: the time the editor actively works, and the elapsed time fro
 
 [Benchmark instrumentation evidence](test-logs/benchmark-instrumentation-pr98.md) records software checks. It is separate from the human editing trial.
 
+[Desktop media and motion evidence](test-logs/desktop-test-20261014.md) records four real-source attempts, motion MOV exports, filename overflow checks, checkpoint fixes, and the failed editorial pilot.
+
+[Reporting and Drive privacy checks](test-logs/privacy-20261014.md) cover manual GitHub reports, restricted uploads, browser-AI download/import, and mobile layout verification.
+
 ## Share or contribute
 
 | Resource | Purpose |

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ตรวจงานทีม</title><link rel="stylesheet" href="/team.css"><link rel="stylesheet" href="/shell.css"><script src="/ui.js?v=2"></script></head>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ตรวจงานทีม</title><link rel="stylesheet" href="/team.css"><link rel="stylesheet" href="/shell.css"><script src="/ui.js?v=3"></script></head>
 <body data-team-page="review"><main>
 <h1>🔎 ตรวจงานทีม</h1><p class="muted">หัวหน้าตรวจงานและบันทึกผลตอบกลับจากลูกค้า</p>
 <div class="help"><p>✂️ กำลังทำ → 👀 รอลูกค้าตรวจ → ✅ อนุมัติแล้ว</p><p>🔁 ต้องแก้: หัวหน้าบันทึกโน้ตจากลูกค้า คนตัดเปิดแก้แล้วส่งใหม่ · ตรวจจาก MP4 โดยไม่รับไฟล์โปรเจกต์</p></div>
@@ -11,4 +11,4 @@
 <form id="review"><h2>✅ ตัดสินใจสำหรับโปรเจกต์ที่เลือก</h2><label>ผลการตรวจ<select name="status"><option value="changes_requested">🔁 ต้องแก้</option><option value="approved">✅ อนุมัติแล้ว</option><option value="editing">✂️ เปิดแก้หลังอนุมัติ</option></select></label><label>จุดที่ต้องแก้ / หลักฐานคำยืนยันลูกค้า<textarea name="note" maxlength="5000"></textarea></label><button class="primary">บันทึกผลที่เลือก</button></form>
 <label>แสดง<select id="reviewFilter"><option value="awaiting_review">👀 งานรอตรวจ</option><option value="approved">✅ งานอนุมัติแล้ว</option><option value="all">ทุกงาน / โอนงาน</option></select></label><div id="projects" class="assets"></div><div class="panel"><h2>ประวัติการตรวจ</h2><div id="activity"></div></div>
 </div></section></section>
-</main><script src="/team.js"></script><script src="/shell.js"></script></body></html>
+</main><script src="/team.js?v=privacy1"></script><script src="/shell.js?v=12"></script></body></html>

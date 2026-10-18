@@ -1,4 +1,4 @@
-"""Google Drive share link: setup, PKCE sign-in through the loopback, upload once, anyone-with-link reader, cached link.
+"""Drive: PKCE, restricted uploads, content cache and no automatic public permissions.
 Google is faked; nothing leaves this machine. Run: python scripts/drive_test.py"""
 import base64
 import hashlib
@@ -66,11 +66,11 @@ def main():
             assert meta == {"name": "cut.mp4", "parents": ["folder-1"]}, meta
             return Reply(None, {"Location": "https://upload.example/session-1"})
         if url == "https://upload.example/session-1":
-            assert body == b"mp4-bytes" and request.get_method() == "PUT"
+            assert body in (b"mp4-bytes", b"new-bytes") and request.get_method() == "PUT"
             return Reply({"id": "file-1", "webViewLink": "https://drive.google.com/file/d/file-1/view"})
-        if url.endswith("/files/file-1/permissions"):
-            assert json.loads(body) == {"role": "reader", "type": "anyone"}
-            return Reply({"id": "anyone"})
+        if "/permissions?" in url:
+            assert request.get_method() == "GET" and body is None
+            return Reply({"permissions": [{"type": "user"}]})
         raise AssertionError("unexpected call " + url)
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -122,20 +122,32 @@ def main():
             stored["expires_at"] = time.time() - 1   # force the refresh path
             (root / "state" / "google-drive.json").write_text(json.dumps(stored), encoding="utf-8")
             first = client.post(share).json()
-            assert first == {"id": "file-1", "link": "https://drive.google.com/file/d/file-1/view", "uploaded": True}, first
+            assert first == {"id": "file-1", "link": "https://drive.google.com/file/d/file-1/view", "uploaded": True, "access": "restricted"}, first
             assert any(c[3].get("Authorization") == "Bearer at-2" for c in calls), "the refreshed token was not used"
-            assert any(c[1].endswith("/files/file-1/permissions") for c in calls), "the link was never opened to anyone"
+            assert not any(c[0] == "POST" and "/permissions" in c[1] for c in calls), "public permissions were created"
             rpc.assert_called_with(rpc.call_args.args[0], "clipkit_set_share_link",
                                    {"org": ORG, "project": PROJECT, "link": first["link"]})
             count = len(calls)
             again = client.post(share).json()
-            assert again["link"] == first["link"] and again["uploaded"] is False and len(calls) == count, "uploaded twice"
+            assert again["link"] == first["link"] and again["uploaded"] is False and len(calls) == count + 1, "cache must recheck permissions without uploading"
+            for permissions in ({"permissions": [{"type": "anyone"}]}, {"permissions": [{"type": "domain"}]},
+                                {"permissions": []}, {"permissions": [{"type": "user"}], "nextPageToken": "more"}):
+                with patch.object(drive, "_call", return_value=(permissions, {})):
+                    try:
+                        drive.share_file(exports / "cut.mp4")
+                        raise AssertionError("unverified or broad cache access was accepted")
+                    except HTTPException as exc:
+                        assert exc.status_code == 409
+            before = len([c for c in calls if c[1] == drive.UPLOAD])
+            (exports / "cut.mp4").write_bytes(b"new-bytes")  # same size, different contents must not use the old cache
+            assert client.post(share).json()["uploaded"] is True
+            assert len([c for c in calls if c[1] == drive.UPLOAD]) == before + 1
 
             (exports / "cut.mp4").write_bytes(b"different size")
             assert client.post(share).status_code == 409, "a file still syncing was shared"
             assert client.post("/api/drive/disconnect").json() == {"disconnected": True}
             assert not client.get("/api/drive/status").json()["connected"]
-    print("PASS Drive share: setup check, PKCE loopback sign-in, forged state refused, refresh, upload once, anyone-with-link, disconnect")
+    print("PASS Drive: PKCE, forged state refusal, refresh, restricted upload, content cache, permission checks, disconnect")
 
 
 if __name__ == "__main__":

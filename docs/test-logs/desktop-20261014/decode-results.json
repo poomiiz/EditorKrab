@@ -1,0 +1,26 @@
+[
+  {
+    "id": "source-1",
+    "exit": 0,
+    "error_lines": 0,
+    "elapsed_s": 21.006
+  },
+  {
+    "id": "source-2",
+    "exit": 0,
+    "error_lines": 0,
+    "elapsed_s": 45.524
+  },
+  {
+    "id": "source-3",
+    "exit": 0,
+    "error_lines": 0,
+    "elapsed_s": 22.529
+  },
+  {
+    "id": "source-4",
+    "exit": 0,
+    "error_lines": 0,
+    "elapsed_s": 4.047
+  }
+]

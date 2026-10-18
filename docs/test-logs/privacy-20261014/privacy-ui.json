@@ -1,0 +1,18 @@
+{
+  "report_link": "https://github.com/poomiiz/EditorKrab/issues/new",
+  "error_report_requests_observed": 0,
+  "issue_submitted": false,
+  "github_requires_user_login": true,
+  "layout": [
+    {
+      "viewport": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "viewport": 375,
+      "scrollWidth": 375
+    }
+  ],
+  "redactions": "source video hidden; private source path replaced only for screenshots",
+  "live_backend": "not restarted; private config disables old auto report and sheet webhook; new API behavior verified in isolated tests"
+}

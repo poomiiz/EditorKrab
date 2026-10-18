@@ -1,0 +1,18 @@
+{
+  "download": {
+    "name": "browser-input.mp4.web-ai-stories.md",
+    "failure": null,
+    "bytes": 160959,
+    "sha256": "8a07296ca3aae19a213166878627a6970ca75cdf7c20da51c7f673e9ed3ecea6"
+  },
+  "contains_prompt": true,
+  "contains_output_schema": true,
+  "transcript_lines": 1214,
+  "contains_word_timestamps": false,
+  "extra_typed_prompt_required_by_contract": false,
+  "live_backend": "baseline process; packet content/instructions present; final wording separately checked",
+  "provider_answer_received": false,
+  "invalid_reply_rejected": true,
+  "valid_fixture_imported_stories": 1,
+  "no_external_provider_answer": true
+}

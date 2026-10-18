@@ -32,6 +32,13 @@ envato-profile/
 .clipkit-web-ai/
 *.web-ai-state/
 *.private.json
+*.stories.json*
+*.story-selection.json*
+*.story-preferences.json
+*.transcript*.json*
+*.brief.txt
+*.lines.json*
+*.clipkit_run.json
 
 # job status kept between restarts (app/jobstore.py)
 state/

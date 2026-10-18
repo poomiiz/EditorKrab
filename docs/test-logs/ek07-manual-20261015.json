@@ -1,0 +1,41 @@
+{
+  "scope": "Actual manual UI preview button then explicit apply, generated gray footage and sine tone. Own fixture picker/lifecycle/process guard; no installed authentication/native CapCut or human acceptance.",
+  "preview_requests": 1,
+  "apply_requests_before_confirmation": 0,
+  "apply_requests_after_confirmation": 1,
+  "cue_id": "0",
+  "start": 2.0,
+  "duration": 4.0,
+  "relative_emphasis_start": 2.0,
+  "media": {
+    "duration": 4.0,
+    "fps": 30.0,
+    "width": 1920,
+    "height": 1080,
+    "sha256": "eaee18443f9a7df5d2f2465d1065ec5924c7d88edc78ab36177064b01160b382",
+    "alpha_decode": true
+  },
+  "receipt_count": 1,
+  "journal_phase": "committed",
+  "unsaved_text_typed_during_encoder_retained": true,
+  "mobile": {
+    "width": 375,
+    "horizontal_overflow": false,
+    "manual_button_height": 44
+  },
+  "source_sha256": {
+    "app/video_editor.py": "993f24b4acec9e1c3c511de5e58b52eb15eb5afdfc620fdaa43290d83771b19a",
+    "app/static/editor.html": "ec44aff488cd4b42ff9be0a5d26527266c296ea02fa742d8aee2ba81114e127e",
+    "app/static/ai-plan.js": "d2e0974c640fb60269d8decc01e23c0eba278e73ec87f4ae761bab01f36c11dc",
+    "app/web_ai_transaction.py": "5b3e64159d430d79d02d745364deb75682bc68f21189e1e5d49e3dda3d7e9b0c",
+    "app/web_ai_identity.py": "1b9f23f327a4533b91a3ba4bd0617d3d00b2ae479a4205caa3cb184c6952de11",
+    "motion/sentence-pair/index.html": "a947a18a436db029f15e8bb0ea12b26decf152951e6ece6c9536c93ac254523f"
+  },
+  "review": "Independent UI/source/desktop375 review found lost-form race; fixed to update motion track/player without rebuilding form, re-reviewed PASS within diff. Source/UI review is separate from real render assertions.",
+  "limits": [
+    "Manual reviewed branch uses existing durable transaction; legacy callers without review_revision retain prior behavior",
+    "Synthetic tone does not establish spoken timing, content/subject suitability or savings",
+    "Private screenshots/DOM not published; fixture update-check404 and sandbox warnings are not called clean console",
+    "No native controls, real user drafts, release or deployment"
+  ]
+}

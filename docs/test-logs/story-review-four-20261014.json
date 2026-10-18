@@ -1,0 +1,123 @@
+{
+  "task_id": "23187ac4-d1ac-4ebb-91a7-6e51078e41f0",
+  "direct_human_listening": false,
+  "human_approval": false,
+  "new_subtitle_motion_exports": false,
+  "complete_decode_pass_count": 4,
+  "visually_inspected_frames": 12,
+  "fresh_context_asr_seconds": 82.04,
+  "boundary_asr_completed_count": 4,
+  "clips": [
+    {
+      "n": 1,
+      "title": "หัวข้อทดสอบ 04",
+      "source_start": 166.04,
+      "source_end": 366.14,
+      "duration": 200.12,
+      "decode_pass": true,
+      "extract_seconds": 10.95,
+      "fresh_asr_seconds": 42.34,
+      "fresh_asr_rows": 84,
+      "streams": [
+        {
+          "codec_type": "video",
+          "codec_name": "h264",
+          "width": 256,
+          "height": 144,
+          "r_frame_rate": "25/1"
+        },
+        {
+          "codec_type": "audio",
+          "codec_name": "aac",
+          "r_frame_rate": "0/0",
+          "sample_rate": "44100"
+        }
+      ]
+    },
+    {
+      "n": 2,
+      "title": "หัวข้อทดสอบ 08",
+      "source_start": 1090.39,
+      "source_end": 1258.79,
+      "duration": 168.4,
+      "decode_pass": true,
+      "extract_seconds": 7.82,
+      "fresh_asr_seconds": 12.84,
+      "fresh_asr_rows": 69,
+      "streams": [
+        {
+          "codec_type": "video",
+          "codec_name": "h264",
+          "width": 256,
+          "height": 144,
+          "r_frame_rate": "25/1"
+        },
+        {
+          "codec_type": "audio",
+          "codec_name": "aac",
+          "r_frame_rate": "0/0",
+          "sample_rate": "44100"
+        }
+      ]
+    },
+    {
+      "n": 3,
+      "title": "หัวข้อทดสอบ 09",
+      "source_start": 1790.06,
+      "source_end": 1940.2,
+      "duration": 150.16,
+      "decode_pass": true,
+      "extract_seconds": 5.99,
+      "fresh_asr_seconds": 15.2,
+      "fresh_asr_rows": 66,
+      "streams": [
+        {
+          "codec_type": "video",
+          "codec_name": "h264",
+          "width": 256,
+          "height": 144,
+          "r_frame_rate": "25/1"
+        },
+        {
+          "codec_type": "audio",
+          "codec_name": "aac",
+          "r_frame_rate": "0/0",
+          "sample_rate": "44100"
+        }
+      ]
+    },
+    {
+      "n": 4,
+      "title": "หัวข้อทดสอบ 01",
+      "source_start": 2224.6,
+      "source_end": 2400.66,
+      "duration": 176.08,
+      "decode_pass": true,
+      "extract_seconds": 6.98,
+      "fresh_asr_seconds": 11.66,
+      "fresh_asr_rows": 78,
+      "streams": [
+        {
+          "codec_type": "video",
+          "codec_name": "h264",
+          "width": 256,
+          "height": 144,
+          "r_frame_rate": "25/1"
+        },
+        {
+          "codec_type": "audio",
+          "codec_name": "aac",
+          "r_frame_rate": "0/0",
+          "sample_rate": "44100"
+        }
+      ]
+    }
+  ],
+  "editorial_assessment": [
+    "strongest pilot candidate; listen to boundaries and confirm names",
+    "needs context for woman and temporary relief",
+    "needs setup; possible missing final word requires listening",
+    "needs recovery setup and removal of spoken name correction"
+  ],
+  "release_approved_count": 0
+}

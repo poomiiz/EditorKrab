@@ -1,0 +1,20 @@
+{
+  "asr-results.json": "bc417bf79c2d7c4083528de387faf4b556429ec68f6dd317fb83d0f478750d3c",
+  "benchmark-final.txt": "6db01ac8abc4957939dcddcebcb7e99a98fa18dca2e563a9537a816ff692bb10",
+  "bounds-regression.json": "50cc9d20bfa0cdf5ef61f6b639581aeafbdeb03070b7dd4cd447686d408d4415",
+  "browser-ai-example.md": "7aa206860cdf3f99f91e8581ae30b79019586b1744f6536d7001a36cd68306af",
+  "checkpoint-final.txt": "94f751906e0ed30979c8dd539889123e6693035f59828d0e5b1b5b5b94ac4af1",
+  "decode-results.json": "8b64455f43201b5c7f0ce00cd76f8d5b85479923f9e16bc5d4a2447bb38c750e",
+  "filename-final-desktop.png": "278717cf76acd7aef8a11fc517da405be230b2b64dd90bc48d4fd4619253d4ea",
+  "filename-final-mobile.png": "2bfc1e0acc97c478c7806eddcdaee2f18ff6ccb3ae12df6e75f8b3480391b607",
+  "hook-frames.png": "e3ee4f34c04aa0f94d2ffec18863f323ebbf15c7078b9fe8ff64063a1535d980",
+  "motion-results.json": "7adbe940aa1048fd95cf4f30d4bca18142e000b6a052a2f76aa7efab0866415b",
+  "pair-frames.png": "4c196e6525d0ab3347af6e7c75d313cad18f10cbabc22401f43d4d66553caee1",
+  "pilot-media-check.json": "06f6579f505f22611f233d63fa14cb112feb3c868c5af4a3444940548dc1f420",
+  "smoke-final.txt": "67f954dea2ca26304d01c052430b3d46916e3c30b6e749b7f2f6b10bde1da787",
+  "source-4-interruption.json": "39e312067055b17aaa89e39fb2d8f462d0ad731c19d6853d996bb8f75dee8e07",
+  "sources.json": "ebf571b4f93dca5f913f28df3e93fd88b76669fa10b7d21c65e5fb21a32fc419",
+  "stat-frames.png": "9b5333e9a120731ca6fece2dee78ace4765b7444054e171bc78d57db0d18bd66",
+  "tail-regression.json": "474e9b335a1d231c17b1c8cbec400bf250df40c42ba8f6b7f2325d97a16a90f4",
+  "web-ai-proof.json": "de8a3d76e8d57c0cee7ad8718a2f37bc296dd4dc42c8a60a0d161e4bcaed2d74"
+}

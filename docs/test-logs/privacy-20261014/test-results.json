@@ -1,0 +1,44 @@
+[
+  {
+    "name": "reports",
+    "command": [
+      "python",
+      "-X",
+      "utf8",
+      "scripts/report_privacy_test.py"
+    ],
+    "exit": 0,
+    "output": ".\n----------------------------------------------------------------------\nRan 1 test in 0.005s\n\nOK\n"
+  },
+  {
+    "name": "drive",
+    "command": [
+      "python",
+      "-X",
+      "utf8",
+      "scripts/drive_test.py"
+    ],
+    "exit": 0,
+    "output": "PASS Drive: PKCE, forged state refusal, refresh, restricted upload, content cache, permission checks, disconnect\n"
+  },
+  {
+    "name": "login",
+    "command": [
+      "python",
+      "-X",
+      "utf8",
+      "scripts/login_gate_test.py"
+    ],
+    "exit": 0,
+    "output": "PASS mandatory page/API login, public entry assets, Google start, expiry and empty GET body\n"
+  },
+  {
+    "name": "team",
+    "command": [
+      "node",
+      "scripts/team_entry_test.js"
+    ],
+    "exit": 0,
+    "output": "PASS review actions follow team role\nPASS team entry: create/join, single team, multiple team selection\n"
+  }
+]

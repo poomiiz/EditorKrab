@@ -1,0 +1,16 @@
+[
+  {
+    "id": "source-2",
+    "method": "final bounds helper on preserved real ASR output; no new recognition",
+    "before_invalid_phrases": 0,
+    "after_invalid_phrases": 0,
+    "zero_duration_word_pieces": 19
+  },
+  {
+    "id": "source-3",
+    "method": "final bounds helper on preserved real ASR output; no new recognition",
+    "before_invalid_phrases": 1,
+    "after_invalid_phrases": 0,
+    "zero_duration_word_pieces": 1575
+  }
+]

@@ -33,7 +33,7 @@ h3{font-size:14px;color:var(--sub);margin:16px 0 8px}
 .family{grid-column:1/-1;border:1px solid var(--line);border-radius:14px;padding:2px 12px 12px}.family h3{margin:10px 0}
 </style>
 <link rel="stylesheet" href="/shell.css?v=8">
-<script src="/ui.js?v=2"></script></head>
+<script src="/ui.js?v=3"></script></head>
 <body>
 <main>
   <h1>🎨 คลังสไตล์</h1>
@@ -208,6 +208,6 @@ api('/api/style/capcut-projects').then(j => j.projects.forEach(p => {
 })).catch(e => { $('startMsg').textContent = '❌ ' + ckErr(e); $('startMsg').className = 'msg bad'; });
 load();
 </script>
-<script src="/shell.js?v=11"></script>
+<script src="/shell.js?v=12"></script>
 </body>
 </html>

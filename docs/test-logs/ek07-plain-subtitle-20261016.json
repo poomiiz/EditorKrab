@@ -1,0 +1,131 @@
+{
+  "date": "2026-10-16",
+  "scope": "Shared native-derived still/pop subtitle geometry; not complete typography/editorial/native acceptance",
+  "source_sha256": {
+    "app/render.py": "aef69260fc0459fbc423c0bd8c155f3e0ab56347b654de235d9c849273c94dfc",
+    "app/hf_build.py": "327e4ba610674f7edbe7548bfcec82a183199f1634ce4c3222195b6a3e075217",
+    "app/capcut_build.py": "c83230d9b3b9d94c9a4788a4f456f031050a4b2322858b94376aae477c548b41",
+    "app/video_editor.py": "6f2bad29300c0d7742721f5a273373d6afbe1478e1920394f4e5be8d514d9888",
+    "app/web_ai_json.py": "713d41b27371f42d0a0eadf11ed8b469d03172b4a48de2675d9e588b5f4e38bc",
+    "prompts/web_ai/clip.md": "cee3298cbe1fdc676fabf340ae6a3ca33ba522416e74eb911551548c9eda955b",
+    "scripts/plain_subtitle_test.py": "d3d63cd69cacf42a35ced2d5885ee30cf1b5dabd48e0f08427cec22e114ea24d",
+    "scripts/subtitle_plan_test.py": "ccdd3a14ff6c8c73d4aaa477f28d045e64f2f88a4f8f458f9045b9ec9eef6097"
+  },
+  "python_cases": {
+    "plain_subtitle": 13,
+    "subtitle_plan": 28,
+    "subtitle_merge": 6,
+    "subtitle_export": 15,
+    "motion_api": 15,
+    "motion_handoff": 15,
+    "motion_freshness": 13,
+    "motion_cut": 22,
+    "manual_cut_transaction": 7,
+    "subject_zones": 9,
+    "web_ai_transaction": 28,
+    "web_ai_identity": 18,
+    "capcut_build_safety": 15,
+    "hf_export_safety": 15,
+    "render_encoder": 6,
+    "motion_layout": 12,
+    "motion_plan": 7,
+    "capcut_font": 7
+  },
+  "python_total": 251,
+  "strong_guard_programs": 18,
+  "private_config_attempts": 0,
+  "count_note": "Reported unittest cases from successful scoped runs; imported fixture classes can overlap other programs, not independent editorial scenarios.",
+  "new_focused_cases": 13,
+  "cpu_raster": "Real FFmpeg/libass pop first-frame ink stays inside measured boxes at1080x1920,1920x1080,1080x1080; generated text/font only.",
+  "actual_editor": {
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "duration": 8,
+    "full_audio_video_decode": true,
+    "frame_at": 3,
+    "plain_events": [
+      {
+        "text": "ข้อความปกติ",
+        "start": 2.25,
+        "end": 6.0,
+        "size_px": 109.39941607788232,
+        "center_x_px": 1056.0,
+        "center_y_px": 297.0,
+        "rotation": -12,
+        "bbox": [
+          660.0321832910806,
+          131.07115277967753,
+          1451.9678167089194,
+          462.9288472203225
+        ],
+        "green_ink_pixels": 24169
+      },
+      {
+        "text": "ขนาดตามวิดีโอ",
+        "start": 2.25,
+        "end": 6.0,
+        "size_px": 109.39941607788232,
+        "center_x_px": 1056.0,
+        "center_y_px": 653.4,
+        "rotation": -12,
+        "bbox": [
+          602.3009484457993,
+          475.19999999999993,
+          1509.6990515542007,
+          831.6
+        ],
+        "green_ink_pixels": 27764
+      }
+    ],
+    "mp4_sha256": "6723af86fd19ac1273f8c50947e324e68e7a7202837292e635eca690c53c9288",
+    "frame_sha256": "aaed95752764d38ebe822336fb2d5119541b72cb41c2691ba77f8dfc8d57fa60",
+    "motion_count": 1,
+    "motion_recipe_errors": [],
+    "initial_measured_conflict_export_status": 400,
+    "explicit_review_then_repair": true,
+    "browser_packet": {
+      "sha256": "8ecc8b66e6ead53b083ebb3a994fbfac0cb1bfbdb531464b701e2e8ec32b2951",
+      "mode": "pop",
+      "events": 3,
+      "font_basenames_only": true,
+      "prompt_mentions_plain_mode": true,
+      "word_clocks": true
+    },
+    "final_backend_reloaded": true,
+    "hf_browser_ready_at_3s": true,
+    "final_preview_retry": "Initial startup HF build HTTP409 because an explicit export held the writer; retried existing live() after confirmed export completion and player.ready passed.",
+    "final_recheck_after_all_guards": "Fresh owned backend, timeline0recipeerrors/3events, player.ready then export200/download; no startup-export collision in final sequence."
+  },
+  "viewports": [
+    [
+      1440,
+      1000
+    ],
+    [
+      375,
+      844
+    ]
+  ],
+  "mobile_body_width": 375,
+  "independent_review": "Scoped measured still/pop HF font serialization and final desktop375 captures PASS; reviewer independently ran focused11cases before later explicit refusal/native-build tests expanded it to13. Later guards covered by root final13cases and fresh-backend export/download recheck.",
+  "prior_exact_ci": {
+    "head": "fc17659a1711271f89aaa27a0ad7bca9f261c2e7",
+    "run": 38779470226,
+    "conclusion": "success",
+    "jobs": 4,
+    "mac_arm_preview_cleanup_confirmed": true
+  },
+  "limits": [
+    "Generated gray+sine16:9 actual app fixture; known synthetic clocks do not establish ASR/speech accuracy.",
+    "Still/pop plain modes now measured; karaoke remains legacy and cannot yet place motion beside its text.",
+    "Rotated multiline uses conservative per-line box spacing; natural/native multiline typography is not certified.",
+    "Multiple native style ranges, unequal/nonpositive X/Y scales and explicitly missing font files refuse; they are not silently flattened/replaced.",
+    "Native _event_text and complete isolated native-build serialization are tested; no installed CapCut opened/saved/reopened/played.",
+    "No external AI provider/model selection tested; actual file download/handoff context only, not browser AI reasoning quality.",
+    "One startup preview/export writer conflict is retained above; no full time-to-approval benchmark or savings claim.",
+    "No customer media, private paths, screenshots, packet contents, account profiles or paid assets published.",
+    "New exact-head CI required; full EK01-EK12 and EK07 remain active."
+  ]
+}

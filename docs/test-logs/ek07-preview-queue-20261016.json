@@ -1,0 +1,159 @@
+{
+  "date": "2026-10-16",
+  "scope": "Coalesced preview completion before top actions; read-only pre-export text check;44px top/dialog targets; actual UI HF export on generated fixture",
+  "source_sha256": {
+    "app/static/editor.html": "dc25247d99c6e4bf0e12692386103849303c330f88cfcb7887a644f6fbb8ec3b",
+    "scripts/preview_queue_test.cjs": "6819f1c29ad6472436f48fa78cbc13cd6224f81797bf8d8627d898d0a3468077"
+  },
+  "changes": [
+    "live callers await the same full promise chain including the queued latest rebuild; no promise cycle.",
+    "Top actions wait for this page preview queue before text-check/export writes; existing backend locks and validation retained.",
+    "Pre-export check reads text once and never calls tidy; explicit subtitle tidy remains available.",
+    "Editor top actions and existing confirmation buttons have44px minimum height using existing styles. No new screen copy or color."
+  ],
+  "regression": {
+    "new_node_suite": "Real editor functions extracted into VM with deferred preview APIs; failed on old immediate export and old automatic tidy, passes fixed coalescing/order/error/cancel behavior.",
+    "node_suites": [
+      "preview_queue_test.cjs",
+      "subject_zones_ui_test.cjs",
+      "subtitle_ui_test.cjs",
+      "ai_plan_ui_test.js",
+      "insert_ui_test.cjs",
+      "web_ai_ui_test.js"
+    ],
+    "smoke_checks": 28,
+    "strong_private_guard_programs": 1,
+    "private_config_attempts": 0,
+    "raw_added_color_literals": 0
+  },
+  "actual_browser": {
+    "network": {
+      "requests": [
+        "/api/video/draft/hf-build",
+        "/api/video/draft/hf-build",
+        "/api/video/draft/text-check",
+        "/api/video/draft/hf-export"
+      ],
+      "responses": [
+        {
+          "endpoint": "/api/video/draft/hf-build",
+          "status": 200
+        },
+        {
+          "endpoint": "/api/video/draft/hf-build",
+          "status": 200
+        },
+        {
+          "endpoint": "/api/video/draft/text-check",
+          "status": 200
+        },
+        {
+          "endpoint": "/api/video/draft/hf-export",
+          "status": 200
+        }
+      ],
+      "held": {
+        "requests": [
+          "/api/video/draft/hf-build"
+        ],
+        "disabled": true
+      }
+    },
+    "exportDisabled": false,
+    "mobile": {
+      "width": 375,
+      "body": 360,
+      "exportHeight": 44
+    },
+    "normalEvents": [
+      {
+        "text": "ข้อความปกติ",
+        "start": 2.25,
+        "end": 6
+      },
+      {
+        "text": "ขนาดตามวิดีโอ",
+        "start": 2.25,
+        "end": 6
+      },
+      {
+        "text": "next",
+        "start": 6,
+        "end": 8
+      }
+    ],
+    "motions": 1
+  },
+  "actual_output": {
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "duration": 8.0,
+    "full_av_decode": true,
+    "mp4_sha256": "c813804f593adbd732afbfb292f9ef71a8b9a3c7131679a9cc43f59a1f387941",
+    "source_and_metadata_unchanged": {
+      "draft_content.json": true,
+      "clipkit_style.json": true,
+      "clipkit_words.json": true,
+      "clipkit_lines.json": true,
+      "clipkit_punch.json": true,
+      "clipkit_overlays.json": true,
+      "source.mp4": true
+    },
+    "sample": {
+      "seconds": 4.5,
+      "gold_stat_pixels": 2511,
+      "green_normal_pixels": 56769,
+      "sha256": "700120838210e9629d916f74dc47222394ac585d69fa68b068b1364ca4188132"
+    }
+  },
+  "real_lock_test": "Owned fixture gates hf_build._build inside the real build lock. While held: one preview request only, Export disabled, no text-check/tidy/export sent. Release: exactlytwo real preview200, one read-only text-check200 then one HF-export200. No409 or silent relocation. Only the generated fixture existing warning was confirmed for this encoding test; this is not editorial approval.",
+  "fresh_final_source": {
+    "cancelled": true,
+    "exportHeight": 44,
+    "confirmationHeight": 44.000030517578125,
+    "width": 375,
+    "body": 360
+  },
+  "settled_preview": {
+    "fonts": "loaded",
+    "time": 4.5,
+    "renderedTime": 4.5,
+    "media": [
+      {
+        "time": 4.5,
+        "readyState": 4,
+        "seeking": false
+      },
+      {
+        "time": 2.25,
+        "readyState": 4,
+        "seeking": false
+      }
+    ],
+    "width": 375,
+    "body": 360
+  },
+  "cancellation": "Fresh-source warning Cancel restored controls; existing MP4 hash and all seven source/sidecar hashes unchanged.",
+  "independent_review": "Independent source/Node review and corrected desktop1440x1000/375x844 settled screenshots PASS within this slice. Reviewer rejected an early desktop capture; after font/media/timeline+paint barriers, recaptured preview matches MP4/phone. Private screenshots, paths and DOM omitted.",
+  "prior_exact_ci": {
+    "head": "954c4768c6167abfd8127cebc680886302a67eea",
+    "run": 38789096899,
+    "status": "completed",
+    "conclusion": "success",
+    "jobs": "Windows,MacIntel,MacARM,install all passed; confirms repaired Intel kerning regression on runner. New UI source still requires its own exact CI."
+  },
+  "retained_failures": [
+    "Initial gated UI attempt exposed an incomplete generated native style.size fixture during old pre-export tidy;500 occurred after a draft write. Failure/seal evidence retained privately. A fresh complete generated fixture was used after removing automatic pre-export tidy. No real user draft was touched, no production input fallback added.",
+    "Early automation URL/null-state errors and an expected external-edit refusal on the modified sealed fixture remain private; that sealed copy was not accepted or bypassed.",
+    "Early desktop capture was ahead of fonts/media/seek completion; it was rejected and recaptured. The capture barrier is not a production initial-frame-flash fix."
+  ],
+  "limits": [
+    "This drains already queued previews for modern editor top actions. It does not flush pending debounce metadata writes, wait for every in-progress motion form/API writer or prevent another process from editing. Backend conflicts still reject.",
+    "Actual legacy full page, user/native CapCut, real speech/semantic suitability, approved pilot and full human timing are not established.",
+    "Existing legacy native-text safe-area warning and manual confirmation remain; this is not completion of the planned structural quality gate.",
+    "Generated8s16:9 gray/sine with reused generated stat MOV; full MP4 decode and one settled gold/green sample, not every frame or all ratios.",
+    "No public customer/paid media, new dependencies, release/merge/batch or stability/savings certification."
+  ]
+}

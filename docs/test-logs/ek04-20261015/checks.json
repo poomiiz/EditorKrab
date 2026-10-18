@@ -1,0 +1,86 @@
+[
+  {
+    "program": "story_selection_test.py",
+    "exit_code": 0,
+    "elapsed_s": 5.188,
+    "reported_cases": 15
+  },
+  {
+    "program": "story_plan_test.py",
+    "exit_code": 0,
+    "elapsed_s": 5.828,
+    "reported_cases": 15
+  },
+  {
+    "program": "story_target_test.py",
+    "exit_code": 0,
+    "elapsed_s": 2.109,
+    "reported_cases": 6
+  },
+  {
+    "program": "story_timing_test.py",
+    "exit_code": 0,
+    "elapsed_s": 2.031,
+    "reported_cases": 4
+  },
+  {
+    "program": "web_ai_identity_test.py",
+    "exit_code": 0,
+    "elapsed_s": 3.25,
+    "reported_cases": 17
+  },
+  {
+    "program": "web_ai_transaction_test.py",
+    "exit_code": 0,
+    "elapsed_s": 10.906,
+    "reported_cases": 17
+  },
+  {
+    "program": "long_transcription_test.py",
+    "exit_code": 0,
+    "elapsed_s": 11.109,
+    "reported_cases": 12
+  },
+  {
+    "program": "cli_resume_test.py",
+    "exit_code": 0,
+    "elapsed_s": 12.875,
+    "reported_cases": 18
+  },
+  {
+    "program": "insert_contract_test.py",
+    "exit_code": 0,
+    "elapsed_s": 3.11,
+    "reported_cases": 3
+  },
+  {
+    "program": "benchmark_test.py",
+    "exit_code": 0,
+    "elapsed_s": 1.515,
+    "reported_cases": 14
+  },
+  {
+    "program": "project_lock_test.py",
+    "exit_code": 0,
+    "elapsed_s": 1.782,
+    "reported_cases": 10
+  },
+  {
+    "program": "smoke_test.py",
+    "exit_code": 0,
+    "elapsed_s": 17.328,
+    "reported_cases": null
+  },
+  {
+    "program": "story_ui_test.cjs",
+    "exit_code": 0,
+    "elapsed_s": 0.079,
+    "reported_cases": null
+  },
+  {
+    "program": "web_ai_ui_test.js",
+    "exit_code": 0,
+    "elapsed_s": 0.062,
+    "reported_cases": null
+  }
+]

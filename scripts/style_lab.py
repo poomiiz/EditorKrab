@@ -198,14 +198,14 @@ def _background(src: Path | None, w: int, h: int):
     return im.crop((x, y, x + w, y + h))
 
 
-def _line(canvas, role: str, r: dict, scale: float = 1.0, alpha: float = 1.0) -> None:
+def _line(canvas, role: str, r: dict, scale: float = 1.0, alpha: float = 1.0, font_file=FONT) -> None:
     """Draw one sample line of a role onto an RGBA canvas, as render.py places it (y up, outline px*w*0.6+2)."""
     from PIL import Image, ImageDraw, ImageFilter, ImageFont
     cw, ch = canvas.size
     px = float(r["size"]) * CAPCUT_PX * min(cw, ch) / 1080 * scale
     if px < 1 or alpha <= 0:
         return
-    font = ImageFont.truetype(str(FONT), max(1, round(px)))
+    font = ImageFont.truetype(str(font_file), max(1, round(px)))
     stroke = round(px * float(r["outline_width"]) * 0.6 + 2 * min(cw, ch) / 1080) if r["outline_width"] else 0
     text = SAMPLE[role]
     pad = round(px) + stroke * 2
@@ -232,7 +232,9 @@ def _frame(bg, style: dict, t: float):
     img = bg.convert("RGBA")
     for k, role in enumerate(r for r in ROLES if style.get(r)):
         p = min(1.0, max(0.0, (t - k * 0.45) / 0.25))  # 0.25 s pop per line, 0.45 s apart
-        _line(img, role, style[role], scale=0.7 + 0.3 * p + 0.15 * math.sin(math.pi * p), alpha=p)  # grow, overshoot, settle
+        font = Path(style.get("font") or FONT)
+        _line(img, role, style[role], scale=0.7 + 0.3 * p + 0.15 * math.sin(math.pi * p), alpha=p,
+              font_file=font if font.is_file() else FONT)  # grow, overshoot, settle
     return img.convert("RGB")
 
 
@@ -275,6 +277,8 @@ def compose(name: str, main: str, caption: str | None = None, second: str | None
             raise ValueError(f"no kept {cat} part named {part}")
         d = json.loads(f.read_text(encoding="utf-8"))
         style.update({r: d[r] for r in CATS[cat]})
+        if cat == "main":
+            style.update({k: d[k] for k in ("fixed_size", "font") if k in d})
         about.append(f"{cat}: {part}")
     style = {"about": "Made in the style lab from " + ", ".join(about), **check(style, full=True)}
     style.setdefault("caption", None)
@@ -310,6 +314,8 @@ def save(folder: str | Path, name: str, parts: list[str] | None = None, overwrit
         d = PARTS / cat
         d.mkdir(parents=True, exist_ok=True)
         piece = {r: style[r] for r in CATS[cat]}
+        if cat == "main":
+            piece.update({k: style[k] for k in ("fixed_size", "font") if k in style})
         (d / f"{slug}.json").write_text(json.dumps({**piece, "about": style.get("about") or "", "source": meta["source"]},
                                                    ensure_ascii=False, indent=1), encoding="utf-8")
         if bg:
@@ -339,6 +345,7 @@ def share(preset: str) -> dict:
     if not preset.startswith("my-") or preset != _slug(preset) or not f.is_file():
         raise ValueError(f"no kept style named {preset}")
     style = check(json.loads(f.read_text(encoding="utf-8")), full=True)
+    style.pop("font", None)  # Local font paths are machine-specific and must not enter a public issue.
     name = preset.removeprefix("my-")
     body = "\n".join([f"ขออนุมัติสไตล์ `{name}` ให้ทีมใช้ (preset team-{name})", "",
                       "ลากไฟล์พรีวิว GIF มาวางตรงนี้:", "", "", "```json",

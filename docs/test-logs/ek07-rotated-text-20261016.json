@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-16",
+  "scope": "Compact rotated still/pop subtitle blocks, padded peak geometry and native text interval lanes; not complete typography or native acceptance",
+  "source_sha256": {
+    "app/render.py": "a1871036edcf4c0478fdf9ed3014672a97954ffc82ba9ea6430a4ecf551c0165",
+    "app/capcut_build.py": "11fb2e98dce43f503ea80401adcbf76642836cd374ce30ac5e7a2df53ef87b54",
+    "scripts/plain_subtitle_test.py": "4925d17648c8e1ea016e2e496648c7b7b3194a43fc0edc2066f1275e2015d09d",
+    "scripts/insert_export_test.py": "5e552ac1efc588cb64c75d660e18da41444ba433e96f276bef480e30bb00802f",
+    "scripts/story_target_test.py": "8090c27bd58ff21516decc82d3865975d826899c096d8e041b215c0e0680d379"
+  },
+  "changes": [
+    "Rotate each multiline center around its shared block center along the local Y axis; fit/clamp the projected block once.",
+    "Recompute padded peak quadrilaterals from selected font metrics; SAT permits separate rotated rows despite overlapping axis-aligned boxes and rejects actual cell intersections.",
+    "Reserve rotated/scaled stroke and shadow padding in pair planning.",
+    "Serialize simultaneous text segments into separate native tracks and reuse each lane only after its prior interval ends."
+  ],
+  "python_cases": {
+    "plain_subtitle": 15,
+    "subtitle_export": 15,
+    "motion_layout": 12,
+    "motion_handoff": 15,
+    "subtitle_plan": 28,
+    "motion_api": 15,
+    "motion_plan": 7,
+    "motion_freshness": 13,
+    "motion_cut": 22,
+    "web_ai_transaction": 28,
+    "manual_cut_transaction": 7,
+    "capcut_build_safety": 15,
+    "capcut_font": 7,
+    "hf_export_safety": 15,
+    "render_encoder": 6,
+    "insert_export": 16,
+    "story_target": 6
+  },
+  "python_total": 242,
+  "strong_guard_programs": 17,
+  "private_config_attempts": 0,
+  "count_note": "Reported cases from successful scoped runs; imported fixture classes can overlap other programs. These are not independent editorial scenarios.",
+  "focused_plain_cases": 15,
+  "new_focused_cases": 2,
+  "focused_geometry": "Angles -45,-12,0,30,90,180; local-axis pitch, projected corners, padded peak collision and zero-area refusal. Full isolated native build verifies two simultaneous text lanes without per-lane overlaps. Existing three-ratio CPU raster containment still passed.",
+  "actual_editor": {
+    "generated_media_only": true,
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "duration": 8.0,
+    "full_audio_video_decode": true,
+    "mp4_sha256": "a6d18d0f4a9b96ea9615763c56bdf897f982499c17e40b53a641acd0c4c66b0b",
+    "old_line_center_distance_px": 356.4,
+    "new_line_center_distance_px": 185.60255999999993,
+    "sampled_frames": [
+      {
+        "seconds": 2.267,
+        "green_pixels_per_quad": [
+          37463,
+          43070
+        ],
+        "green_pixels_outside_union_with_2px_tolerance": 0,
+        "sha256": "bf13fb9f3e9f75010f88879dc9d539309428128c6454b7b9b401ce79495e5299"
+      },
+      {
+        "seconds": 3,
+        "green_pixels_per_quad": [
+          26395,
+          30395
+        ],
+        "green_pixels_outside_union_with_2px_tolerance": 0,
+        "sha256": "e3f45b6329720ff6bbde829f04d1eaa6049637100b6d8313f6d4164eaa6d5bb1"
+      }
+    ],
+    "sample_note": "Green ink classification G>80, G>1.5R, G>1.3B; per-quad ink and union containment with 2px raster tolerance. Only these two sampled frames certify this containment.",
+    "previous_owned_mp4_unchanged": true,
+    "recipe_errors": [],
+    "playwright": "Fresh final-source owned app fixture; wait player.ready, real export, HF seek at3s; desktop1440x1000 and375x844 inspected; no horizontal body overflow. Private screenshots and paths omitted."
+  },
+  "independent_review": "Scoped source/desktop/375px review passed; reviewer independently reran strict plain15 cases with zero private-config reads. No blocking finding within this scope.",
+  "previous_ci": {
+    "head": "e2e8954062b87567e8dd35117b49cae715a215c6",
+    "run": 38783366091,
+    "result": "failure",
+    "jobs": "Install success; Windows and both Macs failed Python suites on two incomplete/inconsistent fixtures.",
+    "fixes": [
+      "Explicitly clear old plain_events when a fixture switches to a fresh pair plan; preserve the GSAP ownership assertions.",
+      "Provide native uniform clip.scale and full transform in the story preference fixture; preserve target-duration assertions."
+    ],
+    "local_fixed_results": {
+      "insert_export": 16,
+      "story_target": 6
+    },
+    "new_head_ci": "Must be observed separately after commit; never rerun the old failed head as proof of this source."
+  },
+  "limits": [
+    "Measured font-cell quadrilaterals are not decoded alpha-ink bounds for every animated frame or every renderer. Motion footprint gates retain conservative axis-aligned bounds.",
+    "Actual app fixture is generated16:9 gray/sine, sampled Thai rows and an existing generated generic motion; no customer or paid media. Three-ratio CPU raster tests are a separate scoped result.",
+    "Native track/coordinates are serialization proof only: no installed CapCut open/save/reopen/playback.",
+    "No real speech accuracy, contrast/semantic placement, watched approved pilot or full time-to-human-approval benchmark.",
+    "Karaoke, rich style runs and nonuniform scale remain incomplete or explicitly refused; existing recipes with changed measured geometry require reviewed recreation. No silent migration.",
+    "No new dependency, release, merge, batch or stability/savings claim."
+  ]
+}

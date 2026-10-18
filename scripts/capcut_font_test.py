@@ -30,25 +30,49 @@ def font_paths(templates):
 
 
 class CapCutFontTests(unittest.TestCase):
+    def test_fitted_native_text_leaves_room_for_outline_and_rounding(self):
+        from PIL import ImageFont
+        templates = json.loads(build.TEMPLATES.read_text(encoding="utf-8"))
+        build._T.update(templates)
+        mat = build._T["white"]["mat"]
+        body = json.loads(mat["content"])
+        body["styles"][0]["font"]["path"] = str(build.render.DEFAULT_FONT)
+        mat["content"] = json.dumps(body)
+        draft = {"materials": {"texts": []}}
+        segments = build._texts(draft, "white", "หรือการตอบเอกสารต่างๆ", 0, 2, -.3, 22.7,
+                                [1, 1, 1], [0, 0, 0], 1080, 1920, {})
+        self.assertEqual(len(segments), 1)
+        written = draft["materials"]["texts"][0]
+        px = written["font_size"] * build.render.CAPCUT_PX
+        font = ImageFont.truetype(str(build.render.DEFAULT_FONT), round(px))
+        self.assertLess(font.getlength("หรือการตอบเอกสารต่างๆ"), 1080 * build.render.SAFE_W)
+
     def setUp(self):
         self.original_templates = copy.deepcopy(build._T)
         build._T.clear()
         self.addCleanup(lambda: build._T.update(self.original_templates))
         self.addCleanup(build._T.clear)
 
-    def make_project(self, base):
+    def make_project(self, base, duration):
         project = base / "test project"
         project.mkdir()
-        draft = {"id": "test", "duration": 1_000_000,
-                 "materials": {"videos": [{"id": "video"}], "texts": []},
+        source = base / "source.mp4"
+        source.touch()
+        span = {"start": 0, "duration": round(duration * build.US)}
+        draft = {"id": "test", "duration": span["duration"],
+                 "canvas_config": {"width": 1080, "height": 1920},
+                 "materials": {"videos": [{"id": "video", "path": str(source)}], "texts": []},
                  "tracks": [{"type": "video", "segments": [{"material_id": "video",
-                             "target_timerange": {"start": 0, "duration": 1_000_000},
+                             "target_timerange": span, "source_timerange": span,
                              "clip": {"scale": {"x": 1.0, "y": 1.0}}, "extra_material_refs": []}]}]}
         (project / "draft_content.json").write_text(json.dumps(draft), encoding="utf-8")
         return project
 
-    def run_build(self, base, *, templates=None, installed=False, default_font=None):
-        project = self.make_project(base)
+    def run_build(self, base, *, templates=None, installed=False, default_font=None, timeline=None):
+        timeline = timeline or {"style": {}, "zoom": [], "width": 1080, "height": 1920, "look": "plain",
+                    "phrases": [], "hook": [], "broll": [], "sfx": {"on": False}, "music": {}}
+        duration = float(timeline.get("duration", 1.0))
+        project = self.make_project(base, duration)
         resources, fonts, data = base / "resources", base / "fonts", base / "user data"
         for folder in (resources, fonts, data):
             folder.mkdir()
@@ -63,9 +87,13 @@ class CapCutFontTests(unittest.TestCase):
                 shutil.copyfile(build.render.DEFAULT_FONT, target)
         config = {"fonts_dir": str(fonts), "capcut_resources": str(resources),
                   "capcut_user_data": str(data)}
-        timeline = {"style": {}, "zoom": [], "width": 1080, "height": 1920, "look": "plain",
-                    "phrases": [], "hook": [], "broll": [], "sfx": {"on": False}, "music": {}}
+        def fixture_probe(file):
+            if Path(file).resolve() == (base / "source.mp4").resolve():
+                return {"duration": duration}
+            return build.video_edit.probe(file)
         with ExitStack() as stack:
+            stack.enter_context(patch.object(build.host_platform, "capcut_running", return_value=False))
+            stack.enter_context(patch.object(build.draft_quality, "probe", side_effect=fixture_probe))
             stack.enter_context(patch.object(build.host_platform, "is_macos", return_value=True))
             stack.enter_context(patch.object(build.capcut_edit.kitconfig, "_load", return_value=config))
             # No platform font scan is needed: test real fixture font files and public template resolution.
@@ -95,6 +123,9 @@ class CapCutFontTests(unittest.TestCase):
         for material in draft["materials"]["texts"]:
             self.assertEqual(material["font_path"], expected)
             self.assertEqual(json.loads(material["content"])["styles"][0]["font"]["path"], expected)
+            self.assertEqual(material["text_size"], material["font_size"])
+            self.assertEqual(material["font_title"], build.render._font(expected)[0])
+            self.assertEqual(material["font_name"], build.render._font(expected)[0])
 
     def test_public_templates_missing_fonts_fallback_in_every_material_and_style(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -156,7 +187,7 @@ class CapCutFontTests(unittest.TestCase):
             with self.assertRaisesRegex(build.VideoEditError, "font file missing"):
                 self.run_build(base, default_font=base / "missing Kanit.ttf")
             self.assertTrue((base / "test project" / "draft_content.json").is_file())
-            self.assertFalse((base / "test project · CapCut").exists())
+            self.assertFalse(any(base.glob("test project · CapCut*")))
 
     def test_invalid_font_path_fails_explicitly_before_copying_project(self):
         templates = json.loads(build.TEMPLATES.read_text(encoding="utf-8"))
@@ -165,7 +196,7 @@ class CapCutFontTests(unittest.TestCase):
             base = Path(folder)
             with self.assertRaisesRegex(build.VideoEditError, "font path must be a string"):
                 self.run_build(base, templates=templates)
-            self.assertFalse((base / "test project · CapCut").exists())
+            self.assertFalse(any(base.glob("test project · CapCut*")))
 
 
 if __name__ == "__main__":

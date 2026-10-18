@@ -1,0 +1,72 @@
+{
+  "task_id": "146aba82-b7d1-495c-9472-868c06f5ca83",
+  "revision": "ac7b2e0",
+  "total_files": 61,
+  "total_bytes": 17428390342,
+  "total_seconds": 1795.777,
+  "groups": [
+    {
+      "group": "additional_camera",
+      "files": 4,
+      "duration_seconds": 501.735,
+      "audio_streams": 4
+    },
+    {
+      "group": "river_views",
+      "files": 14,
+      "duration_seconds": 382.048,
+      "audio_streams": 14
+    },
+    {
+      "group": "building_views",
+      "files": 6,
+      "duration_seconds": 71.513,
+      "audio_streams": 6
+    },
+    {
+      "group": "behind_the_scenes",
+      "files": 37,
+      "duration_seconds": 840.481,
+      "audio_streams": 37
+    }
+  ],
+  "probe_count": 61,
+  "frame_samples_inspected": 10,
+  "full_dialogue_asr_count": 4,
+  "baseline_asr_seconds": 78.2,
+  "dialogues": [
+    {
+      "n": 1,
+      "duration": 203.419883,
+      "asr_seconds": 43.74,
+      "rows": 84
+    },
+    {
+      "n": 2,
+      "duration": 119.61115,
+      "asr_seconds": 11.54,
+      "rows": 47
+    },
+    {
+      "n": 3,
+      "duration": 117.9178,
+      "asr_seconds": 12.79,
+      "rows": 41
+    },
+    {
+      "n": 4,
+      "duration": 60.785717,
+      "asr_seconds": 10.13,
+      "rows": 24
+    }
+  ],
+  "retry_window_seconds": 30,
+  "retry_accepted": false,
+  "retry_warning": "Batched segments longer than 30 seconds truncated; missing and unreliable content remained",
+  "direct_human_listening": false,
+  "finished_exports": 0,
+  "approved_story_count": null,
+  "provisional_topic_count": 4,
+  "final_selection_imported": false,
+  "original_media_modified": false
+}

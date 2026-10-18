@@ -1,0 +1,47 @@
+{
+  "scope": "Generated footage/tone, real app HTTP via Playwright request, editor refresh, actual pinned HyperFrames check/render/alpha decode; no UI cut-button or native acceptance",
+  "cut": [
+    3.25,
+    3.75
+  ],
+  "old_duration": 4.0,
+  "new_duration": 3.5,
+  "stable_id": true,
+  "old_media_bytes_retained": true,
+  "undo_exact_original_overlay": true,
+  "new_media_retained_after_undo": true,
+  "emphasis_start_before": 2.0,
+  "emphasis_start_after": 1.5,
+  "normal_end_after": 3.5,
+  "old_media": {
+    "duration": 4.0,
+    "fps": 30.0,
+    "width": 1920,
+    "height": 1080,
+    "sha256": "eaee18443f9a7df5d2f2465d1065ec5924c7d88edc78ab36177064b01160b382",
+    "alpha_decode": true
+  },
+  "new_media": {
+    "duration": 3.5,
+    "fps": 30.0,
+    "width": 1920,
+    "height": 1080,
+    "sha256": "3b9606d4f6019996c9dc7409ad56056fe80cc5c002b8754146e62c156ed83895",
+    "alpha_decode": true
+  },
+  "source_sha256": {
+    "app/motion_plan.py": "1d35108c020bcb16d8d110927a11bfb18bb483df54424292d11f5fb3873c3bb3",
+    "app/capcut_edit.py": "133af156a4667f959a05b6dc2d7df8f90bb370ef1385722da35cc775ad2c9b9a",
+    "app/video_editor.py": "0d3bc1dd0d136ddff79a28155591a723436273a893cca92daed46024beefcba8",
+    "app/web_ai_json.py": "b9caed162de5370c5c2042b805d654a6249e0aa10ead710641062a713721aaa3",
+    "motion/sentence-pair/index.html": "a947a18a436db029f15e8bb0ea12b26decf152951e6ece6c9536c93ac254523f"
+  },
+  "retries_and_limits": [
+    "Initial fixture wait used iframe instead of custom player and timed out before writes",
+    "Missing fixture output directory rejected initial request; created fixture directory",
+    "Fixture media route refused old output location; byte preservation verified separately by local SHA256 against recipe",
+    "After successful cut, null timeline wait failed; resumed at editor refresh/undo without repeating render",
+    "Screenshots private; synthetic sine tone is not spoken timing evidence",
+    "No process-crash durable journal or real/native/human acceptance"
+  ]
+}

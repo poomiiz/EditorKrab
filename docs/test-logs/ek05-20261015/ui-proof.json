@@ -1,0 +1,37 @@
+{
+  "fixture_only": true,
+  "authentication_tested": false,
+  "native_capcut_opened": false,
+  "desktop": {
+    "width": 1440,
+    "height": 1000
+  },
+  "mobile": {
+    "width": 375,
+    "height": 1000,
+    "scroll_width": 375
+  },
+  "controls_44px": [
+    "pl",
+    "pp",
+    "po",
+    "pq",
+    "pc",
+    "ps",
+    "pm",
+    "pcut"
+  ],
+  "actions": [
+    "Changed emphasis and saved source correction explicitly",
+    "Changed caption and saved it with source and choices in one draft/phrases request",
+    "Saved repeated subtitle rows; first/second IDs and 1.234/2.345 timings retained; no replacement words sent"
+  ],
+  "console": [
+    "favicon.ico 404 only"
+  ],
+  "limits": [
+    "Actual source handlers and CSS rendered in an isolated fixture with stub API responses",
+    "The native-looking confirmation in fixture is existing UI copy, not native opening evidence",
+    "Second panel is a DOM/payload fixture; screenshot visual acceptance applies to the phrase panel only"
+  ]
+}

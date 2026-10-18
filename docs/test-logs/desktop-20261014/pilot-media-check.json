@@ -1,0 +1,22 @@
+{
+  "duration_s": 30.0,
+  "streams": [
+    {
+      "codec_type": "video",
+      "codec_name": "h264",
+      "width": 1920,
+      "height": 1080,
+      "r_frame_rate": "25/1"
+    },
+    {
+      "codec_type": "audio",
+      "codec_name": "aac",
+      "width": null,
+      "height": null,
+      "r_frame_rate": "0/0"
+    }
+  ],
+  "sha256": "4531e0227169bd8d6abc53bcc1be1dc12e888029f388b32d4095e30349712899",
+  "decode_exit": 0,
+  "decode_error_lines": 0
+}

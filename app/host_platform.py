@@ -22,7 +22,7 @@ def hyperframes_command(command: list[str], project: Path, env: dict[str, str]) 
     """Keep Mac preview/render cleanup inside the process tree EditorKrab owns."""
     if not is_macos():
         return command
-    if command[2:3] != ["hyperframes@0.8.101"] or command[3] not in {"preview", "render"}:
+    if command[2:3] != ["hyperframes@0.8.101"] or command[3] not in {"preview", "render", "check"}:
         raise RuntimeError("Mac launcher needs review for this HyperFrames version/command")
     node = shutil.which("node", path=env.get("PATH"))
     if not node:
@@ -378,7 +378,12 @@ def stop_owned_preview(proc, expected: ProcessIdentity | None) -> None:
     if expected is None or not same_process(expected, process_identity(proc.pid)):
         raise RuntimeError("Preview process identity changed; refusing to stop it")
     root = psutil.Process(proc.pid)
-    children = [process_identity(child.pid) for child in root.children(recursive=True)]
+    children = []
+    for child in root.children(recursive=True):
+        try:
+            children.append(process_identity(child.pid))
+        except psutil.NoSuchProcess:
+            continue  # Includes a child that became a zombie during enumeration.
     if not same_process(expected, process_identity(proc.pid)):
         raise RuntimeError("Preview process identity changed; refusing to stop it")
     for snapshot in reversed(children):

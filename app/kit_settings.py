@@ -6,6 +6,8 @@ and report through GET /api/kit/job/{name}.
 from __future__ import annotations
 
 import atomic
+from contextlib import contextmanager
+from contextvars import ContextVar
 import host_platform
 import jobstore
 import json
@@ -340,6 +342,8 @@ def motion_templates() -> dict[str, dict[str, Any]]:
             spec = json.loads(m.group(1))
         except json.JSONDecodeError as exc:
             raise HTTPException(500, f"motion/{page.parent.name}: bad clipkit-motion JSON: {exc}")
+        if spec.get("status", "ready") != "ready":
+            continue
         out[page.parent.name] = spec
     return out
 
@@ -397,56 +401,186 @@ class MotionRequest(BaseModel):
     template: str
     name: str              # output file name (no extension)
     params: dict[str, Any]
+    width: int | None = Field(default=None, ge=1, le=8192, strict=True)
+    height: int | None = Field(default=None, ge=1, le=8192, strict=True)
+    placement: dict[str, Any] | None = None
+
+
+_motion_destination = ContextVar("motion_destination", default=None)
+
+
+@contextmanager
+def motion_destination(directory: Path):
+    """AI transactions own their new assets; never render over an existing project's MOV."""
+    token = _motion_destination.set(directory)
+    try:
+        yield
+    finally:
+        _motion_destination.reset(token)
+
+
+def sentence_pair_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Reject invented clocks before starting a renderer; measured project events are the preferred input."""
+    import math
+    import render
+    import subtitle_plan
+    from video_edit import VideoEditError
+    out = dict(params)
+    try:
+        W, H = out.get("width", 1080), out.get("height", 1920)
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 < v <= 8192 or int(v) != v for v in (W, H)):
+            raise VideoEditError("sentence-pair: canvas width/height ไม่ถูกต้อง")
+        events = out.get("subtitle_events")
+        if events is None:
+            pairs, clocks = out.get("pairs"), out.get("word_times")
+            if not isinstance(pairs, list) or not pairs:
+                raise VideoEditError("sentence-pair: เลือกช่วงซับจริงจาก Timeline ก่อนสร้าง motion")
+            if not isinstance(clocks, (list, dict)):
+                raise VideoEditError("sentence-pair: ไม่มีเวลาระดับคำจริง · เลือกซับจาก Timeline หรือแนบ word_times ก่อนสร้าง")
+            family, font = render._font(out.get("font"))
+            look = render.pair_look({}, int(W), int(H))
+            scale = render.CAPCUT_PX * min(W, H) / 1080
+            for role, size, top in (("lead", "normal_size", "normal_top"), ("punch", "punch_size", "punch_top")):
+                part = look[role]
+                look[role] = ((float(out[size]) * H / 1920 / scale) if size in out else part[0],
+                              (1 - 2 * float(out[top]) / 1920) if top in out else part[1], *part[2:])
+            look["fixed_size"] = out.get("sizing") == "fixed"
+            phrases = []
+            for n, pair in enumerate(pairs):
+                if not isinstance(pair, list) or len(pair) != 5:
+                    raise VideoEditError(f"sentence-pair {n}: pairs ไม่ถูกต้อง")
+                a, b, lead, punch, _ = pair
+                words = clocks[n] if isinstance(clocks, list) and n < len(clocks) else clocks.get(str(n)) if isinstance(clocks, dict) else None
+                phrases.extend(subtitle_plan.resolve(lead + " " + punch, [[lead, punch]], words,
+                                                     cue_id=f"pair-{n}", start=a, end=b))
+            events = render.pair_events(phrases, look, int(W), int(H), family, font)
+        if not isinstance(events, list) or not events:
+            raise VideoEditError("sentence-pair: ไม่มีข้อความที่แสดงในช่วงนี้")
+        for event in events:
+            if not isinstance(event, dict) or event.get("role") not in {"normal", "emphasis", "caption", "second"}:
+                raise VideoEditError("sentence-pair: role event ไม่ถูกต้อง")
+            keys = ("start", "end", "size_px", "center_x_px", "center_y_px", "rotation", "outline_px", "shadow")
+            if any(isinstance(event.get(k), bool) or not isinstance(event.get(k), (int, float)) or not math.isfinite(event[k]) for k in keys):
+                raise VideoEditError("sentence-pair: event ต้องเป็นตัวเลข finite")
+            if not 0 <= event["start"] < event["end"] <= 120 or event["size_px"] <= 0 or event["outline_px"] < 0 or event["shadow"] < 0:
+                raise VideoEditError("sentence-pair: ช่วงหรือขนาดข้อความไม่ถูกต้อง")
+            if not isinstance(event.get("text"), str) or not event["text"].strip() or event.get("effect") not in {"none", "fade", "pop"}:
+                raise VideoEditError("sentence-pair: ข้อความหรือ effect ไม่ถูกต้อง")
+            for color in (event.get("fill"), event.get("stroke")):
+                if not isinstance(color, list) or len(color) != 3 or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 1 for v in color):
+                    raise VideoEditError("sentence-pair: สีข้อความไม่ถูกต้อง")
+            font = Path(event.get("font_file") or "")
+            if font.suffix.lower() not in {".ttf", ".otf", ".ttc"} or not font.is_file() or not isinstance(event.get("font_family"), str):
+                raise VideoEditError("sentence-pair: ไม่พบฟอนต์ที่ใช้วัดข้อความ")
+            if render._font(str(font))[0] != event["font_family"]:
+                raise VideoEditError("sentence-pair: ชื่อฟอนต์ไม่ตรงกับไฟล์ที่ใช้วัด")
+        events = render.check_pair_events(events, int(W), int(H))
+        out.update(width=W, height=H, subtitle_events=events)
+        return out
+    except (VideoEditError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+def _motion_project(plan: dict, work: Path) -> Path:
+    """Build only inside the caller's owned staging folder using the measured font bytes."""
+    import re
+    import shutil
+    shutil.copytree(Path(plan["inputs"]["template"]).parent, work, dirs_exist_ok=True)
+    page = (work / "index.html").read_text(encoding="utf-8")
+    params = dict(plan["source_params"])
+    if plan["layout"] is not None:
+        params["layout"] = plan["layout"]
+    kit = json.dumps(params, ensure_ascii=False).replace("</", "<\\/")
+    script = f"<script>window.KIT = {kit};</script>"
+    if plan["layout"] is not None:
+        script += "<script>" + Path(plan["inputs"]["runtime"]).read_text(encoding="utf-8").replace("</", "<\\/") + "</script>"
+    page, count = re.subn(r"<head>", lambda _: "<head>\n" + script, page, count=1)
+    if count != 1:
+        raise HTTPException(400, "motion template has no <head>")
+    length = f'{plan["duration"]:.9f}'.rstrip("0").rstrip(".")
+    page, count = re.subn(r'data-duration="[\d.]+"', f'data-duration="{length}"', page)
+    if not count:
+        raise HTTPException(400, "motion template has no duration")
+    W, H = plan["canvas"]["width"], plan["canvas"]["height"]
+    page = re.sub(r'<meta name="viewport"[^>]*>', f'<meta name="viewport" content="width={W}, height={H}">', page)
+    page = re.sub(r'data-width="[\d.]+"', f'data-width="{W}"', page)
+    page = re.sub(r'data-height="[\d.]+"', f'data-height="{H}"', page)
+    fonts = (list(dict.fromkeys((e["font_family"], e["font_file"]) for e in params["subtitle_events"]))
+             if plan["layout"] is None else [(plan["layout"]["font_face"], plan["inputs"]["font"])])
+    rules = [f'html,body{{width:{W}px;height:{H}px;font-synthesis:none}}']
+    for index, (family, source) in enumerate(fonts):
+        font = Path(source)
+        filename = f'{"subtitle" if plan["layout"] is None else "motion"}-font-{index}{font.suffix}'
+        shutil.copyfile(font, work / filename)
+        rules.append(f'@font-face{{font-family:{json.dumps(family)};src:url("{filename}");font-weight:700;font-style:normal}}')
+    page = page.replace("</head>", "<style>" + "".join(rules).replace("</", "<\\/") + "</style></head>", 1)
+    atomic.write_text(work / "index.html", page, encoding="utf-8")
+    return work / "index.html"
 
 
 @router.post("/motion")
 def make_motion(body: MotionRequest) -> dict[str, Any]:
-    """Render a motion template with the user's words to a transparent MOV in <output_dir>/motion."""
+    """Validate, check and decode a new exact-canvas motion revision before publishing it."""
     import re
     import shutil
     import tempfile
-    specs = motion_templates()
-    if body.template not in specs:
+    import motion_plan
+    import render_process
+    from video_edit import VideoEditError
+    if body.template not in motion_templates():
         raise HTTPException(400, f"unknown motion template: {body.template}")
+    try:
+        plan = motion_plan.prepare_template(body.template, body.params, width=body.width,
+                                            height=body.height, placement=body.placement)
+        if not .5 <= plan["duration"] <= 120:
+            raise VideoEditError("motion duration must be0.5-120seconds")
+    except VideoEditError as exc:
+        raise HTTPException(400, str(exc)) from exc
     npx = shutil.which("npx")
     if not npx:
         raise HTTPException(400, "Node.js (npx) is not installed - run setup")
     cfg = _read_config()
-    out_dir = Path(cfg.get("output_dir") or cfg.get("work_root") or "") / "motion"
-    if not out_dir.parent.is_dir():
+    private = _motion_destination.get()
+    out_dir = private if private is not None else Path(cfg.get("output_dir") or cfg.get("work_root") or "") / "motion"
+    if private is None and not out_dir.parent.is_dir():
         raise HTTPException(400, "set the workspace folder in Settings first")
     out_dir.mkdir(parents=True, exist_ok=True)
-    work = Path(tempfile.mkdtemp(prefix="clipkit_motion_"))
-    shutil.copytree(KIT / "motion" / body.template, work, dirs_exist_ok=True)
-    page = (work / "index.html").read_text(encoding="utf-8")
-    kit = json.dumps(body.params, ensure_ascii=False).replace("</", "<\\/")
-    page, n = re.subn(r"<head>", lambda _: f"<head>\n<script>window.KIT = {kit};</script>", page, count=1)
-    if not n:
-        raise HTTPException(500, "template has no <head>")
-    # the renderer reads the clip length from the HTML attributes, not from the script
-    try:
-        p = body.params
-        how = specs[body.template].get("length", "duration")
-        length = max(float(x[1]) for x in p["pairs"]) if how == "pairs" else float(p[how])
-    except (KeyError, TypeError, ValueError, IndexError) as exc:
-        raise HTTPException(400, f"missing or bad length in params: {exc}")
-    if not 0.5 <= length <= 120:
-        raise HTTPException(400, f"length must be 0.5-120 s, got {length}")
-    page, n = re.subn(r'data-duration="[\d.]+"', f'data-duration="{length:g}"', page)
-    if not n:
-        raise HTTPException(500, "template has no data-duration")
-    atomic.write_text((work / "index.html"), page, encoding="utf-8")
     name = re.sub(r'[\\/:*?"<>|]+', "", body.name).strip()[:40] or body.template
-    target = out_dir / f"{name}.mov"
-    env = {**__import__("os").environ, "HYPERFRAMES_SKIP_SKILLS": "1"}
-    command = host_platform.hyperframes_command(
-        [npx, "--yes", f"hyperframes@{HF_VERSION}", "render", "--format", "mov", "--quiet", "--workers", "4", "-o", str(target)], work, env)
-    r = subprocess.run(command, cwd=str(work), capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", env=env, timeout=900)
-    shutil.rmtree(work, ignore_errors=True)
-    if r.returncode != 0 or not target.is_file():
-        raise HTTPException(500, "motion render failed: " + (r.stderr or r.stdout).strip()[-500:])
-    return {"file": str(target)}
+    target = out_dir / f"{name}-{__import__('uuid').uuid4().hex}.mov"
+    work = Path(tempfile.mkdtemp(prefix="clipkit_motion_"))
+    try:
+        _motion_project(plan, work)
+        env = {**__import__("os").environ, "HYPERFRAMES_SKIP_SKILLS": "1", "HYPERFRAMES_NO_TELEMETRY": "1"}
+        length = plan["duration"]
+        times = sorted({0, min(.04, length / 10), length * .15, length * .35, length * .65, max(0, length - 1 / 30)})
+        command = host_platform.hyperframes_command([npx, "--yes", f"hyperframes@{HF_VERSION}", "check", "--json",
+                    "--at", ",".join(f"{t:.6f}" for t in times), "--at-transitions"], work, env)
+        checked = render_process.run(command, cwd=str(work), capture_output=True, text=True,
+                                     encoding="utf-8", errors="replace", env=env, timeout=300)
+        try:
+            proof = json.loads(checked.stdout)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(500, "motion check returned no valid report: " + (checked.stderr or checked.stdout)[-600:]) from exc
+        if checked.returncode or not isinstance(proof, dict) or proof.get("ok") is not True:
+            raise HTTPException(400, "motion check failed before encoding: " + (checked.stdout or checked.stderr)[-800:])
+        motion_plan.verify_inputs(plan)
+        command = host_platform.hyperframes_command([npx, "--yes", f"hyperframes@{HF_VERSION}", "render",
+                    "--format", "mov", "--quiet", "--workers", "4", "-o", str(target)], work, env)
+        rendered = render_process.run(command, cwd=str(work), capture_output=True, text=True,
+                                      encoding="utf-8", errors="replace", env=env, timeout=900)
+        if rendered.returncode or not target.is_file():
+            raise HTTPException(500, "motion render failed: " + (rendered.stderr or rendered.stdout)[-600:])
+        media = motion_plan.verify_media(target, plan)
+        motion_plan.verify_inputs(plan)
+        recipe = {"version": 1, "template": body.template, "params": plan["source_params"], "inputs": plan["inputs"],
+                  "hashes": plan["hashes"], "layout_sha256": plan["layout_sha256"], "canvas": plan["canvas"],
+                  "placement": plan["placement"], "bounds": plan["bounds"], "duration": plan["duration"], "media": media}
+        return {"file": str(target), "recipe": recipe, "check": proof}
+    except BaseException:
+        target.unlink(missing_ok=True)
+        raise
+    finally:
+        shutil.rmtree(work)
 
 
 class FramesRequest(BaseModel):
@@ -768,60 +902,16 @@ class BugReport(BaseModel):
     auto: bool = False   # sent by the app on its own when it hit an error, not typed by a person
 
 
-_auto_sent: set[str] = set()   # auto reports already sent by this run, so one error loop sends once
-
-
-def _send_report(report: dict[str, Any]) -> bool:
-    """POST the report to the team hub's bug_reports table (Supabase, anon key: insert only).
-    False when this install has no hub set; raises when the hub refuses or cannot be reached."""
-    import urllib.request
-    cfg = _read_config()
-    url, key = cfg.get("supabase_url", ""), cfg.get("supabase_anon_key", "")
-    if not (url and key):
-        return False
-    home = str(Path.home())   # the hub is not public, but a user folder still has no business in it
-    row = {"text": report["text"].replace(home, "~")[:5000], "page": report["page"][:300],
-           "version": str(report["version"] or "")[:50], "commit": str(report["commit"] or "")[:50],
-           "errors": [e.replace(home, "~")[:1000] for e in report["errors"]]}
-    req = urllib.request.Request(url.rstrip("/") + "/rest/v1/bug_reports", method="POST",
-                                 data=json.dumps(row, ensure_ascii=False).encode("utf-8"),
-                                 headers={"apikey": key, "Authorization": f"Bearer {key}",
-                                          "Content-Type": "application/json", "Prefer": "return=minimal"})
-    urllib.request.urlopen(req, timeout=10).close()
-    return True
-
-
 def report_bug(text: str, page: str = "", errors: list[str] | None = None, auto: bool = False) -> dict[str, Any]:
-    """Keep the report on this machine, send it to the team hub when one is set, else hand back a GitHub issue link."""
-    import platform
+    """Compatibility for old clients: never transmit diagnostics; return a manual GitHub draft."""
     import urllib.parse
+    if auto:
+        return {"sent": False, "skipped": True}
     if not text.strip():
         raise HTTPException(400, "เขียนอาการก่อน")
-    if auto:
-        if not _read_config().get("auto_bug_report", True) or text in _auto_sent:
-            return {"sent": False, "skipped": True}
-        _auto_sent.add(text)
-    v = version()
-    report = {"time": time.strftime("%Y-%m-%d %H:%M:%S"), "text": text.strip(), "page": page,
-              "version": v.get("version"), "commit": v.get("commit"), "machine": platform.node(),
-              "errors": (errors or [])[-10:]}
-    folder = KIT / "bug_reports"
-    folder.mkdir(exist_ok=True)
-    f = folder / f"{time.strftime('%Y%m%d-%H%M%S')}.json"
-    atomic.write_text(f, json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
-    try:
-        if _send_report(report):
-            return {"saved": str(f), "sent": True}
-    except OSError as exc:   # URLError and HTTPError are OSErrors
-        raise HTTPException(502, f"บันทึกในเครื่องแล้ว แต่ส่งถึงทีมไม่ได้: {exc}") from exc
-    md = chr(10).join([report["text"], "", f"- page: {report['page']}",
-                     f"- version: {report['version']} ({report['commit']})",
-                     f"- time: {report['time']}", "", "errors:", "```",
-                     *report["errors"], "```"])
-    md = md.replace(str(Path.home()), "~")   # the issue is public: no machine name or user folder in it
-    title = report["text"].splitlines()[0][:80]
-    url = "https://github.com/poomiiz/EditorKrab/issues/new?" + urllib.parse.urlencode({"title": "[bug] " + title, "body": md[:6000]})
-    return {"saved": str(f), "sent": False, "issue_url": url}
+    url = "https://github.com/poomiiz/EditorKrab/issues/new?" + urllib.parse.urlencode(
+        {"title": "[bug] EditorKrab", "body": text.strip()[:5000]})
+    return {"sent": False, "issue_url": url}
 
 
 @router.post("/bug-report")

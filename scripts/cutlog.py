@@ -7,11 +7,10 @@ Everything goes under <output_dir>/logs/ (config.json):
 
     python scripts/cutlog.py feedback "<project folder>" "ซับยาวไป" [--fix "ตัดท่อนเหลือ 8-14 ตัว"]
     python scripts/cutlog.py report            # zip the logs to send back (no video inside)
-    python scripts/cutlog.py sheet "<Apps Script web app URL>"   # also send each row to the team Google Sheet
+    python scripts/cutlog.py sheet "<legacy URL>"   # retained command: automatic uploads are disabled
 
 Every finished clip is also checked against the editing rules (analyze()); the result goes into the log, back to
-the agent through run_clip's output, and - when a sheet URL is set - to the team sheet as numbers and problems
-only (never the spoken words).
+the caller through run_clip's output. Logs remain on this machine; report problems manually on GitHub.
 """
 from __future__ import annotations
 
@@ -75,80 +74,24 @@ def _subtitle_stats(project: Path) -> dict:
     return {"normal_letters": stat(leads), "emphasis_letters": stat(punches), "looks": looks}
 
 
-# the rules the analysis checks (letters exclude spaces); change them here when the editing rules change
-RULES = {"normal": (4, 18), "emphasis": (2, 16), "emphasis_share": (0.25, 0.7), "title_letters": (3, 20),
-         "cuts_per_min": (6, 45), "min_length_s": 40}
-
-
 def analyze(project: Path, max_s: float | None, length: float, cuts: int | None) -> dict:
-    """The finished clip checked against the rules: [{check, ok, detail}] and a score."""
-    checks = []
-    add = lambda name, ok, detail="": checks.append({"check": name, "ok": bool(ok), "detail": detail})  # noqa: E731
-    p = project / "clipkit_punch.json"
-    if not p.is_file():
-        add("คำเน้น", False, "ไม่มีไฟล์คำเน้น (AI ข้ามขั้นเลือกคำเน้น)")
-    else:
-        lo_n, hi_n = RULES["normal"]
-        lo_e, hi_e = RULES["emphasis"]
-        long_n, short_n, long_e, coloured, shown = [], [], [], 0, 0
-        for items in json.loads(p.read_text(encoding="utf-8")).values():
-            for it in items:
-                opts = next((x for x in it[2:] if isinstance(x, dict)), {}) or {}
-                if opts.get("look") == "skip":
-                    continue
-                w, c = opts.get("show") or (it[0], it[1])
-                w, c = w.replace(" ", ""), c.replace(" ", "")
-                shown += 1
-                coloured += bool(c) and opts.get("look") != "white"
-                if w and len(w) > hi_n:
-                    long_n.append(w)
-                if w and len(w) < lo_n and not c:
-                    short_n.append(w)
-                if c and len(c) > hi_e:
-                    long_e.append(c)
-        add("ซับปกติยาวเกิน", not long_n, f"{len(long_n)} ท่อนเกิน {hi_n} ตัวอักษร" if long_n else "")
-        add("ซับสั้นเกิน", len(short_n) <= max(2, shown // 10), f"{len(short_n)} ท่อนสั้นกว่า {lo_n} ตัวอักษร" if short_n else "")
-        add("คำเน้นยาวเกิน", not long_e, f"{len(long_e)} ท่อนเกิน {hi_e} ตัวอักษร" if long_e else "")
-        share = coloured / shown if shown else 0
-        lo, hi = RULES["emphasis_share"]
-        add("สัดส่วนคำเน้น", lo <= share <= hi, f"{share:.0%} ของท่อน (ควร {lo:.0%}-{hi:.0%})")
-    h = project / "clipkit_hook.json"
-    if not h.is_file():
-        add("หัวคลิป", False, "ไม่มีหัวคลิป")
-    else:
-        lines = [x.get("text", "").replace(" ", "") for x in json.loads(h.read_text(encoding="utf-8"))]
-        lo, hi = RULES["title_letters"]
-        add("หัวคลิป", all(lo <= len(x) <= hi for x in lines), " / ".join(f"{len(x)} ตัว" for x in lines))
-    if max_s:
-        add("ความยาวไม่เกินที่สั่ง", length <= max_s + 1, f"{length:.0f} วิ (สั่ง {max_s:.0f})")
-    add("ความยาวขั้นต่ำ", length >= RULES["min_length_s"], f"{length:.0f} วิ")
-    if cuts is not None and length:
-        per_min = cuts / (length / 60)
-        lo, hi = RULES["cuts_per_min"]
-        add("จังหวะตัด", lo <= per_min <= hi, f"{per_min:.0f} จุด/นาที (ควร {lo}-{hi})")
+    """Record editorial observations; only a valid duration is a machine acceptance check."""
+    import math
+    checks = [{"check": "ความยาวใช้งานได้", "ok": math.isfinite(length) and length > 0,
+               "detail": f"{length:.2f} วิ"}]
+    observations = {"target_seconds": max_s, "duration_seconds": length,
+                    "target_is_approximate": True, **_subtitle_stats(project)}
+    if cuts is not None and length > 0:
+        observations["cuts_per_minute"] = round(cuts / (length / 60), 2)
     passed = sum(c["ok"] for c in checks)
     return {"score": f"{passed}/{len(checks)}", "checks": checks,
-            "problems": [f"{c['check']}: {c['detail']}".rstrip(": ") for c in checks if not c["ok"]]}
+            "problems": [f"{c['check']}: {c['detail']}" for c in checks if not c["ok"]],
+            "observations": observations, "human_review": "pending"}
 
 
 def _sheet(row: dict) -> str:
-    """Send one row to the team Google Sheet (Apps Script web app in config.json "report_url")."""
-    import urllib.request
-    sys.path.insert(0, str(ROOT / "app"))
-    import kit_settings
-    # off unless this machine set config.json "report_url" (python scripts/cutlog.py sheet <url>); "off" = do not send
-    url = kit_settings._read_config().get("report_url", "")
-    if url == "off":
-        url = ""
-    if not url:
-        return "sheet: off (no report_url in config.json)"
-    try:
-        req = urllib.request.Request(url, data=json.dumps(row, ensure_ascii=False).encode("utf-8"),
-                                     headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return "sheet: sent" if r.status == 200 else f"sheet: HTTP {r.status}"
-    except Exception as exc:  # the clip is done either way: say the upload failed, the local log keeps the row
-        return f"sheet: NOT sent ({exc})"
+    """Legacy callback: logs stay local; old webhook settings never transmit automatically."""
+    return "sheet: disabled (local logs only; report issues manually on GitHub)"
 
 
 def log_run(raw: str, story: dict, n: int, project: str, args: dict, length: float) -> dict:
@@ -166,7 +109,8 @@ def log_run(raw: str, story: dict, n: int, project: str, args: dict, length: flo
            "preset": style.get("preset"), "look": style.get("anim"), "args": args, "cuts": cuts,
            "hook": json.loads(hook.read_text(encoding="utf-8")) if hook.is_file() else None,
            "subtitles": _subtitle_stats(proj), "snapshot": _snapshot(proj, "run")}
-    row["analysis"] = analyze(proj, args.get("max"), length, cuts)
+    target = args["max_minutes"] * 60 if args.get("max_minutes") is not None else args.get("max")
+    row["analysis"] = analyze(proj, target, length, cuts)
     with open(logs_dir() / "runs.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
     sub = row["subtitles"]
@@ -226,14 +170,7 @@ def main() -> int:
             sys.exit(f"project folder not found: {a.project}")
         feedback(a.project, a.said, a.fix)
     elif a.cmd == "sheet":
-        if not a.url.startswith("https://script.google.com/"):
-            sys.exit("that is not an Apps Script web app URL (https://script.google.com/macros/s/.../exec)")
-        cfg_f = ROOT / "config.json"
-        cfg = json.loads(cfg_f.read_text(encoding="utf-8-sig"))
-        cfg["report_url"] = a.url
-        cfg_f.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(_sheet({"type": "test", "time": time.strftime("%Y-%m-%d %H:%M:%S"), "version": version(),
-                      "problems": "test row from clipkit sheet"}))
+        print(_sheet({}))
     elif a.cmd == "ping":
         print(_sheet({"type": "machine", **_who(), "time": time.strftime("%Y-%m-%d %H:%M:%S"), "version": version(),
                       "video": "(เครื่อง)", "problems": a.event}))

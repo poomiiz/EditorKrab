@@ -86,7 +86,7 @@ def render_evidence(proof: Path, font: Path, family: str) -> dict:
         fixture = Path(folder)
         (fixture / "fonts").mkdir()
         shutil.copyfile(font, fixture / "fonts" / font.name)
-        ass = ("[Script Info]\nScriptType: v4.00+\nPlayResX: 640\nPlayResY: 360\nWrapStyle: 2\n\n"
+        ass = ("[Script Info]\nScriptType: v4.00+\nPlayResX: 640\nPlayResY: 360\nWrapStyle: 2\nKerning: yes\n\n"
                "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, "
                "BorderStyle, Outline, Shadow, Alignment, Encoding\n"
                f"Style: S,{family},42,&H00FFFFFF,&H00000000,1,1,0,5,1\n\n"

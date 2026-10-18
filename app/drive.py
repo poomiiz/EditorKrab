@@ -162,16 +162,30 @@ def _folder(token: str) -> str:
     return folder["id"]
 
 
+def _check_restricted(file_id: str, token: str) -> None:
+    query = urllib.parse.urlencode({"fields": "permissions(type),nextPageToken", "pageSize": 100})
+    data, _ = _call(f"{API}/files/{file_id}/permissions?{query}", None, _auth(token))
+    permissions = data.get("permissions")
+    if not isinstance(permissions, list) or not permissions or data.get("nextPageToken"):
+        raise HTTPException(409, "ตรวจสิทธิ์ Drive ไม่ครบ เปิด Drive เพื่อตรวจสอบ")
+    if any(p.get("type") not in ("user", "group") for p in permissions):
+        raise HTTPException(409, "ไฟล์หรือโฟลเดอร์ Drive เปิดกว้างอยู่ ตั้งเป็นจำกัดก่อน")
+
+
 def share_file(path: Path) -> dict[str, Any]:
-    """Upload once per name+size, let anyone with the link watch it, return the link."""
+    """Upload without granting public access; the owner shares with chosen reviewers in Drive."""
     size = path.stat().st_size
-    key = f"{path.name}|{size}"
+    with path.open("rb") as source:
+        key = f"{path.name}|{hashlib.file_digest(source, 'sha256').hexdigest()}"
     with _lock:
+        token = _access_token()
         known = _load().get("shared", {}).get(key)
         if known:
-            return {**known, "uploaded": False}
-        token = _access_token()
-        meta = json.dumps({"name": path.name, "parents": [_folder(token)]}).encode()
+            _check_restricted(known["id"], token)
+            return {**known, "uploaded": False, "access": "restricted"}
+        folder = _folder(token)
+        _check_restricted(folder, token)
+        meta = json.dumps({"name": path.name, "parents": [folder]}).encode()
         _, headers = _call(UPLOAD, meta, _auth(token, {"Content-Type": "application/json; charset=UTF-8",
                                                       "X-Upload-Content-Type": "video/mp4",
                                                       "X-Upload-Content-Length": str(size)}), "POST")
@@ -181,13 +195,12 @@ def share_file(path: Path) -> dict[str, Any]:
         with path.open("rb") as stream:
             uploaded, _ = _call(session, stream, _auth(token, {"Content-Type": "video/mp4", "Content-Length": str(size)}),
                                 "PUT", timeout=3600)
-        permission = json.dumps({"role": "reader", "type": "anyone"}).encode()
-        _call(f"{API}/files/{uploaded['id']}/permissions", permission, _auth(token, {"Content-Type": "application/json"}), "POST")
+        _check_restricted(uploaded["id"], token)
         link = uploaded.get("webViewLink") or f"https://drive.google.com/file/d/{uploaded['id']}/view"
         data = _load()
         data.setdefault("shared", {})[key] = {"id": uploaded["id"], "link": link}
         _save(data)
-        return {"id": uploaded["id"], "link": link, "uploaded": True}
+        return {"id": uploaded["id"], "link": link, "uploaded": True, "access": "restricted"}
 
 
 class Setup(BaseModel):
@@ -241,8 +254,7 @@ def disconnect(request: Request) -> dict[str, bool]:
 
 @router.post("/organizations/{org}/projects/{project}/share")
 def share_export(org: UUID, project: UUID, request: Request) -> dict[str, Any]:
-    """The project's submitted MP4 (from the team exports folder) to Drive, with a link anyone can open,
-    saved on the project so reviewers see it."""
+    """Upload the submitted MP4 without broadening Drive access; save the link on the team project."""
     hub._same_origin(request)
     item = next((p for p in workspace.projects(org, request) if p["id"] == str(project)), None)
     if not item:

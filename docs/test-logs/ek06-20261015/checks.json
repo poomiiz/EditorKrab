@@ -1,0 +1,196 @@
+[
+  {
+    "program": "story_target_test.py",
+    "exit_code": 0,
+    "elapsed_s": 2.328,
+    "reported_cases": 6
+  },
+  {
+    "program": "subtitle_plan_test.py",
+    "exit_code": 0,
+    "elapsed_s": 6.547,
+    "reported_cases": 28
+  },
+  {
+    "program": "subtitle_export_test.py",
+    "exit_code": 0,
+    "elapsed_s": 2.219,
+    "reported_cases": 15
+  },
+  {
+    "program": "spelling_scope_test.py",
+    "exit_code": 0,
+    "elapsed_s": 2.875,
+    "reported_cases": 20
+  },
+  {
+    "program": "subtitle_timing_test.py",
+    "exit_code": 0,
+    "elapsed_s": 1.375,
+    "reported_cases": 14
+  },
+  {
+    "program": "subtitle_merge_test.py",
+    "exit_code": 0,
+    "elapsed_s": 3.797,
+    "reported_cases": 6
+  },
+  {
+    "program": "cue_occurrence_test.py",
+    "exit_code": 0,
+    "elapsed_s": 3.656,
+    "reported_cases": 10
+  },
+  {
+    "program": "trim_timing_test.py",
+    "exit_code": 0,
+    "elapsed_s": 1.875,
+    "reported_cases": 12
+  },
+  {
+    "program": "capcut_font_test.py",
+    "exit_code": 0,
+    "elapsed_s": 1.125,
+    "reported_cases": 7
+  },
+  {
+    "program": "preset_from_capcut_test.py",
+    "exit_code": 0,
+    "elapsed_s": 0.359,
+    "reported_cases": 4
+  },
+  {
+    "program": "motion_handoff_test.py",
+    "exit_code": 0,
+    "elapsed_s": 2.922,
+    "reported_cases": 14
+  },
+  {
+    "program": "motion_cut_test.py",
+    "exit_code": 0,
+    "elapsed_s": 1.407,
+    "reported_cases": null
+  },
+  {
+    "program": "web_ai_identity_test.py",
+    "exit_code": 0,
+    "elapsed_s": 3.172,
+    "reported_cases": 17
+  },
+  {
+    "program": "web_ai_transaction_test.py",
+    "exit_code": 0,
+    "elapsed_s": 13.781,
+    "reported_cases": 17
+  },
+  {
+    "program": "story_timing_test.py",
+    "exit_code": 0,
+    "elapsed_s": 2.25,
+    "reported_cases": 4
+  },
+  {
+    "program": "story_plan_test.py",
+    "exit_code": 0,
+    "elapsed_s": 8.218,
+    "reported_cases": 15
+  },
+  {
+    "program": "story_selection_test.py",
+    "exit_code": 0,
+    "elapsed_s": 6.907,
+    "reported_cases": 15
+  },
+  {
+    "program": "cli_resume_test.py",
+    "exit_code": 0,
+    "elapsed_s": 16.797,
+    "reported_cases": 18
+  },
+  {
+    "program": "insert_contract_test.py",
+    "exit_code": 0,
+    "elapsed_s": 15.328,
+    "reported_cases": 9
+  },
+  {
+    "program": "project_lock_test.py",
+    "exit_code": 0,
+    "elapsed_s": 1.844,
+    "reported_cases": 10
+  },
+  {
+    "program": "smoke_test.py",
+    "exit_code": 0,
+    "elapsed_s": 25.078,
+    "reported_cases": null
+  },
+  {
+    "program": "subtitle_ui_test.cjs",
+    "exit_code": 0,
+    "elapsed_s": 0.063,
+    "reported_cases": null
+  },
+  {
+    "program": "sentence_pair_test.cjs",
+    "exit_code": 0,
+    "elapsed_s": 0.063,
+    "reported_cases": null
+  },
+  {
+    "program": "story_ui_test.cjs",
+    "exit_code": 0,
+    "elapsed_s": 0.093,
+    "reported_cases": null
+  },
+  {
+    "program": "web_ai_ui_test.js",
+    "exit_code": 0,
+    "elapsed_s": 0.079,
+    "reported_cases": null
+  },
+  {
+    "program": "insert_plan_test.py",
+    "exit_code": 0,
+    "elapsed_s": 3.781,
+    "reported_cases": 14
+  },
+  {
+    "program": "insert_api_test.py",
+    "exit_code": 0,
+    "elapsed_s": 1.625,
+    "reported_cases": 5
+  },
+  {
+    "program": "insert_export_test.py",
+    "exit_code": 0,
+    "elapsed_s": 12.141,
+    "reported_cases": 16,
+    "private_config_attempts": 0,
+    "fixture_followup": "Temporary config/resources; real Mac serializer; derivative filesystem identity"
+  },
+  {
+    "program": "free_stock_test.py",
+    "exit_code": 0,
+    "elapsed_s": 0.609,
+    "reported_cases": 4
+  },
+  {
+    "program": "insert_ui_test.cjs",
+    "exit_code": 0,
+    "elapsed_s": 0.062,
+    "reported_cases": null
+  },
+  {
+    "program": "hf_export_safety_test.py",
+    "exit_code": 0,
+    "elapsed_s": 2.109,
+    "reported_cases": 13
+  },
+  {
+    "program": "capcut_build_safety_test.py",
+    "exit_code": 0,
+    "elapsed_s": 2.813,
+    "reported_cases": 14
+  }
+]

@@ -1,0 +1,90 @@
+[
+  {
+    "id": "source-1",
+    "bytes": 207293483,
+    "duration_s": 3117.766531,
+    "sha256": "31f02c403e386fdf0a6a84c5f03e28c26c9dd78dec9e82e1f587bd2a2257c574",
+    "streams": [
+      {
+        "codec_type": "video",
+        "codec_name": "h264",
+        "width": 640,
+        "height": 360,
+        "avg_frame_rate": "24000/1001"
+      },
+      {
+        "codec_type": "audio",
+        "codec_name": "aac",
+        "width": null,
+        "height": null,
+        "avg_frame_rate": "0/0"
+      }
+    ]
+  },
+  {
+    "id": "source-2",
+    "bytes": 334423956,
+    "duration_s": 6675.179683,
+    "sha256": "2cec1d8401ffba12cd1ebf1dfe6a6546cbf733a47660be60dcbb416619b3c120",
+    "streams": [
+      {
+        "codec_type": "video",
+        "codec_name": "h264",
+        "width": 640,
+        "height": 360,
+        "avg_frame_rate": "2997/100"
+      },
+      {
+        "codec_type": "audio",
+        "codec_name": "aac",
+        "width": null,
+        "height": null,
+        "avg_frame_rate": "0/0"
+      }
+    ]
+  },
+  {
+    "id": "source-3",
+    "bytes": 59514698,
+    "duration_s": 3270.251973,
+    "sha256": "16eacc5247eb95f75c7e03e1f4a7cca1896338880230d019acda6101b06cfacc",
+    "streams": [
+      {
+        "codec_type": "video",
+        "codec_name": "h264",
+        "width": 256,
+        "height": 144,
+        "avg_frame_rate": "25/1"
+      },
+      {
+        "codec_type": "audio",
+        "codec_name": "aac",
+        "width": null,
+        "height": null,
+        "avg_frame_rate": "0/0"
+      }
+    ]
+  },
+  {
+    "id": "source-4",
+    "bytes": 40264013,
+    "duration_s": 1755.498231,
+    "sha256": "33462900368baeb663eefe573fa9fcfd867e919229e7c1bbe4284bc964524467",
+    "streams": [
+      {
+        "codec_type": "video",
+        "codec_name": "h264",
+        "width": 256,
+        "height": 144,
+        "avg_frame_rate": "30/1"
+      },
+      {
+        "codec_type": "audio",
+        "codec_name": "aac",
+        "width": null,
+        "height": null,
+        "avg_frame_rate": "0/0"
+      }
+    ]
+  }
+]

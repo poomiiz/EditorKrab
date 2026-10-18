@@ -1,0 +1,74 @@
+{
+  "trial": "fresh-semantic-pilot-20261014-160948",
+  "source_duration_seconds": 3270.25,
+  "fresh_transcript_cache_existed": false,
+  "asr_seconds": 374.067,
+  "target_minutes": 3,
+  "target_is_approximate": true,
+  "selected_source_seconds": [
+    166.04,
+    366.14
+  ],
+  "output_duration_seconds": 200.12,
+  "encode_seconds": 21.297,
+  "render_wall_seconds": 21.723,
+  "rows_before_grouping": 79,
+  "semantic_groups": 27,
+  "emphasis_phrases": 11,
+  "canvas": {
+    "width": 1920,
+    "height": 1080
+  },
+  "structural_pass": true,
+  "capcut_structural_pass": true,
+  "capcut_text_coverage_gaps": [],
+  "native_capcut": {
+    "opened": true,
+    "observed_project": "fresh-semantic-pilot-20261014-160948 · CapCut",
+    "missing_media_dialog": false,
+    "timeline_duration_display": "00:03:20:03",
+    "human_listening": "pending",
+    "playback_started": true,
+    "both_text_roles_observed": true,
+    "observed_frame": "00:02:30:19",
+    "audio_meters_active": true
+  },
+  "decode_exit": 0,
+  "mp4_bytes": 13728813,
+  "mp4_sha256": "fe8ef254b16eaea8da9f60c2a0e5502bc396931ce7dee419033240301118989b",
+  "answer_origin": "operator-authored from exported transcript; not an external browser provider test",
+  "human_audio_qc": "pending",
+  "spelling_qc": "ASR errors and uncertain names need review",
+  "standalone_motion_overlays_in_this_pilot": 0,
+  "time_savings_measured": false,
+  "end_to_end_human_accepted_seconds": null,
+  "playwright": {
+    "target_selected_before_story_plan": 3,
+    "target_locked_while_waiting": true,
+    "download_contains_target_before_transcript": true,
+    "story_answer_pasted_and_imported": true,
+    "selected_range_not_hard_split": true,
+    "css_375_width": 375,
+    "css_375_scroll_width": 375,
+    "select_touch_height": 44,
+    "desktop_screenshot_size": [
+      1440,
+      1000
+    ]
+  },
+  "failed_trial_preserved": "First UI Auto edit failed foreign helper references; fresh project after shared fix passed structure/export/native open.",
+  "review_followup": {
+    "native_long_text_visual_qc": "failed by user screenshot",
+    "native_font_correction": "size fields and family metadata synchronized; actual native visual recheck pending",
+    "computer_use": "stopped by user Escape; no further native input",
+    "trim_regression": {
+      "removed_seconds": 1.5,
+      "keyword_before_seconds": 4.0,
+      "keyword_after_seconds": 2.5,
+      "both_rows_hold_until_new_normal_seconds": 4.5
+    },
+    "existing_pilot_is_before_trim_followup": true,
+    "ci_554f7ca": "all jobs passed after retrying external FFmpeg installation HTTP 504",
+    "new_runtime_restart": "pending next normal application restart"
+  }
+}

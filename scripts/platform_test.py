@@ -199,6 +199,27 @@ class PlatformTests(unittest.TestCase):
             child_process.terminate.assert_not_called()
             root.terminate.assert_called_once()
 
+    def test_preview_child_exits_during_snapshot_without_signalling_unknown_pid(self):
+        import psutil
+        owner = host.ProcessIdentity(4201, 10, 100, "node", ("node", "preview"))
+        for error in (psutil.NoSuchProcess(4202), psutil.ZombieProcess(4202), psutil.AccessDenied(4202)):
+            with self.subTest(error=type(error).__name__):
+                root = Mock();root.children.return_value = [SimpleNamespace(pid=4202)]
+                proc = Mock(pid=4201);proc.poll.return_value = None
+                def identity(pid):
+                    if pid == owner.pid:
+                        return owner
+                    raise error
+                with patch.object(host, "process_identity", side_effect=identity), patch("psutil.Process", return_value=root) as process:
+                    if isinstance(error, psutil.NoSuchProcess):
+                        host.stop_owned_preview(proc, owner)
+                        root.terminate.assert_called_once()
+                    else:
+                        with self.assertRaises(psutil.AccessDenied):
+                            host.stop_owned_preview(proc, owner)
+                        root.terminate.assert_not_called()
+                    self.assertTrue(all(call.args == (owner.pid,) for call in process.call_args_list))
+
     def test_server_worker_check_excludes_only_verified_controller_and_preview_trees(self):
         owner = host.ProcessIdentity(4201, 123.0, 100, str(Path(sys.executable).resolve()),
                                      (sys.executable, str(control.APP)))
@@ -293,6 +314,8 @@ class PlatformTests(unittest.TestCase):
                     ["npx", "--yes", "hyperframes@0.8.101", "preview", "--port", "3002", "--no-open"], root, env)
                 render = host.hyperframes_command(
                     ["npx", "--yes", "hyperframes@0.8.101", "render", "--format", "mp4"], root, env)
+                check = host.hyperframes_command(
+                    ["npx", "--yes", "hyperframes@0.8.101", "check", "--json"], root, env)
                 install.assert_not_called()
             self.assertEqual(original.read_bytes(), source.replace(b'function killOrphanedProcesses() {',
                              b'function killOrphanedProcesses() {\n  return 0;'))
@@ -300,6 +323,7 @@ class PlatformTests(unittest.TestCase):
             self.assertEqual(env["PWD"], str(root.resolve()))
             self.assertEqual(command, ["node", str(cli), "preview", "--port", "3002", "--no-open", "--foreground"])
             self.assertEqual(render, ["node", str(cli), "render", "--format", "mp4"])
+            self.assertEqual(check, ["node", str(cli), "check", "--json"])
 
     def test_mac_preview_changed_module_fails_before_writing_or_launching(self):
         with tempfile.TemporaryDirectory() as folder:

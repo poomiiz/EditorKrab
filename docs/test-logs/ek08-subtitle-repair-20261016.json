@@ -1,0 +1,112 @@
+{
+  "date": "2026-10-16",
+  "task_id": "68bba7f8-5ea4-4451-a2bd-c6f1e7f0662d",
+  "scope": "Partial EK08: fixed pair subtitle layout repair, not speech/editorial/native acceptance",
+  "source_head": "ec25e46dd7f823965405d18532c5ce89d82e3fbf",
+  "source_sha256": {
+    "app/render.py": "866a886bee3959009a46d367a454bea0c3b18f5185422e175a8996d5abba2a29",
+    "app/video_editor.py": "48b9a9493affa038350946f5205a64b9a64b6088dbdd3b08748dff2114c7590e",
+    "app/web_ai_json.py": "5b7da4eddf144952be4f99f71351b11e62e79f84ee346c20f831593d8b44c3c6",
+    "app/hf_build.py": "7cd827f67c988c6b34a97bc5d55fbca5369285c0691cf5ae9a52590b5b3b0c7e",
+    "app/static/editor.html": "d4fffb924d4dbaaaec7c5903b4d414af2798424bec5a18c49f2435336c936738",
+    "scripts/subtitle_repair_test.py": "a3a38592b9501e07cbddadd5d3630a98c6292a88488e5d3d73268f9b1a0e90b9",
+    "scripts/subtitle_ui_test.cjs": "ced11cfd5af89ec5b21f44049245894c16d49243139b7aeab8c9edf047c52c9f",
+    "scripts/subtitle_timing_test.py": "41a8c953de67a6f3c61d17f9b0998ba10d0133b1963380ac9d2e861b17d19308"
+  },
+  "behavior": [
+    "Only explicit dry repair previews collect measured bounds/overlap errors; fixed text is not shrunk, source words/clocks remain authoritative. Strict default, final=True and encoded outputs refuse invalid layouts. Invalid clocks/fonts remain hard errors.",
+    "Timeline and live HF preview opt into repair. Manual Save requires selected cue free of errors and every remaining issue exactly equal to a baseline issue, including geometry and time; other bad cues can then be repaired incrementally. Browser/local imports remain strict.",
+    "Display-only normal/emphasis inputs preserve source and keyword timing; full source edits remain separate. Existing second/color options are retained. Save disables its form and guards timeline adoption against panel navigation; failures retain input and show complete wrapped error."
+  ],
+  "regression_before_fix": "Both new repair tests failed: overflow timeline HTTP400 and valid first-cue Save HTTP422 while another cue remained invalid.",
+  "tests": {
+    "focused_suites": 19,
+    "reported_cases": 248,
+    "failures": 0,
+    "private_config_read_attempts": 0,
+    "node_suites": [
+      "subtitle_ui_test.cjs",
+      "preview_queue_test.cjs",
+      "ai_plan_ui_test.js"
+    ],
+    "smoke_checks": 28,
+    "test_fixture_repair": "Strong private-config guard caught one old subtitle timing fixture consulting fallback config. It now explicitly binds generated config; rerun14 passed with zero attempts. No production guard weakened."
+  },
+  "playwright": {
+    "fixture": "Generated8-second source and private fixed preset, real editor/router/player and Save handlers; no customer assets",
+    "viewport_desktop": [
+      1440,
+      1000
+    ],
+    "viewport_mobile": [
+      375,
+      844
+    ],
+    "mobile_scroll_width": 375,
+    "new_field_save_height_px": 44,
+    "invalid_final_http": 400,
+    "manual_save_http": [
+      200,
+      200
+    ],
+    "layout_errors_before": 2,
+    "layout_errors_after": 0,
+    "phrase_clocks_unchanged": [
+      {
+        "cue_id": "0",
+        "start": 1,
+        "end": 4,
+        "hit": 2
+      },
+      {
+        "cue_id": "1",
+        "start": 4,
+        "end": 8,
+        "hit": 4
+      }
+    ],
+    "after_capture": "Same repaired cue0 selected at1.5s, loading cover hidden, two animation frames before capture; text fits. These captures do not certify every seek or real speech.",
+    "fixture_export_correction": "First export was refused400 because the private fixture registered its custom preset only in render, not identity. Bound the same generated preset folder to both modules and restarted the now-idle owned fixture. Production identity guard unchanged."
+  },
+  "review": {
+    "initial": "Independent reviewer found pending-save lost-form race and clipped error; fixed with deferred success/failure/navigation regression and unclipped error.",
+    "rereview": "Pending: reviewer tool hit quota; no independent PASS claimed."
+  },
+  "pending": [
+    "Independent review of corrected Save lifecycle",
+    "Real spoken audio/subtitle/translation and editorial quality",
+    "Native CapCut opening/playback/layout calibration",
+    "Owner approval of UI copy and one watched pilot before batch",
+    "All-plan EK01-EK12 acceptance and full baseline/time-to-human-approval",
+    "Stale motion repairs and plain/karaoke/rich/nonuniform font recovery outside this slice"
+  ],
+  "export": {
+    "http": 200,
+    "output_sha256": "d659838fe1ee5a974ab8e036cc5214c6223a293e5d4f822d12fb669ea16f99be",
+    "bytes": 264435,
+    "width": 1080,
+    "height": 1920,
+    "duration": 8.0,
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "full_primary_av_decode": "passed",
+    "manifest_sha256": "36511df6ae6b9c5f64f01637a6df67c2e4b4fff214890e9cc2d3807d2262f385",
+    "status": {
+      "inputs_match": true,
+      "artifact_matches": true,
+      "current": true,
+      "commit_provenance": "recorded",
+      "human_audio_sync": "pending",
+      "human_editorial_review": "pending",
+      "capcut_open": "pending",
+      "status": "pending_review"
+    },
+    "render_phase_seconds": 69.4,
+    "timing_limit": "HF rendering phase only, excludes setup, earlier failed attempts, transcription and human review; not a savings comparison"
+  },
+  "preserved_source_hashes": {
+    "source.mp4": "bcc5e8927ece7d0e26de3fa8d97ca01023ffaab2ce8a836500438167ba55a1de",
+    "draft_content.json": "937e8d08b2d47f21ba2babaa28f45f9041a75fcf5c04e9c0d6dbef573878f603",
+    "clipkit_words.json": "7101472851a2c9208635074d327f3f4127a0d6549b2225c17c0af5fa91743d46"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "task_id": "a4f7f5ff-1413-4262-919e-e74d0eea5c9e",
+  "revision": "5bfb2bc",
+  "screened_sources": 61,
+  "baseline_asr_rows": 474,
+  "reused_baseline_sources": 4,
+  "new_asr_sources": 57,
+  "new_asr_seconds": 151.45,
+  "selected_plan_count": 2,
+  "selected": [
+    {
+      "n": 1,
+      "name": "onsite-ai.mp4",
+      "title": "หัวข้อทดสอบ 07",
+      "start": 36.02,
+      "end": 135.46,
+      "duration": 99.44,
+      "cli_import": true,
+      "consumer_exact_range": true,
+      "source_unchanged": true,
+      "asr_transport_split": false
+    },
+    {
+      "n": 4,
+      "name": "onsite-home.mp4",
+      "title": "หัวข้อทดสอบ 06",
+      "start": 0.68,
+      "end": 58.36,
+      "duration": 57.68,
+      "cli_import": true,
+      "consumer_exact_range": true,
+      "source_unchanged": true,
+      "asr_transport_split": true
+    }
+  ],
+  "held_source_ids": [
+    2,
+    3,
+    48,
+    50
+  ],
+  "interrupted_take_excluded": 56,
+  "original_transport_end": {
+    "requested": 58.36,
+    "consumer_returned": 57.76,
+    "passed": false
+  },
+  "prepared_transport_end": {
+    "requested": 58.36,
+    "consumer_returned": 58.36,
+    "passed": true,
+    "manual_test_artifact": true,
+    "all_text_and_word_clocks_preserved": true
+  },
+  "product_fix": false,
+  "external_browser_ai_provider_tested": false,
+  "direct_human_listening": false,
+  "finished_export_count": 0,
+  "release_approved_count": 0
+}

@@ -67,7 +67,12 @@ def cmd_transcribe(a):
     src = Path(a.input)
     model = WhisperModel(a.model, device=a.device, compute_type="int8_float16" if a.device == "cuda" else "int8",  # half the VRAM of float16
                          download_root=kitconfig.CFG.get("models_dir") or None)
-    segments, info = model.transcribe(str(src), language=a.language, vad_filter=True)
+    language = a.language or kitconfig.CFG.get("speech_language") or "auto"
+    if language == "auto":
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
+        import video_edit
+        language = video_edit._detect_language(model, src, model_size=a.model)
+    segments, info = model.transcribe(str(src), language=language, vad_filter=True)
     # Thai: whisper "words" are sub-character byte tokens, so keep segment text (clean) and
     # re-split it on real word boundaries with pythainlp; time each word by its share of characters.
     from pythainlp.tokenize import word_tokenize
@@ -330,7 +335,7 @@ def main():
     t.add_argument("--out")
     t.add_argument("--model", help="default: whisper_model in config.json, else large-v3")
     t.add_argument("--device", help="default: whisper_device in config.json, else cuda")
-    t.add_argument("--language", default="th")
+    t.add_argument("--language", help="spoken language; default: config.json or automatic detection")
     t.set_defaults(fn=cmd_transcribe)
 
     p = sub.add_parser("plan")

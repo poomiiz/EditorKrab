@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import atomic
 import copy
+import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -55,8 +57,8 @@ PHRASE_PARSERS = {"ja": "load_default_japanese_parser", "zh": "load_default_simp
 
 def speech_language() -> str:
     """The language people speak in the clips: config.json "speech_language", a Whisper code ("th", "en", ...)
-    or "auto" = the recogniser decides once per file. Thai unless set."""
-    return kitconfig._load().get("speech_language") or "th"
+    or "auto" = the recogniser decides once per file. Automatic unless set."""
+    return kitconfig._load().get("speech_language") or "auto"
 
 
 def whisper_model() -> str:
@@ -289,18 +291,22 @@ def _has_cuda() -> bool:
         return False
 
 
+def _model_settings(model_size: str | None = None) -> tuple[str, str, str]:
+    if _has_cuda():
+        return model_size or whisper_model(), "cuda", "int8_float16"
+    return model_size or WHISPER_CPU_FALLBACK, "cpu", "int8"
+
+
 def _get_model(model_size: str | None = None):
     """Load once, keep it warm. Returns (model, description)."""
     global _model
     from faster_whisper import WhisperModel
 
-    if _has_cuda():
+    wanted = _model_settings(model_size)
+    if wanted[1] == "cuda":
         _enable_cuda_libs()
         # int8_float16: large-v3 in about half the VRAM of float16 with near-identical accuracy, so it fits on an
         # 8 GB card next to the local LLM that keeps its own share loaded
-        wanted = (model_size or whisper_model(), "cuda", "int8_float16")
-    else:
-        wanted = (model_size or WHISPER_CPU_FALLBACK, "cpu", "int8")
 
     if _model is None or _model[0] != wanted:
         name, device, compute = wanted
@@ -359,7 +365,7 @@ def english_terms(text: str) -> str:
 def transcribe(path: str, start: float, end: float, language: str | None = None,
                model_size: str | None = None, window: float = 15.0) -> list[dict[str, Any]]:
     """Speech to timed phrases, in clip-relative seconds. language None = speech_language(); "auto" = detected
-    once from the start of the file, so every window is read as the same language.
+    once across samples of the source, so every window is read as the same language.
 
     The audio is cut into fixed 15 s windows: on a long file the recogniser sometimes returns nothing for the
     first half-minute, which silently loses subtitles, and 30 s windows lost about a quarter of the words.
@@ -374,13 +380,14 @@ def transcribe(path: str, start: float, end: float, language: str | None = None,
         _extract_audio(path, start, end, full)
         language = language or speech_language()
         if language == "auto":
-            language = _detect_language(model, full)
+            language = _detect_language(model, full, model_size=_engine.split("/")[0])
         if kitconfig._load().get("whisper_batched", True):
             phrases = _batched(model, full, language, window)
         else:
             phrases = _one_by_one(model, full, end - start, language, window)
     finally:
         full.unlink(missing_ok=True)
+    _bound_phrase_times(phrases, end - start)
     import spelling
     known = spelling.load()  # this person's own fixes (spelling.learn)
     for phrase in phrases:
@@ -390,7 +397,17 @@ def transcribe(path: str, start: float, end: float, language: str | None = None,
     return phrases
 
 
-def _detect_language(model, wav: Path, samples: int = 5, lowest: float = 0.5) -> str:
+def _bound_phrase_times(phrases: list[dict[str, Any]], duration: float) -> None:
+    # Whisper can align the last word beyond the audio; keep every Thai word piece inside its clip.
+    for phrase in phrases:
+        phrase["start"] = max(0, min(phrase["start"], duration))
+        phrase["end"] = max(phrase["start"], min(phrase["end"], duration))
+        phrase["words"] = [[max(0, min(a, duration)), max(0, min(max(a, b), duration)), text]
+                           for a, b, text in phrase.get("words", [])]
+
+
+def _detect_language(model, wav: Path, samples: int = 5, lowest: float = 0.5,
+                     model_size: str | None = None) -> str:
     """The language spoken across the file: the recogniser's odds averaged over up to `samples` 30 s windows
     spread through it. Its own detection reads only the first 30 s and stops at 0.5: physicsworks.wav
     (English) came out Dutch at 0.52 and half its subtitles were Dutch. Below `lowest` it raises."""
@@ -405,6 +422,19 @@ def _detect_language(model, wav: Path, samples: int = 5, lowest: float = 0.5) ->
             odds[lang] = odds.get(lang, 0.0) + p / len(starts)
     lang = max(odds, key=odds.get)
     if odds[lang] < lowest:
+        if model_size == "large-v3-turbo":
+            # Turbo gave Thai 0.43 on the long-video trial; retry with an installed full model.
+            from faster_whisper import WhisperModel
+            from faster_whisper.utils import download_model
+            try:
+                cached = download_model("large-v3", local_files_only=True,
+                                        cache_dir=kitconfig._load().get("models_dir") or None)
+            except Exception as exc:
+                raise VideoEditError("turbo cannot identify the language confidently; select the spoken language "
+                                     "or install large-v3 for a second check") from exc
+            # Keep the transcription model on its chosen device; the second check needs no extra VRAM.
+            stronger = WhisperModel(cached, device="cpu", compute_type="int8", local_files_only=True)
+            return _detect_language(stronger, wav, samples, lowest, model_size="large-v3")
         raise VideoEditError(f"cannot tell the spoken language (best guess {lang}, {odds[lang]:.2f}): "
                              'set config.json "speech_language" to its code, e.g. "en"')
     return lang
@@ -724,7 +754,7 @@ def create_capcut_draft(video_path: str, project_name: str,
     shutil.copytree(_template_dir(), target,
                     ignore=shutil.ignore_patterns("*.bak_*", "*.bak", "draft_content.before_*",
                                                   "draft_content.user_edited_*", "*.tmp",
-                                                  "clipkit*.json"))  # the template project's own raw file / motions / subs
+                                                  "clipkit*.json", ".clipkit-web-ai"))  # the template project's own raw file / motions / subs
 
     content_path = target / "draft_content.json"
     draft = json.loads(content_path.read_text(encoding="utf-8"))
@@ -896,6 +926,7 @@ def create_capcut_draft(video_path: str, project_name: str,
         meta["tm_draft_create"] = int(time.time() * 1_000_000)
         meta["tm_draft_modified"] = int(time.time() * 1_000_000)
         for group in meta.get("draft_materials", []):
+            group["value"] = [value for value in (group.get("value") or []) if value.get("metetype") == "video"][:1]
             for value in group.get("value", []) or []:
                 if value.get("metetype") == "video":
                     value["file_Path"] = str(Path(video_path).as_posix())
@@ -909,6 +940,21 @@ def create_capcut_draft(video_path: str, project_name: str,
         atomic.write_text(meta_path, json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     import capcut_edit  # here: capcut_edit imports this module
     capcut_edit.fresh_ids(target)  # own timeline id + the Timelines/<id> copy CapCut 9.x opens
+    # Supplied subtitles still need the existing transcript's word clock for emphasis.
+    import cue_data
+    heard = {}
+    cue_rows = capcut_edit.read_draft(str(target))["subtitles"]
+    for segment in segments:
+        start = segment["source_timerange"]["start"] / US
+        length = segment["source_timerange"]["duration"] / US
+        for phrase in capcut_edit._from_transcript(video_path, start, start + length) or []:
+            at = segment["target_timerange"]["start"] / US + phrase["start"]
+            matches = [row for row in cue_rows if row["text"] == phrase["text"] and abs(row["start"] - at) <= .04]
+            if len(matches) == 1:
+                heard[cue_data.key(matches[0]["id"])] = [[round(a - phrase["start"], 2), round(b - phrase["start"], 2), w]
+                                                       for a, b, w in phrase["words"]]
+    if heard:
+        cue_data.save(target, "clipkit_words.json", heard)
 
     return {
         "draft_path": str(target),
@@ -960,6 +1006,113 @@ def transcript_file(video: str) -> Path:
     return Path(video).with_suffix(Path(video).suffix + ".transcript.json")
 
 
+CHUNK_S = 600
+
+
+def lines_file(video: str) -> Path:
+    return Path(video).with_suffix(Path(video).suffix + ".lines.json")
+
+
+def transcribe_file(video: str) -> list[dict[str, Any]]:
+    """Save each completed piece atomically; resume only the same source and ASR settings."""
+    tf = transcript_file(video)
+    part, meta = tf.with_suffix(".part.json"), tf.with_suffix(".meta.json")
+    media = Path(video)
+    stat = media.stat()
+    source_stat = (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino)
+
+    def check_source():
+        try:
+            current = media.stat()
+            unchanged = (current.st_size, current.st_mtime_ns, current.st_ctime_ns, current.st_ino) == source_stat
+        except OSError:
+            unchanged = False
+        if not unchanged:
+            if not part.exists():
+                atomic.write_text(part, json.dumps({"source": None, "end": 0.0, "language": None, "phrases": []}), encoding="utf-8")
+            raise VideoEditError("ฟุตเปลี่ยนระหว่างถอดเสียง · เริ่มถอดเสียงจากฟุตล่าสุดใหม่")
+
+    cfg = kitconfig._load()
+    engine = _model_settings()
+    with Path(video).open("rb") as source:
+        identity = {"schema_version": 2, "sha256": hashlib.file_digest(source, "sha256").hexdigest(),
+                    "model": "/".join(engine), "models_dir": cfg.get("models_dir"),
+                    "language": speech_language(),
+                    "batched": cfg.get("whisper_batched", True), "chunk_s": CHUNK_S}
+    check_source()
+    # An unbound legacy transcript cannot prove which footage/settings produced its words.
+    cached = not part.exists() and meta.is_file() and json.loads(meta.read_text(encoding="utf-8")) == identity
+    if tf.is_file() and cached:
+        phrases = json.loads(tf.read_text(encoding="utf-8"))
+    else:
+        done = json.loads(part.read_text(encoding="utf-8")) if part.is_file() else None
+        if done is None or done["source"] != identity:
+            done = {"source": identity, "end": 0.0, "language": None, "phrases": []}
+        if "backups" not in done:
+            stamp = f".before-retranscribe-{time.time_ns()}-{uuid.uuid4().hex[:8]}"
+            done["backups"] = []
+            for original in (tf, meta, lines_file(video)):
+                if original.is_file():
+                    backup = original.with_name(original.name + stamp)
+                    shutil.copy2(original, backup)
+                    done["backups"].append(backup.name)
+            # Persist even the zero-second checkpoint: interruption before the first chunk
+            # must retain the originals and reuse this backup rather than make one per retry.
+            check_source()
+            atomic.write_text(part, json.dumps(done, ensure_ascii=False), encoding="utf-8")
+        total = probe(video)["duration"]
+        while done["end"] < total:
+            start = done["end"]
+            end = total if total - start <= CHUNK_S * 1.5 else _quiet_point(video, start + CHUNK_S)
+            if not start < end <= total:
+                raise VideoEditError("invalid transcription checkpoint boundary")
+            if done["language"] is None:
+                done["language"] = _file_language(video) if total > CHUNK_S * 1.5 else speech_language()
+            piece = transcribe(video, start, end, done["language"], model_size=engine[0])
+            shifted = [{**p, "start": round(p["start"] + start, 2), "end": round(p["end"] + start, 2),
+                        "words": [[round(a + start, 2), round(b + start, 2), w]
+                                  for a, b, w in p.get("words", [])]} for p in piece]
+            done["phrases"].extend(shifted)
+            done["end"] = end
+            check_source()
+            atomic.write_text(part, json.dumps(done, ensure_ascii=False), encoding="utf-8")
+        phrases = done["phrases"]
+        check_source()
+        atomic.write_text(tf, json.dumps(phrases, ensure_ascii=False, indent=1), encoding="utf-8")
+        check_source()
+        atomic.write_text(meta, json.dumps(identity), encoding="utf-8")
+        check_source()
+        part.unlink(missing_ok=True)
+    check_source()
+    atomic.write_text(lines_file(video), json.dumps([{k: p[k] for k in ("start", "end", "text")}
+                                                   for p in phrases], ensure_ascii=False, indent=1), encoding="utf-8")
+    check_source()
+    return phrases
+
+
+def _file_language(video: str) -> str:
+    language = speech_language()
+    if language != "auto":
+        return language
+    model, engine = _get_model()
+    wav = Path(os.environ.get("TEMP", "/tmp")) / f"ve_{uuid.uuid4().hex}.wav"
+    try:
+        _extract_audio(video, 0, probe(video)["duration"], wav)
+        return _detect_language(model, wav, model_size=engine.split("/")[0])
+    finally:
+        wav.unlink(missing_ok=True)
+
+
+def _quiet_point(video: str, near: float, reach: float = 30.0) -> float:
+    # shortcut: quietest spans can include speech; review seams before editorial delivery.
+    lo = max(near - reach, 0.0)
+    spans = quiet_spans(video, lo, near + reach, min_len=0.2)
+    if not spans:
+        raise VideoEditError(f"no quiet span near {near:.0f} s to split transcription")
+    span = max(spans, key=lambda s: (s["length"], -abs(lo + (s["start"] + s["end"]) / 2 - near)))
+    return round(lo + (span["start"] + span["end"]) / 2, 2)
+
+
 def stories_file(video: str) -> Path:
     return Path(video).with_suffix(Path(video).suffix + ".stories.json")
 
@@ -982,24 +1135,52 @@ def agent_command(kind: str, target: str) -> str:
             "spelling": f'ClipKit: ตรวจคำผิด "{target}"'}[kind]
 
 
-def stories_from_agent(video: str, phrases: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
-    """Stories the agent wrote to <video>.stories.json as [{title, summary, start, end}] (seconds).
-    None while the file is not there yet; a broken file raises."""
-    path = stories_file(video)
-    if not path.is_file():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8-sig"))
-        items = [(float(i["start"]), float(i["end"]), str(i.get("title", "")).strip(),
-                  str(i.get("summary", "")).strip()) for i in raw]
-    except (ValueError, KeyError, TypeError) as exc:
-        raise VideoEditError(f"{path.name} is not a story list: {exc}") from exc
+def slice_transcript(phrases: list[dict[str, Any]], start: float, end: float) -> list[dict[str, Any]]:
+    """Keep complete spoken words at semantic edges inside an ASR transport row."""
     out = []
-    for start, end, title, summary in items:
-        idx = [n for n, p in enumerate(phrases) if p["start"] >= start - 0.5 and p["end"] <= end + 0.5]
-        if not idx:
-            raise VideoEditError(f"story '{title}' ({start}-{end} s) has no speech in the transcript")
-        out.extend(_split_long(idx[0], idx[-1], phrases, title, summary))
+    for phrase in phrases:
+        if phrase["end"] <= start or phrase["start"] >= end:
+            continue
+        crossing = [edge for edge in (start, end) if phrase["start"] < edge < phrase["end"]]
+        if not crossing:
+            out.append(copy.deepcopy(phrase))
+            continue
+        words = phrase.get("words", [])
+        if not words:
+            raise VideoEditError("ขอบเขตเรื่องอยู่กลางบรรทัดที่ไม่มีเวลารายคำ · ถอดเสียงรายคำก่อนเลือกช่วงนี้")
+        language = "th" if re.search(r"[ก-๛]", phrase["text"]) else speech_language()
+        starts = [n for n, whole in enumerate(_word_starts(words, language)) if whole] + [len(words)]
+        if any(words[a][0] + 1e-6 < edge < words[b - 1][1] - 1e-6
+               for a, b in zip(starts, starts[1:]) for edge in crossing):
+            raise VideoEditError("ขอบเขตเรื่องตัดกลางคำ · เลือกจุดเริ่มหรือจบของคำเต็ม")
+        kept = [w for w in words if w[0] >= start - 1e-6 and w[1] <= end + 1e-6]
+        if kept:
+            out.append({**copy.deepcopy(phrase), "start": max(phrase["start"], kept[0][0]),
+                        "end": min(phrase["end"], kept[-1][1]),
+                        "text": "".join(w[2] for w in kept).strip(), "words": copy.deepcopy(kept)})
+    return out
+
+
+def validate_stories(items: Any, phrases: list[dict[str, Any]], *, max_minutes: float | None = None) -> list[dict[str, Any]]:
+    """One trust boundary for browser answers and persisted local/manual selections."""
+    import story_selection
+    return story_selection.validate(items, phrases, max_minutes=max_minutes)
+
+
+def stories_from_agent(video: str, phrases: list[dict[str, Any]], *, split_long: bool = True) -> list[dict[str, Any]] | None:
+    """Current, explicitly validated selection; legacy/unbound/stale files remain historical.
+
+    split_long is retained for callers, but an accepted semantic selection is never split again.
+    """
+    import story_selection
+    items = story_selection.read_selection(video, phrases)
+    if items is None:
+        return None
+    out = []
+    for item in items:
+        start, end = item["start"], item["end"]
+        part = slice_transcript(phrases, start, end)
+        out.append({**item, "lines": len(part), "speech": round(sum(p["end"] - p["start"] for p in part), 1)})
     return out
 
 
@@ -1007,16 +1188,18 @@ STORY_MAX_S = 300     # a story above this is split (length is trimmed later, in
 STORY_AIM_S = 150
 
 
-def _split_long(first: int, last: int, phrases: list[dict[str, Any]], title: str, summary: str) -> list[dict[str, Any]]:
+def _split_long(first: int, last: int, phrases: list[dict[str, Any]], title: str, summary: str,
+                *, max_s: float | None = None, aim_s: float | None = None) -> list[dict[str, Any]]:
     """The small local model sometimes returns one story for a whole file. Any story longer than STORY_MAX_S
     is cut at the longest pause near every STORY_AIM_S, so each part still ends on a finished sentence."""
     parts, a = [], first
-    while phrases[last]["end"] - phrases[a]["start"] > STORY_MAX_S:
-        target = phrases[a]["start"] + STORY_AIM_S
+    while phrases[last]["end"] - phrases[a]["start"] > (max_s if max_s is not None else STORY_MAX_S):
+        target = phrases[a]["start"] + (aim_s if aim_s is not None else STORY_AIM_S)
         window = [i for i in range(a + 1, last + 1) if abs(phrases[i]["start"] - target) <= 25]
         if not window:
             break
-        cut = max(window, key=lambda i: phrases[i]["start"] - phrases[i - 1]["end"])   # longest pause
+        cut = max(window, key=lambda i: (phrases[i]["start"] - phrases[i - 1]["end"],
+                                         -abs(phrases[i]["start"] - target) if aim_s is not None else 0))
         parts.append((a, cut - 1))
         a = cut
     parts.append((a, last))

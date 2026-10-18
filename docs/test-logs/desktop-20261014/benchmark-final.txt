@@ -1,0 +1,9 @@
+{"trial_id": "cli-trial", "run_id": "cc70dbbdb0734f67a3242e9f64f3537e"}
+{"took": "stub", "s": 0.0}
+{"trial_id": "cli-trial", "run_id": "b3630b54b50a43eb81fc140bea6718a8"}
+{"took": "stub", "s": 0.0}
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 2.022s
+
+OK

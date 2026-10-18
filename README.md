@@ -106,7 +106,7 @@ Use the [benchmark protocol](docs/benchmark.md) and [result sheet](docs/benchmar
 
 Footage and project folders are stored on your machine. Keep client media, private projects, credentials and personal `config.json` files out of Git.
 
-Some optional steps send information to other services: web AI receives the material you export or upload, and team accounts store metadata in Supabase. Drive sharing uploads the MP4 and makes it available to anyone with the link. Automatic error reporting is enabled in the example configuration and sends error text and app details to the team service; change `auto_bug_report` in your configuration if you do not want this.
+Some optional steps send information to other services: web AI receives the material you export or upload, and team accounts store metadata in Supabase. Drive upload does not grant public link access; add chosen reviewers in Google Drive. Existing public links are not revoked automatically. Report a problem opens GitHub for you to review and submit; automatic error reporting is disabled, including for old configurations. No logs or transcripts are attached automatically.
 
 The app uses Google sign-in before opening the editing pages. Sign-in, team permissions and synchronization still need testing with real accounts and devices. If you operate your own service, configure Supabase and Google OAuth before distributing it. Team synchronization uses Drive for desktop or Syncthing for footage and exports; private project folders stay with their owner. See [team setup](docs/team-setup.md) (Thai).
 

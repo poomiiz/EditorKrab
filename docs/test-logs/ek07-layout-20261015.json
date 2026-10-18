@@ -1,0 +1,339 @@
+{
+  "scope": "Synthetic text, bundled OFL font, transparent media; no speech, customer footage or native acceptance",
+  "renderer": "HyperFrames 0.8.101",
+  "cases": [
+    {
+      "case": "hook-title-1080x1080",
+      "canvas": {
+        "width": 1080,
+        "height": 1080
+      },
+      "duration": 2.0,
+      "bounds": [
+        118.80000000000004,
+        226.21940004717948,
+        961.2,
+        421.78059995282047
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1080,
+        "height": 1080,
+        "sha256": "1cc21fcb4c45d34af7fcd72465c84112dcb2a6fabb469591ecabfa1cdde4df5f",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "2b17fa817d27b9fa7d9016c1b4115766ddbafa581f39bfea0691459f4cef52ab",
+        "font": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70",
+        "runtime": "f8df41df1de407597ecf530005428beebb4b451d52ff7c0de59107011ac4bf9e"
+      }
+    },
+    {
+      "case": "hook-title-1080x1080-tilt",
+      "canvas": {
+        "width": 1080,
+        "height": 1080
+      },
+      "duration": 2.0,
+      "bounds": [
+        235.20479517979476,
+        161.99999999999994,
+        844.7952048202052,
+        486.0
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1080,
+        "height": 1080,
+        "sha256": "1f39246beecb8d3238b9eb262a3be2f897355db50d381ec3bf844c04ba08a9a6",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "2b17fa817d27b9fa7d9016c1b4115766ddbafa581f39bfea0691459f4cef52ab",
+        "font": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70",
+        "runtime": "f8df41df1de407597ecf530005428beebb4b451d52ff7c0de59107011ac4bf9e"
+      }
+    },
+    {
+      "case": "hook-title-1080x1920",
+      "canvas": {
+        "width": 1080,
+        "height": 1920
+      },
+      "duration": 2.0,
+      "bounds": [
+        118.80000000000004,
+        478.2194000471795,
+        961.2,
+        673.7805999528205
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1080,
+        "height": 1920,
+        "sha256": "6f1daa82947279408587b047308360e4ff7be21562e38324f10483f6494a103a",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "2b17fa817d27b9fa7d9016c1b4115766ddbafa581f39bfea0691459f4cef52ab",
+        "font": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70",
+        "runtime": "f8df41df1de407597ecf530005428beebb4b451d52ff7c0de59107011ac4bf9e"
+      }
+    },
+    {
+      "case": "hook-title-1080x1920-tilt",
+      "canvas": {
+        "width": 1080,
+        "height": 1920
+      },
+      "duration": 2.0,
+      "bounds": [
+        118.80000000000003,
+        352.13033630154837,
+        961.1999999999999,
+        799.8696636984514
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1080,
+        "height": 1920,
+        "sha256": "2cab82fe770699278a6e6beee00a9b8b5dcff40183b88d5a60f6f1c5cb3c639d",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "2b17fa817d27b9fa7d9016c1b4115766ddbafa581f39bfea0691459f4cef52ab",
+        "font": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70",
+        "runtime": "f8df41df1de407597ecf530005428beebb4b451d52ff7c0de59107011ac4bf9e"
+      }
+    },
+    {
+      "case": "hook-title-1920x1080",
+      "canvas": {
+        "width": 1920,
+        "height": 1080
+      },
+      "duration": 2.0,
+      "bounds": [
+        262.16832344122105,
+        162.0,
+        1657.831676558779,
+        486.0
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1920,
+        "height": 1080,
+        "sha256": "3f3f055be031166d7c231edff232b60a357d308539e7f1ad51dce522c8bb35c5",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "2b17fa817d27b9fa7d9016c1b4115766ddbafa581f39bfea0691459f4cef52ab",
+        "font": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70",
+        "runtime": "f8df41df1de407597ecf530005428beebb4b451d52ff7c0de59107011ac4bf9e"
+      }
+    },
+    {
+      "case": "hook-title-1920x1080-tilt",
+      "canvas": {
+        "width": 1920,
+        "height": 1080
+      },
+      "duration": 2.0,
+      "bounds": [
+        655.2047951797947,
+        161.99999999999994,
+        1264.795204820205,
+        486.0
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1920,
+        "height": 1080,
+        "sha256": "a84110ac36d1f5bca96c6f30f40316b516b290295df68d17ad3a7706df074348",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "2b17fa817d27b9fa7d9016c1b4115766ddbafa581f39bfea0691459f4cef52ab",
+        "font": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70",
+        "runtime": "f8df41df1de407597ecf530005428beebb4b451d52ff7c0de59107011ac4bf9e"
+      }
+    },
+    {
+      "case": "sentence-pair-1080x1080",
+      "canvas": {
+        "width": 1080,
+        "height": 1080
+      },
+      "duration": 2,
+      "bounds": [
+        303.5043275,
+        570.25343,
+        776.4956725,
+        831.6
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1080,
+        "height": 1080,
+        "sha256": "2d7568cb43f252f1e617df5d999a064408930bbc492b36417be5e00132a8692d",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "a947a18a436db029f15e8bb0ea12b26decf152951e6ece6c9536c93ac254523f",
+        "font:0": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70"
+      }
+    },
+    {
+      "case": "sentence-pair-1080x1920",
+      "canvas": {
+        "width": 1080,
+        "height": 1920
+      },
+      "duration": 2,
+      "bounds": [
+        122.67435999999998,
+        1036.3083199999999,
+        957.32564,
+        1478.4
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1080,
+        "height": 1920,
+        "sha256": "2e05d7bc291914d8d3cb699b6db5ae7ffda641ee00e0b57819eee007caff4f0e",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "a947a18a436db029f15e8bb0ea12b26decf152951e6ece6c9536c93ac254523f",
+        "font:0": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70"
+      }
+    },
+    {
+      "case": "sentence-pair-1920x1080",
+      "canvas": {
+        "width": 1920,
+        "height": 1080
+      },
+      "duration": 2,
+      "bounds": [
+        723.5043275,
+        570.25343,
+        1196.4956725,
+        831.6
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1920,
+        "height": 1080,
+        "sha256": "ee20b20878ba4f65f49ae23d5c0e5565e54979d61507dca0866c537fa7ac6310",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "a947a18a436db029f15e8bb0ea12b26decf152951e6ece6c9536c93ac254523f",
+        "font:0": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70"
+      }
+    },
+    {
+      "case": "stat-number-1080x1080",
+      "canvas": {
+        "width": 1080,
+        "height": 1080
+      },
+      "duration": 2.0,
+      "bounds": [
+        307.7469553175178,
+        216.0,
+        772.2530446824821,
+        648.0
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1080,
+        "height": 1080,
+        "sha256": "47e653935edb6afcca83e4e6f815f1046c248d67740158da8196e54d3ede132d",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "3796e7c91360369e74f0343ddd847572b1d23d4ea5a772d6bbeb511dd45f7c31",
+        "font": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70",
+        "runtime": "f8df41df1de407597ecf530005428beebb4b451d52ff7c0de59107011ac4bf9e"
+      }
+    },
+    {
+      "case": "stat-number-1080x1920",
+      "canvas": {
+        "width": 1080,
+        "height": 1920
+      },
+      "duration": 2.0,
+      "bounds": [
+        127.10569834225389,
+        383.99999999999994,
+        952.8943016577462,
+        1152.0
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1080,
+        "height": 1920,
+        "sha256": "6ca8f02f8d6a5aed46c2bd811dbd38bb56d8dbc74d3d938432b2bf26fff39aa5",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "3796e7c91360369e74f0343ddd847572b1d23d4ea5a772d6bbeb511dd45f7c31",
+        "font": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70",
+        "runtime": "f8df41df1de407597ecf530005428beebb4b451d52ff7c0de59107011ac4bf9e"
+      }
+    },
+    {
+      "case": "stat-number-1920x1080",
+      "canvas": {
+        "width": 1920,
+        "height": 1080
+      },
+      "duration": 2.0,
+      "bounds": [
+        727.7469553175179,
+        216.0,
+        1192.2530446824821,
+        648.0
+      ],
+      "media": {
+        "duration": 2.0,
+        "fps": 30.0,
+        "width": 1920,
+        "height": 1080,
+        "sha256": "9970cdccc691119606bf01a2b9509205b899985eb68095b96bbfbc958271bd38",
+        "alpha_decode": true
+      },
+      "check_ok": true,
+      "input_hashes": {
+        "template": "3796e7c91360369e74f0343ddd847572b1d23d4ea5a772d6bbeb511dd45f7c31",
+        "font": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70",
+        "runtime": "f8df41df1de407597ecf530005428beebb4b451d52ff7c0de59107011ac4bf9e"
+      }
+    }
+  ]
+}

@@ -1,0 +1,141 @@
+{
+  "task_id": "bc9986e3-6221-44cb-bda9-67dbf2613360",
+  "source_duration_seconds": 3270.25,
+  "transcript_rows": 1214,
+  "transcript_reused": true,
+  "external_browser_ai_provider_tested": false,
+  "answer_author": "codex reading the exported full transcript",
+  "main_narrative_count": 1,
+  "candidate_highlights": 8,
+  "editorially_selected_for_preview": 4,
+  "context_dependent_held": 4,
+  "human_audio_video_approval": false,
+  "approximate_minutes": 3,
+  "import_and_api_readback_seconds": 14.348,
+  "checks": {
+    "cli_import": true,
+    "artifact_readback": true,
+    "source_row_boundaries": true,
+    "chronological_no_overlap": true,
+    "retained_without_hard_split": true,
+    "api_rehydrate_from_disk": true,
+    "api_repeat_readback": true
+  },
+  "candidates": [
+    {
+      "title": "หัวข้อทดสอบ 04",
+      "start": 166.04,
+      "end": 366.14,
+      "duration": 200.1,
+      "ready_for_preview": true,
+      "review_note": "[Private work description removed]"
+    },
+    {
+      "title": "หัวข้อทดสอบ 02",
+      "start": 455.44,
+      "end": 630.25,
+      "duration": 174.81,
+      "ready_for_preview": false,
+      "review_note": "[Private work description removed]"
+    },
+    {
+      "title": "หัวข้อทดสอบ 05",
+      "start": 759.13,
+      "end": 931.95,
+      "duration": 172.82,
+      "ready_for_preview": false,
+      "review_note": "[Private work description removed]"
+    },
+    {
+      "title": "หัวข้อทดสอบ 08",
+      "start": 1090.39,
+      "end": 1258.79,
+      "duration": 168.4,
+      "ready_for_preview": true,
+      "review_note": "[Private work description removed]"
+    },
+    {
+      "title": "หัวข้อทดสอบ 03",
+      "start": 1260.01,
+      "end": 1475.21,
+      "duration": 215.2,
+      "ready_for_preview": false,
+      "review_note": "[Private work description removed]"
+    },
+    {
+      "title": "หัวข้อทดสอบ 10",
+      "start": 1580.89,
+      "end": 1785.31,
+      "duration": 204.42,
+      "ready_for_preview": false,
+      "review_note": "[Private work description removed]"
+    },
+    {
+      "title": "หัวข้อทดสอบ 09",
+      "start": 1790.06,
+      "end": 1940.2,
+      "duration": 150.14,
+      "ready_for_preview": true,
+      "review_note": "[Private work description removed]"
+    },
+    {
+      "title": "หัวข้อทดสอบ 01",
+      "start": 2224.6,
+      "end": 2400.66,
+      "duration": 176.06,
+      "ready_for_preview": true,
+      "review_note": "[Private work description removed]"
+    }
+  ],
+  "invalid_input_checks": [
+    {
+      "case": "out_of_order",
+      "expected": "REJECTED",
+      "actual": "ACCEPTED",
+      "passed": false
+    },
+    {
+      "case": "duplicate",
+      "expected": "REJECTED",
+      "actual": "ACCEPTED",
+      "passed": false
+    },
+    {
+      "case": "overlap",
+      "expected": "REJECTED",
+      "actual": "ACCEPTED",
+      "passed": false
+    },
+    {
+      "case": "beyond_source",
+      "expected": "REJECTED",
+      "actual": "ACCEPTED",
+      "passed": false
+    },
+    {
+      "case": "mid_phrase_boundary",
+      "expected": "REJECTED",
+      "actual": "ACCEPTED",
+      "passed": false
+    },
+    {
+      "case": "non_finite_end",
+      "expected": "REJECTED",
+      "actual": "ACCEPTED",
+      "passed": false
+    },
+    {
+      "case": "reversed_range",
+      "expected": "REJECTED",
+      "actual": "REJECTED",
+      "passed": true
+    },
+    {
+      "case": "no_speech",
+      "expected": "REJECTED",
+      "actual": "REJECTED",
+      "passed": true
+    }
+  ],
+  "source_sha256": "16eacc5247eb95f75c7e03e1f4a7cca1896338880230d019acda6101b06cfacc"
+}

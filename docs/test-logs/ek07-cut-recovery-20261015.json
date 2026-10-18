@@ -1,0 +1,88 @@
+{
+  "scope": "Durable manual/automatic cuts and Undo reuse existing AI transaction; owned process-exit fixtures plus actual generated UI cut/Undo",
+  "source_sha256": {
+    "app/web_ai_transaction.py": "921374b0b292541a4919194bc54836b0fb218c296245c9dd6feb3a64b419ffc4",
+    "app/project_lock.py": "bbd6045760cd1c99ef6578ad2aa3f3f8d7e8bfbf4fdd7d0306e0ad2d43178af3",
+    "app/capcut_edit.py": "1cb25c5358619d50b84b2e1a3cafe5f16da40d427205bb33df74164955db7293",
+    "app/video_editor.py": "147f9f723fed4236ad9a3acd5df4fdc6f569573b2b52d9153eac7bb0c26d866d",
+    "app/static/editor.html": "cef20b19512948e19d02c5ce74cdcdb0feefca57a1ef627ecbf9a6f5aa9ff04a",
+    "scripts/manual_cut_transaction_test.py": "9354a6dfdadf76a1f275c349a89b6812fb738aceedb8c0d60285d10fdbf499bc",
+    "scripts/motion_cut_test.py": "19420e109f1b815071d07666ebf9a0ef190f2b71559841946795beee828cc685",
+    "scripts/trim_timing_test.py": "f957f977e4327205187f4f8a05a09e46be7055fd33762a7917bb4473d76a39ce",
+    "scripts/insert_export_test.py": "cb397f027e824fd04ef01cd8373d22532725c1228e870b329429ac7fb5f2d71a",
+    "scripts/subtitle_ui_test.cjs": "59fa41ab8bcac5774e83de5fd7f5cdce661f29b47c45a02693eae004ac5ed4bd"
+  },
+  "tests": {
+    "programs": 11,
+    "python_cases": 163,
+    "new_manual_cases": 7,
+    "actual_child_process_exits": 3,
+    "child_exit_code": 79,
+    "private_config_reads": "final successful guarded programs: zero attempts; child rejects private config access",
+    "node_suites": [
+      "subtitle_ui",
+      "ai_plan_ui",
+      "web_ai_ui"
+    ]
+  },
+  "crash": {
+    "cut_before_next_writer": "exact metadata and undo restored",
+    "undo_before_next_writer": "exact cut state and retryable undo restored",
+    "external_edit": "refused recovery before restoring any file; external bytes preserved",
+    "native_open": "cut and Undo refuse before original metadata publication",
+    "nested_staging": "one root transaction; no nested manual issue/recovery",
+    "browser_lane": "active Browser AI pointer preserved; old answer revision correctly stale after successful cut"
+  },
+  "ui": {
+    "cut_request": [
+      2,
+      6
+    ],
+    "before_seconds": 8,
+    "after_seconds": 4,
+    "next_cue_after": [
+      2,
+      4
+    ],
+    "after_motion_count": 0,
+    "undo_seconds": 8,
+    "undo_motion_count": 1,
+    "before_after_undo_sha256": {
+      "draft_content.json": "1a2082aa1b366ba3a438776768b7ea8a95c795ebced1c594f823127c77b68aed",
+      "clipkit_words.json": "8657acf8ea0bb9516fd936ce8659a9022f1e7c5b11a6d65cc2ff212383422579",
+      "clipkit_overlays.json": "29a62dc5a7a9d09fc896b5d29d5f2c75d0f576ecd36811d29265017b990e1e57",
+      "source.mp4": "bcc5e8927ece7d0e26de3fa8d97ca01023ffaab2ce8a836500438167ba55a1de",
+      "seed.mov": "e8a7fcfdffb38c3bdb4a33eae7844ad7f45e39825c8d90442cbcef3de8ff342c"
+    },
+    "exact_restored_files": [
+      "draft_content.json",
+      "clipkit_words.json",
+      "clipkit_overlays.json",
+      "source.mp4",
+      "seed.mov"
+    ],
+    "committed_journals": 2,
+    "mobile_viewport": [
+      375,
+      844
+    ],
+    "mobile_body_width": 375,
+    "desktop_viewport": [
+      1440,
+      1000
+    ],
+    "review": "independent scoped UI/source/desktop375 PASS; backend/crash evidence separate"
+  },
+  "prior_ci": {
+    "head": "1ff093054316c30c6abd1d041c4f8f69219ef1f9",
+    "run": 38770073129,
+    "all_four_jobs": "success"
+  },
+  "limits": [
+    "Child exits use generated metadata/media placeholders and only owned child processes, not an OS power-loss/filesystem durability certification.",
+    "UI generated gray/sine media and existing real alpha MOV; no real speech, editorial judgement, native CapCut control or human approval.",
+    "Running UI fixture loaded before later redundant-import and line-ending cleanup; no functional changes followed its tested interactions.",
+    "Private recovery journals/assets retained for inspection; empty undo containers are ignored once their metadata is transactionally deleted.",
+    "Current source needs its own exact-head CI; no release or batch."
+  ]
+}

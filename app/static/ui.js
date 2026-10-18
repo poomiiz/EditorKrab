@@ -1,18 +1,13 @@
 // EditorKrab shared UI helpers, loaded in <head> of every page (also inside the editor iframe):
 // friendly error text and in-app dialogs instead of the browser's alert / confirm / prompt boxes.
 (() => {
-  const report = text => fetch('/api/kit/bug-report', {method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({text: '[auto] ' + text, page: location.pathname + location.search, errors: [text], auto: true})})
-    .catch(() => {});   // the server is down: the next error tries again
-
   // what a person reads when something failed: the server's own message, or a plain sentence for app bugs
   window.ckErr = e => {
     const msg = (e && e.message) || String(e);
     if (e instanceof TypeError && /fetch|network|load failed/i.test(msg))
       return 'ติดต่อ EditorKrab ไม่ได้ ตรวจว่าโปรแกรมยังเปิดอยู่ แล้วลองอีกครั้ง';
     if (e instanceof TypeError || e instanceof ReferenceError || e instanceof SyntaxError || e instanceof RangeError) {
-      report(`${e.name}: ${msg}\n${(e.stack || '').split('\n').slice(0, 4).join('\n')}`);
-      return 'เกิดข้อผิดพลาดในหน้านี้ ส่งรายงานให้ทีมแล้ว ลองรีเฟรชหน้าอีกครั้ง';
+      return 'หน้านี้เกิดข้อผิดพลาด ลองรีเฟรชหรือแจ้งผ่าน GitHub';
     }
     return msg;
   };
@@ -22,6 +17,7 @@
   .ck-dlg::backdrop{background:rgba(0,0,0,.55)}
   .ck-dlg form{display:flex;flex-direction:column;gap:14px;padding:18px}
   .ck-dlg p{margin:0;white-space:pre-line;overflow-wrap:anywhere;max-height:50vh;overflow:auto}
+  .ck-dlg .ck-dlg-quote{color:#b4b6c0;font-weight:600}
   .ck-dlg input{font:inherit;color:inherit;background:#1d1f24;border:1px solid #2a2c33;border-radius:8px;padding:8px 10px;width:100%;box-sizing:border-box}
   .ck-dlg input:focus{outline:none;border-color:#7c5cff}
   .ck-dlg .ck-dlg-row{display:flex;flex-direction:row-reverse;justify-content:flex-start;gap:8px}  /* ok first in the DOM: Enter submits ok */
@@ -33,12 +29,14 @@
   document.head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
 
   // one dialog for all three; resolves true / false, or the typed text / null
-  const ask = (text, {input = null, ok = 'ตกลง', cancel = 'ยกเลิก', danger = false} = {}) => new Promise(resolve => {
+  // quote: the person's own words (a title, a name) shown under the question and never translated
+  const ask = (text, {input = null, ok = 'ตกลง', cancel = 'ยกเลิก', danger = false, quote = ''} = {}) => new Promise(resolve => {
     const d = document.createElement('dialog');
     d.className = 'ck-dlg' + (danger ? ' danger' : '');
-    d.innerHTML = '<form method="dialog"><p></p>' + (input === null ? '' : '<input>') +
+    d.innerHTML = '<form method="dialog"><p></p>' + (quote ? '<p class="ck-dlg-quote" translate="no"></p>' : '') + (input === null ? '' : '<input>') +
       '<div class="ck-dlg-row"><button value="ok"></button>' + (cancel ? '<button value="cancel"></button>' : '') + '</div></form>';
     d.querySelector('p').textContent = text;
+    if (quote) d.querySelector('.ck-dlg-quote').textContent = quote;
     d.querySelector('[value=ok]').textContent = ok;
     if (cancel) d.querySelector('[value=cancel]').textContent = cancel;
     const field = d.querySelector('input');
@@ -62,8 +60,9 @@
 // People's own text is left alone: typed fields, translate="no", and any text still holding Thai after the swap.
 (() => {
   let lang = null;
-  try { lang = localStorage.getItem('ck_lang'); } catch (e) { /* private window: English */ }
-  lang = lang === 'th' ? 'th' : 'en';   // English unless the person picked Thai with the TH/EN switch
+  try { lang = localStorage.getItem('ck_lang'); } catch (e) { /* private window: follow the browser */ }
+  // the TH/EN switch wins; until it is used, a Thai browser gets Thai and any other language gets English
+  if (lang !== 'th' && lang !== 'en') lang = /^th([-_]|$)/i.test((navigator.languages || [])[0] || navigator.language || '') ? 'th' : 'en';
   window.ckLang = lang;
   window.ckSetLang = next => { try { localStorage.setItem('ck_lang', next); } catch (e) { /* not kept */ } location.reload(); };
   if (lang !== 'en') return;
@@ -73,7 +72,7 @@
   document.head.insertAdjacentHTML('beforeend', '<style>html.ck-i18n-wait body{visibility:hidden}' +
     'body.dropping::after{content:"Drop video files or folders here"!important}</style>');
   const reveal = () => root.classList.remove('ck-i18n-wait');
-  const TH = /[฀-๿]/, ATTRS = ['title', 'placeholder', 'aria-label'];
+  const TH = /[฀-๿]/, ATTRS = ['title', 'placeholder', 'aria-label', 'alt'];
   const SKIP = 'script,style,textarea,[contenteditable],[translate=no]';
   fetch('/i18n/en.json').then(r => { if (!r.ok) throw new Error('i18n ' + r.status); return r.json(); }).then(dict => {
     const keys = Object.keys(dict).sort((a, b) => b.length - a.length);

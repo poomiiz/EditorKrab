@@ -1,0 +1,53 @@
+{
+  "scope": "Actual editor/router on generated gray footage/sine tone, pinned motion encode/decode; not spoken/native/human acceptance",
+  "preview_http": {
+    "invalid": 400,
+    "valid": 200
+  },
+  "imports_before_confirmation": 0,
+  "imports_after_confirmation": 1,
+  "edited_json_requires_new_preview": true,
+  "mobile": {
+    "width": 375,
+    "horizontal_overflow": false,
+    "apply_height": 44
+  },
+  "start": 4.0,
+  "duration": 1.0,
+  "ownership": {
+    "mode": "decorate",
+    "targets": [],
+    "caption_policy": "preserve"
+  },
+  "media": {
+    "duration": 1.0,
+    "fps": 30.0,
+    "width": 1920,
+    "height": 1080,
+    "sha256": "fb37e6fb72bb8198e4c5b1b36f0fb7e02439121e515afeeef8150bbe10544eac",
+    "alpha_decode": true
+  },
+  "independent_review": "Three findings repaired; source/desktop375 review and two Node suites passed; no native/editorial certification",
+  "source_hashes": {
+    "app/web_ai_json.py": "97995d6255b18e313871fe60e63d2bd64cfd2e3390c6d29a8bdf62de20efa637",
+    "app/web_ai_transaction.py": "5b3e64159d430d79d02d745364deb75682bc68f21189e1e5d49e3dda3d7e9b0c",
+    "app/video_editor.py": "e0e6c206931393a4825a90d2b878abb2a58f9062aa1e9ec074ea140bf31c7186",
+    "app/static/editor.html": "a012f6f5d9bd3c9238274854f1d5029775db861db300f3a7004f7955183b17ce",
+    "app/static/video-editor.html": "fd8a67cc9ded25d61e0ff6e42e729f413b2b05202c5ceaf896d42dcfc099c056",
+    "app/static/ai-plan.js": "34a7c92bbcd941854942234f86a5e8a36f2ac4c6905d22aef41db9043aff8346",
+    "app/static/ai-plan.css": "94eae639bba28f4fa83c26cc13e6a6aab51815e8722664a8464398f9528790a3"
+  },
+  "private_screenshot_hashes": {
+    "ek07-preview-desktop-private.png": "7ccece02db9289d5009945bd1970c849524a7e6f5c44c53bfc4cc07857d7c700",
+    "ek07-preview-mobile-private.png": "f6909832207a733e4f57651821288551785e1d6ff45d3bea675039505a0ab639"
+  },
+  "retry_notes": [
+    "First export attempted during active hf-build and was rejected; test now waits for that response",
+    "Lazy detail test waited for visible rows before reading them"
+  ],
+  "console_limits": [
+    "Fixture-only update-check404",
+    "Expected invalid-preview400",
+    "iframe sandbox warnings"
+  ]
+}

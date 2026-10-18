@@ -1,0 +1,17 @@
+{
+  "duration_s": 8.0,
+  "width": 1920,
+  "height": 1080,
+  "fps": "30/1",
+  "video_codec": "h264",
+  "audio_codec": "aac",
+  "bytes": 313258,
+  "sha256": "1939d18b42ff2aa390458592f37ce057d2f619ef3ecb8a4495ecf3e3bebd3e51",
+  "ui_render_seconds": 23.3,
+  "failed_attempts_before_success": [
+    "shared CSS/GSAP transform contract rejected by preflight",
+    "safe-zone checker used raw portrait preset instead of actual canvas; corrected and regression tested",
+    "output volume C low disk; fixture output changed to its existing temporary workspace volume"
+  ],
+  "timing_scope": "Final successful app export only; excludes preflight/retries, transcription, AI, editing and human review; no savings claim"
+}

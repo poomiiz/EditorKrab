@@ -80,7 +80,7 @@
   // app-style icon bar, top right: report a bug, settings, restart, shut down
   const top = document.createElement('div');
   top.className = 'ck-top';
-  top.innerHTML = `<a href="#" id="sbBug" title="แจ้งปัญหา">${svg('bug')}</a>` +
+  top.innerHTML = `<a href="https://github.com/poomiiz/EditorKrab/issues/new" target="_blank" rel="noopener noreferrer" id="sbBug" title="แจ้งปัญหา">${svg('bug')}</a>` +
     `<a href="/settings.html" title="ตั้งค่า"${isOn('/settings.html') ? ' class="on"' : ''}>${svg('settings')}</a>` +
     `<a href="#" id="ckLang" class="ck-lang" translate="no" title="${window.ckLang === 'en' ? 'ภาษาไทย' : 'English'}">${window.ckLang === 'en' ? 'TH' : 'EN'}</a>`;
   top.querySelector('#ckLang').onclick = e => { e.preventDefault(); window.ckSetLang(window.ckLang === 'en' ? 'th' : 'en'); };
@@ -232,54 +232,6 @@
       document.body.appendChild(bar);
     }
   }).catch(() => {}), 30000);
-  // bug report: keeps the last errors seen on the page so the report says what actually broke
-  const errs = [];
-  // a page error is also sent to the team on its own (the server sends each one once and honours auto_bug_report)
-  const autoReport = msg => fetch('/api/kit/bug-report', {method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({text: '[auto] ' + msg, page: location.pathname + location.search, errors: errs.slice(-10), auto: true})})
-    .catch(() => {});  // the server is down: nothing can take the report, and the next error tries again
-  const pageError = msg => { errs.push(msg); autoReport(msg); };
-  window.addEventListener('error', e => pageError(`${e.message} @ ${(e.filename || '').split('/').pop()}:${e.lineno}`));
-  window.addEventListener('unhandledrejection', e => pageError('promise: ' + ((e.reason && e.reason.message) || e.reason)));
-  const ce = console.error;
-  console.error = (...a) => { errs.push(a.map(String).join(' ').slice(0, 300)); ce.apply(console, a); };
-  new MutationObserver(() => {   // red ❌ messages the pages show to people
-    document.querySelectorAll('#toast, .msg, .busy, #result').forEach(el => {
-      const t = (el.textContent || '').trim();
-      if (t.startsWith('❌') && errs[errs.length - 1] !== t) errs.push(t.slice(0, 300));
-    });
-  }).observe(document.body, {subtree: true, childList: true, characterData: true});
-  document.getElementById('sbBug').onclick = e => {
-    e.preventDefault();
-    if (document.getElementById('ckBug')) return;
-    const m = document.createElement('div');
-    m.id = 'ckBug';
-    m.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.55);display:grid;place-items:center';
-    m.innerHTML = `<div style="background:#141824;border:1px solid #262d40;border-radius:14px;padding:20px;width:min(520px,92vw);color:#f1f4fb">
-      <b style="font-size:17px">แจ้งปัญหา</b>
-      <div style="color:#828ca4;font-size:13px;margin:4px 0 10px">เล่าว่ากดอะไร แล้วเกิดอะไรขึ้น · ระบบแนบหน้าที่เปิดอยู่ เวอร์ชัน และ error ล่าสุด ${errs.length} รายการให้เอง</div>
-      <textarea rows="5" style="width:100%;background:#1b2030;color:#f1f4fb;border:1px solid #262d40;border-radius:10px;padding:10px;font:inherit" placeholder="เช่น กดส่งออก MP4 แล้วขึ้น error…"></textarea>
-      <div class="r" style="color:#828ca4;font-size:13px;min-height:18px;margin-top:6px"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-        <button class="x" style="background:#1b2030;color:#c5cde0;border:1px solid #262d40;border-radius:9px;padding:8px 14px;cursor:pointer;font:inherit">ปิด</button>
-        <button class="s" style="background:#7c5cff;color:#fff;border:0;border-radius:9px;padding:8px 14px;cursor:pointer;font:inherit;font-weight:600">ส่ง</button></div></div>`;
-    document.body.appendChild(m);
-    const ta = m.querySelector('textarea'), res = m.querySelector('.r');
-    ta.focus();
-    m.querySelector('.x').onclick = () => m.remove();
-    m.querySelector('.s').onclick = async () => {
-      try {
-        const r = await fetch('/api/kit/bug-report', {method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({text: ta.value, page: location.pathname + location.search, errors: errs})});
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.detail || r.status);
-        if (j.sent) { res.textContent = '✅ ส่งถึงทีมแล้ว ไม่ต้องทำอะไรต่อ'; return; }
-        res.innerHTML = '✅ บันทึกในเครื่องแล้ว · <a target="_blank" style="color:#9fb0ff">ส่งเข้า GitHub ของทีม</a> (กดแล้วกด Submit)';
-        res.querySelector('a').href = j.issue_url;
-        window.open(j.issue_url, '_blank');
-      } catch (err) { res.textContent = '❌ ' + ckErr(err); }
-    };
-  };
   document.body.classList.add('shell');
   // repaint the active item when video-editor switches screens through the hash
   window.addEventListener('hashchange', () => {

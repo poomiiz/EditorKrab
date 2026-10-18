@@ -1,0 +1,32 @@
+{
+  "reviewer": "ek02_clean_ci_fix",
+  "scope": "Source contract, shared clocks, callers and ordinary I/O rollback; no native/human acceptance",
+  "verdict": "pass",
+  "corrected_word_clock_probe": {
+    "alphabet": [
+      "cat",
+      "dog",
+      "fox"
+    ],
+    "heard_word_counts": [
+      2,
+      3
+    ],
+    "candidates": "permutations and single-token deletions; each single-pair punch boundary",
+    "cases": 450,
+    "accepted": 183,
+    "conservative_rejections": 267,
+    "wrong_known_word_onsets": 0,
+    "nonmonotonic_mappings": 0,
+    "start_hit_end_invariant_failures": 0,
+    "previous_wrong_known_word_onsets": 48
+  },
+  "source_overlap_ms": 5,
+  "source_overlap_result": "rejected",
+  "isolated_spelling_tests": 20,
+  "private_config_read_attempts": 0,
+  "pending": [
+    "Native CapCut open/save/reopen/playback",
+    "Independent audio listening and human pilot approval"
+  ]
+}

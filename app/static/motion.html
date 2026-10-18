@@ -32,7 +32,7 @@ button:disabled{opacity:.5;cursor:wait}
 [hidden]{display:none!important}
 </style>
 <link rel="stylesheet" href="/shell.css?v=8">
-<script src="/ui.js?v=2"></script></head>
+<script src="/ui.js?v=3"></script></head>
 <body>
 <main>
   <div class="top"><h1>🔤 ตัวหนังสือเคลื่อนไหว</h1></div>
@@ -125,6 +125,6 @@ Promise.all([fetch('/api/kit/motion-templates').then(r => r.json()), fontsReady]
   drawFields(); refresh();
 }).catch(e => { $('msg').className = 'msg bad'; $('msg').textContent = '❌ โหลดรายชื่อเอฟเฟกต์ไม่ได้: ' + ckErr(e); });
 </script>
-<script src="/shell.js?v=11"></script>
+<script src="/shell.js?v=12"></script>
 </body>
 </html>

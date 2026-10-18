@@ -1,0 +1,126 @@
+{
+  "date": "2026-10-16",
+  "scope": "Explicit kerning in shared MP4 ASS header; hardware failure diagnosed, exact repaired-head Mac CI still required",
+  "source_sha256": {
+    "app/render.py": "65e5aa9fa65252d56b1e7dda0c199829620c6d34876d2364313c296d713b76e8",
+    "scripts/plain_subtitle_test.py": "7066a665f16c6eb3286c9a7d2ba42cb4af3bba2feae7300ecbe8edfca3683cd8",
+    "scripts/subtitle_export_test.py": "6184d847060ad8c735704b081678e414fe9e2b19912664f072cba9c31438366f",
+    "scripts/macos_acceptance_test.py": "b30f1fbf0ba81732180a25adb278d3f1a3e40ee178b12a9e589ceec7ae1d5ee6"
+  },
+  "failed_ci": {
+    "head": "14242c40cdb068147e7cea25cf7a3341eb4033e0",
+    "run": 38787580924,
+    "status": "completed",
+    "result": "failure",
+    "jobs": {
+      "Windows": "success",
+      "MacARM": "success",
+      "install": "success",
+      "MacIntel": "failure"
+    },
+    "intel_failure": "Only plain subtitle1080x1920 raster containment: inkright929 exceeds measured926.535+2px.",
+    "artifact_id": 11999845159,
+    "artifact_name": "mac-acceptance-macos-15-intel",
+    "generated_files_sha256": {
+      "metrics.json": "29b0f02b2d130cfeb509ab323242e2274b750c861ec837b8c589d85a3437cbb5",
+      "frame.png": "4432d605d253b84665e417aa927a17d5fefcf7e651f05fd5f65f6ff897804431",
+      "subs.ass": "7b7b0d049b53702150a3e3b2228a5bb24510f8e51b83b88ad4fb0f659d52638c"
+    },
+    "pillow": "12.3.0",
+    "font_advance_100": 753.921875,
+    "font_bbox_100": [
+      0,
+      42,
+      754,
+      128
+    ],
+    "renderer": "libass0.17.5/CoreText with HarfBuzz14.3.1; selectedKanit-Bold, no missing-face explanation"
+  },
+  "root_reproduction": {
+    "before": {
+      "ink": [
+        158,
+        848,
+        929,
+        1077
+      ],
+      "inside_unchanged_2px_gate": false,
+      "png_sha256": "7ed90d7a94ff2fdd977e95bb6ef53465888249009e7897681da0df7f85523300"
+    },
+    "after": {
+      "ink": [
+        169,
+        850,
+        917,
+        1074
+      ],
+      "inside_unchanged_2px_gate": true,
+      "png_sha256": "9ddb5cf809ed175cedac70c40aadb02411be32f1459f77ed479620b2b4e277b1"
+    },
+    "mac_measured_advance_100": 753.921875,
+    "mac_bbox": [
+      153.46508803245254,
+      821.0176698810524,
+      926.5349119675474,
+      1098.9823301189476
+    ],
+    "font_sha256": "5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70"
+  },
+  "change": "Production MP4 writer and both real CPU raster tests now use one shared ASS header with Kerning: yes. The separate Mac native-font smoke ASS also enables kerning. No font size/bounds/raster tolerance changed. No new dependency.",
+  "local_verification": {
+    "unittest_cases": {
+      "plain_subtitle": 15,
+      "subtitle_export": 15,
+      "render_encoder": 6,
+      "macos_acceptance": 5
+    },
+    "unittest_total": 41,
+    "smoke_checks": 28,
+    "strong_guard_programs": 5,
+    "private_config_attempts": 0,
+    "mac_live": "Skipped on Windows; do not count mocked Mac cases as actual Mac proof.",
+    "regression": "Original failing three-ratio pixel containment remains unchanged at2px. CPU raster tests consume the actual production header. Downloaded Mac ASS replay locally matches old ink exactly; new header passes that recorded narrower Mac box."
+  },
+  "actual_editor": {
+    "canvas": {
+      "width": 1080,
+      "height": 1920
+    },
+    "duration": 8.0,
+    "full_av_decode": true,
+    "mp4_sha256": "9b04eb2ae206d9fa496b9c67988c665314b201187cd871b5dc39e4f21661f4c7",
+    "sample": {
+      "seconds": 2.267,
+      "white_ink_bbox": [
+        200,
+        859,
+        886,
+        1064
+      ],
+      "inside_recorded_mac_box_with_2px_tolerance": true,
+      "sha256": "d6375a736d657c3d0501787d8d63f2643e2e3c8714202af42d4a9c688ff788bc"
+    },
+    "source_and_metadata_unchanged": {
+      "clipkit_lines.json": true,
+      "clipkit_overlays.json": true,
+      "clipkit_punch.json": true,
+      "clipkit_style.json": true,
+      "clipkit_words.json": true,
+      "draft_content.json": true,
+      "source.mp4": true
+    }
+  },
+  "playwright": "Fresh final-source generated9:16 fixture; actual app HTTP export200 after player.ready,8s1080x1920fullAVdecode, HF seek2.267 and desktop screenshot inspected. Source/draft/sidecar hashes unchanged. Screenshot and paths remain private.",
+  "primary_references": [
+    "https://github.com/libass/libass/wiki/Libass%27-ASS-Extensions#kerning",
+    "https://pillow.readthedocs.io/en/stable/reference/ImageFont.html#PIL.ImageFont.FreeTypeFont.getlength"
+  ],
+  "limits": [
+    "Repaired exact-head Mac CI must pass before claiming the Intel raster regression fixed on hardware. No failed run restarted.",
+    "Older failed-run diagnostics did not capture Pillow layout-engine flags;753.921875advance and actual provider/face logs were captured. Kerning causality reproduced with identical old ink and only ASS header changed.",
+    "Local Windows Pillow10.4 lacks Raqm; measured width777 vs recorded Mac753.921875. This fix aligns MP4 kerning with shaped text; it does not certify every font/positive-kerning pair or all shaping engines.",
+    "Actual generated MP4 verifies one near-onset frame and full decode, not all-frame alpha/contrast/semantic/spoken review.",
+    "Karaoke run-boundary kerning, rich text/nonuniform scale/native calibration, installed CapCut, watched real pilot and complete timing remain open.",
+    "No user/native app controlled, customer/paid media published, batch/release/merge or stability/savings certification."
+  ]
+}

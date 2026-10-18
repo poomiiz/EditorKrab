@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-16",
+  "task_id": "4f8c1a50-3bb6-4d03-9f37-6eafd088d5ec",
+  "scope": "Read-only revalidation of the previously unapproved 71-second onsite pilot against current strict subtitle rules",
+  "project_files_checked": 45,
+  "project_files_unchanged": true,
+  "duration_seconds": 71.28,
+  "structural_pass": true,
+  "subtitle_pass": false,
+  "findings": [
+    {
+      "code": "source_word_alignment_ambiguous",
+      "action": "Fresh ASR from actual source range, then semantic choices against the new word text; no invented clock or weakening validator",
+      "issue_id": "legacy-1"
+    },
+    {
+      "code": "word_clock_exceeds_cue",
+      "action": "Recheck actual selected source audio and real final word boundary before creating another revision",
+      "issue_id": "legacy-2"
+    }
+  ],
+  "human_approved": false,
+  "native_capcut_review": "pending",
+  "media_or_transcript_published": false,
+  "source_audit_sha256": "813f2b55c43640bb624e8cb3d5a62e9bff2f7a0773a80d1581a42ea6a66942ee",
+  "next": "Compare focused retry to full ASR at actual whole-word seam anchors, create a separate pilot revision only after strict word/cue validation. Retain old projects and private transcripts; no batch before human approval.",
+  "fresh_asr": {
+    "model": "large-v3",
+    "language": "th",
+    "duration_seconds": 71.28,
+    "processing_seconds": 39.126,
+    "phrases": 31,
+    "clock_preflight_pass": 30,
+    "clock_preflight_failures": [
+      {
+        "cue_id": "fresh-1-6",
+        "passed": false,
+        "error": "cue fresh-1-6: เวลาระดับคำต้องเรียง ไม่ทับ และอยู่ในช่วงซับจริง"
+      }
+    ],
+    "fresh_result_sha256": "0e4a0a143840ea4e260da92c8c4e9a245988dd8f4243492bc745eea45c23a6c2",
+    "source_text_policy": "Use actual ASR word text for timing; preserve prior operator corrections separately and review as display edits. This has not been imported or listened to.",
+    "timing_limit": "ASR only, includes model warmup; not total time or savings"
+  },
+  "focused_retry": {
+    "audio_context_seconds": 7.079999999999998,
+    "asr_seconds": 32.576,
+    "phrases": 2,
+    "preflight": [
+      {
+        "cue": 0,
+        "passed": true
+      },
+      {
+        "cue": 1,
+        "passed": true
+      }
+    ],
+    "result_sha256": "cd35e0b8786aa81d8205ad89a4df2b377463803f7e15d4f14ea2b970b3695be0",
+    "imported": false,
+    "limit": "Context retry is a separate ASR result, not yet a proven seam-safe replacement or listened reference; do not splice by guessed times."
+  }
+}

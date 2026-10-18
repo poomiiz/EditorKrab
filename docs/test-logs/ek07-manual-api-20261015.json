@@ -1,0 +1,29 @@
+{
+  "scope": "Actual unreviewed legacy motion API through Playwright request after actual Browser AI packet export, generated gray footage/tone, pinned HF check/render/full alpha decode; no UI apply-button, installed authentication, real speech, native or human acceptance",
+  "browser_active_packet_still_matches_download": true,
+  "manual_packet_operation": "manual",
+  "receipt_matches_published_overlay": true,
+  "journal_phase": "committed",
+  "motion_start": 2.0,
+  "media": {
+    "duration": 4.0,
+    "fps": 30.0,
+    "width": 1920,
+    "height": 1080,
+    "sha256": "eaee18443f9a7df5d2f2465d1065ec5924c7d88edc78ab36177064b01160b382",
+    "alpha_decode": true
+  },
+  "source_sha256": {
+    "app/video_editor.py": "7782ac0a58224bcd7490da2d24207fa2b1c334f3697e2ffeb1b0a36cb15678ea",
+    "app/web_ai_identity.py": "7307b98266a83eea92bd43045c5c4ca297d5c706ea6abb41fe6e4106f1877c57",
+    "app/web_ai_transaction.py": "5b3e64159d430d79d02d745364deb75682bc68f21189e1e5d49e3dda3d7e9b0c",
+    "app/capcut_build.py": "1209aa80ae54be4a916a553126b2b6b6abf67de7ece97d9389610053ef0f3331"
+  },
+  "unit_scope": "Injected receipt failure for reviewed and legacy requests, simulated interruption/recovery before next writer, external source edit retained, failed motion/caption transactions leave Browser packet verifiable; no actual OS termination in those tests",
+  "limits": [
+    "Initial proof reader used32hex receipt name instead of canonical UUID and got404; resumed readback without repeating render",
+    "A successful manual edit changes project revision; retained Browser packet still requires fresh export before applying to edited metadata",
+    "Native preflight moved before machine resource discovery; Windows/strong regression passed, Mac runner confirmation pending",
+    "Prior236f003 CI38763950681 failed: Intel freshness test reached missing CapCut resources before preflight; ARM setup model download HTTP429. Not marked success."
+  ]
+}

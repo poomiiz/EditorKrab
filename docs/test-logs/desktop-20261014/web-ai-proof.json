@@ -1,0 +1,18 @@
+{
+  "stories_packet_generated_from_real_source": true,
+  "browser_first_instruction": true,
+  "contains_compact_lines": true,
+  "contains_word_times": false,
+  "local_agent_required": false,
+  "provider_answer_received": false,
+  "scope": "packet and import contract; no external browser AI execution or provider acceptance",
+  "actual_ui_download": {
+    "name": "input.mp4.web-ai-stories.md",
+    "failure": null
+  },
+  "actual_ui_import": {
+    "fixture": "explicit test answer, not external provider output",
+    "stories": 1
+  },
+  "live_backend": "existing baseline process; final packet text validated in separate final-code process"
+}

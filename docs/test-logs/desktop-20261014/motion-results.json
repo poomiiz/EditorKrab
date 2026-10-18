@@ -1,0 +1,92 @@
+[
+  {
+    "template": "hook",
+    "bytes": 44235344,
+    "sha256": "d20a2ba4756d05fa196e33d49289d7105eac2ad7a4fd27725e80a9b7c39e44b2",
+    "duration_s": 3.0,
+    "codec": "prores",
+    "pix_fmt": "yuva444p12le",
+    "width": 1080,
+    "height": 1920,
+    "frames": [
+      {
+        "time": 0.5,
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "sha256": "72c514283d3c50553923e584ef758173277e10d1f2886fe1c69289d219a4c71d"
+      },
+      {
+        "time": 1.5,
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "sha256": "cbd4e0f34a09926fbaedb07c611c3db63eef2f241e7bc0c755e4fd592579c226"
+      },
+      {
+        "time": 2.55,
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "sha256": "cbd4e0f34a09926fbaedb07c611c3db63eef2f241e7bc0c755e4fd592579c226"
+      }
+    ]
+  },
+  {
+    "template": "stat",
+    "bytes": 30908297,
+    "sha256": "cc287965838a53ac2db80830474e713c388f2691cd6b7d3cb759cc3ee751d2bc",
+    "duration_s": 3.0,
+    "codec": "prores",
+    "pix_fmt": "yuva444p12le",
+    "width": 1080,
+    "height": 1920,
+    "frames": [
+      {
+        "time": 0.5,
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "sha256": "86b3b487e454777341bbe1327b07b53178e0bdb31061bf7b26995530eec7b6b7"
+      },
+      {
+        "time": 1.5,
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "sha256": "4478e298481b9c6aff46f49d8a84dac440994729688ee361d366707f0c6ce02c"
+      },
+      {
+        "time": 2.55,
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "sha256": "4478e298481b9c6aff46f49d8a84dac440994729688ee361d366707f0c6ce02c"
+      }
+    ]
+  },
+  {
+    "template": "pair",
+    "bytes": 20530728,
+    "sha256": "759f5ce374ca97baa5471b91ad168474c8c3edd57ead815366a602c3862a08b6",
+    "duration_s": 2.2,
+    "codec": "prores",
+    "pix_fmt": "yuva444p12le",
+    "width": 1080,
+    "height": 1920,
+    "frames": [
+      {
+        "time": 0.44,
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "sha256": "155e8d10c42085f54bc46bf9e2ac57df891d562531badea8db6c26a96f3de925"
+      },
+      {
+        "time": 1.1,
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "sha256": "228b873b384628d1eb6bf9b190fe1bf0c5c496ebd20ac90209a75824509039b1"
+      },
+      {
+        "time": 1.87,
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "sha256": "228b873b384628d1eb6bf9b190fe1bf0c5c496ebd20ac90209a75824509039b1"
+      }
+    ]
+  }
+]

@@ -17,7 +17,7 @@
   #root { position: absolute; inset: 0; }
   #bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .hook { position: absolute; left: 0; right: 0; top: 0; height: 1920px; opacity: 0; }
-  .line { position: absolute; left: 50%; white-space: nowrap; font-weight: 700; text-align: center; }
+  .line { position: absolute; left: 50%; white-space: nowrap; font-weight: 700; text-align: center; line-height: 1.2; }
   .key { -webkit-text-stroke: 18px #fff; paint-order: stroke fill; filter: drop-shadow(0 6px 10px rgba(0,0,0,.45)); }
   .glow { position: absolute; inset: 0; color: transparent; -webkit-text-stroke: 4px var(--c, #fff); }
   .sub { color: #fff; text-shadow: 0 0 2px rgba(0,0,0,.6), 0 4px 10px rgba(0,0,0,.6); }
@@ -42,11 +42,11 @@
 <script>
   // values come from ?key=... in the preview URL, or window.KIT injected by the ClipKit app before render
   const ARGS = { ...Object.fromEntries(new URLSearchParams(location.search)), ...(window.KIT || {}) };
-  const HOOK = { key: ARGS.key || "Burn out", sub: ARGS.sub ?? "เพราะพลาดเรื่องนี้", duration: parseFloat(ARGS.duration) || 5.5 };
+  const HOOK = { key: ARGS.key ?? "Burn out", sub: ARGS.sub ?? "เพราะพลาดเรื่องนี้", duration: parseFloat(ARGS.duration) || 5.5 };
   const STYLE = (ARGS.style || "tilt");
   if (!(STYLE in { tilt: 1, straight: 1 })) throw new Error("unknown style: " + STYLE);
   // SPEED 2 = every entrance twice as fast as the original CapCut edit (the original felt slow); ?speed= overrides
-  const SPEED = parseFloat(ARGS.speed) || 2;
+  const SPEED = Math.max(parseFloat(ARGS.speed) || 2, 1.6 / HOOK.duration);
 
   const STYLES = {
     tilt: { font: '"DB Heavent", "Sukhumvit Set", sans-serif', tilt: -4.3,
@@ -65,28 +65,35 @@
   if (bg) { const im = document.getElementById("bg"); im.src = bg; im.style.display = "block"; }
 
   const seg = (s) => [...new Intl.Segmenter("th", { granularity: "grapheme" }).segment(s)].map(x => x.segment);
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
   const h = document.createElement("div");
   h.className = "hook clip"; h.dataset.start = 0; h.dataset.duration = HOOK.duration; h.dataset.trackIndex = 1;
   // ?font= / KIT.font: any font installed on this machine, the style font stays as fallback
   h.style.fontFamily = ARGS.font ? `"${ARGS.font}", ${S.font}` : S.font;
   h.innerHTML = `
     <div class="line key" style="top:${S.key.top}px;font-size:${S.key.size}px;color:${S.key.color}">
-      <span class="solid">${HOOK.key}</span><span class="glow">${HOOK.key}</span></div>
+      <span class="solid">${esc(HOOK.key)}</span><span class="glow" data-layout-ignore aria-hidden="true">${esc(HOOK.key)}</span></div>
     <div class="line sub" style="top:${S.sub.top}px;font-size:${S.sub.size}px">
-      ${seg(HOOK.sub).map(c => `<span class="ch">${c}</span>`).join("")}<span class="cur"></span></div>`;
+      <span class="sub-text">${esc(HOOK.sub)}</span><span class="cur" data-layout-ignore aria-hidden="true" style="pointer-events:none"></span></div>`;
   root.appendChild(h);
 
   const key = h.querySelector(".key"), solid = key.querySelector(".solid"), glow = key.querySelector(".glow");
-  const sub = h.querySelector(".sub"), cur = sub.querySelector(".cur"), chars = sub.querySelectorAll(".ch");
+  const sub = h.querySelector(".sub"), cur = sub.querySelector(".cur"), subText = sub.querySelector('.sub-text'), chars = seg(HOOK.sub);
+  const layout = ARGS.layout;
+  [key, sub].forEach(node => node.setAttribute('data-motion-box', ''));
+  const check = layout ? window.clipkitMotionLayout(h, layout) : null;
   // a wide font or a long word must not run off the 1080 px frame: shrink the line to 960 px (60 px margin)
   const base = new Map([[key, S.key.size], [sub, S.sub.size]]);   // the style's own sizes (inline px)
-  const fit = () => { for (const [el, size] of base) {
+  const fit = () => { if (layout) {
+    key.style.fontSize = `${layout.font_sizes.key * layout.scale}px`; sub.style.fontSize = `${layout.font_sizes.sub * layout.scale}px`; return;
+  } for (const [el, size] of base) {
     el.style.fontSize = size + "px";
     const w = el.offsetWidth;
     if (w > 960) el.style.fontSize = size * 960 / w + "px";
   } };
-  fit(); document.fonts.ready.then(fit);
+  fit(); if (!layout) document.fonts.ready.then(fit);
   const tl = gsap.timeline({ paused: true });
+  const scaled = value => layout ? window.clipkitMotionScaleCss(value) : value;
   // both lines share the tilt; -50% keeps them centred on the frame
   gsap.set([key, sub], { xPercent: -50, rotation: S.tilt, transformOrigin: "50% 50%" });
 
@@ -95,21 +102,24 @@
     // neon flicker: coloured outline blinks through blue -> green -> pink, then the solid red title lands
     gsap.set(solid, { opacity: 0 });
     ["#4fc3ff", "#39ff88", "#ff6fd8", "#9dff6a", "#bdfcff"].forEach((c, i) =>
-      tl.set(glow, { "--c": c, opacity: i % 2 ? 0.55 : 1, textShadow: `0 0 18px ${c}, 0 0 40px ${c}` }, i * NEON / 5));
+      tl.set(glow, { "--c": c, opacity: i % 2 ? 0.55 : 1, textShadow: scaled(`0 0 18px ${c}, 0 0 40px ${c}`) }, i * NEON / 5));
     tl.set(glow, { opacity: 0 }, NEON);
     tl.set(solid, { opacity: 1 }, NEON);
     tl.fromTo(key, { scale: 1.08 }, { scale: 1, duration: 0.18 / SPEED, ease: "power2.out" }, NEON);
   } else {
     gsap.set(glow, { opacity: 0 });
-    tl.fromTo(key, { opacity: 0, x: -160, scaleX: 1.9, filter: "blur(10px)" },
-                   { opacity: 1, x: 0, scaleX: 1, filter: "blur(0px) drop-shadow(0 6px 10px rgba(0,0,0,.45))", duration: 0.17 / SPEED, ease: "power2.out" },
+    tl.fromTo(key, { opacity: 0, x: -160 * (layout?.scale || 1), scaleX: 1.9, filter: scaled("blur(10px)") },
+                   { opacity: 1, x: 0, scaleX: 1, filter: scaled("blur(0px) drop-shadow(0 6px 10px rgba(0,0,0,.45))"), duration: 0.17 / SPEED, ease: "power2.out" },
                    S.key.order ? 0.6 / SPEED : 0);
   }
   // sub-line types in one grapheme at a time (display toggles: same picture at any seek time)
-  tl.set(chars, { display: "none" }, 0);
-  chars.forEach((c, k) => tl.set(c, { display: "inline" }, SUB_DELAY + TYPE * (k + 1) / chars.length));
+  const typed = { count: 0 };
+  subText.textContent = '';
+  tl.fromTo(typed, { count: 0 }, { count: chars.length, duration: TYPE, ease: 'none',
+    onUpdate: () => { subText.textContent = chars.slice(0, Math.floor(typed.count)).join(''); } }, SUB_DELAY);
   tl.set(cur, { opacity: 0 }, SUB_DELAY + TYPE + 0.2 / SPEED);
   tl.set(h, { opacity: 0 }, HOOK.duration);
+  if (check) tl.eventCallback('onUpdate', check);
 
   window.__timelines = window.__timelines || {};
   window.__timelines["main"] = tl;

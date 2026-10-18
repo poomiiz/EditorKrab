@@ -1,0 +1,35 @@
+{
+  "scope": "Actual app endpoints through Playwright request with generated gray footage/tone and a previously real-rendered4s sentence-pair alpha MOV. No export UI-button, native-editor or human acceptance.",
+  "source_sha256": {
+    "app/motion_plan.py": "51a54d56e1099ca139166479753d033b8b0686128169600728a62d3ef8f6149c",
+    "app/render.py": "1d0a8293d85e2dfdcfa21d210f25c65d09329a7dc45bcab68c5af7f0b0a4c5e0",
+    "app/hf_build.py": "247204e5e8dfdd3a2535e9cc6e90ca7183ec27b2cde0f01f48fdd06ccdfbb011",
+    "app/capcut_build.py": "879fd4a5890677706bd0e4d92d108837e98fa8a1861437d2761026f131450871",
+    "app/video_editor.py": "69240e812fdfa0bc7c903594546e0e87e859e0e52e1c7d2e718b2947c234d44b",
+    "app/web_ai_identity.py": "5bc5fcc0221b9b861736b11204f19304bdf73bfca655313bbb09ce51883c1590"
+  },
+  "output": {
+    "sha256": "23d4746ee0dc931fb60da7cf4fd65fd5f31d004952da25d5ec3af37fe86f28a8",
+    "bytes": 197318,
+    "duration": 8.0,
+    "width": 1920,
+    "height": 1080,
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "full_av_decode": true
+  },
+  "input_motion_sha256": "eaee18443f9a7df5d2f2465d1065ec5924c7d88edc78ab36177064b01160b382",
+  "valid_recipe_export_status": 200,
+  "manual_change": "Reassign same cue to normal-only words through actual phrases endpoint; retained old motion becomes stale",
+  "stale_recipe_export_status": 400,
+  "stale_hf_build_status": 400,
+  "previous_export_bytes_retained": true,
+  "previous_hf_composition_bytes_retained": true,
+  "limits": [
+    "Legacy MOV without recipe retains existing conservative policy and review_required; not promoted to verified",
+    "Input/target changes during encode checked by injected encoder tests for three adapters, separately from actual export above",
+    "Code first exercised before later publication guard was extended; owned fixture restarted and actual export/rejection rerun against these final source hashes",
+    "No real spoken timing, subject/semantic/contrast, alpha-ink pixel bound, native CapCut or human savings proof",
+    "Expected stale400, fixture update-check404 and sandbox warnings; screenshots/DOM remain private"
+  ]
+}

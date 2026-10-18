@@ -1,0 +1,33 @@
+{
+  "scope": "Actual editor.html and FastAPI video router/transaction/HF builder on isolated generated-media server; picker/lifecycle endpoints and native CapCut guard scoped to fixture; no installed-app auth/native acceptance",
+  "source": "Generated 8-second grey source with440Hz tone, blue/red PNGs, supplied word clocks; no ASR or external Browser AI provider used",
+  "browser_ai": [
+    "bound packet download",
+    "JSON file load",
+    "read-only preview left placements empty",
+    "explicit apply placed atkeyword4.0s",
+    "music/SFX preserved",
+    "stale reply retained input and noapply"
+  ],
+  "manual": [
+    "duration0.5then0.8, later0.7then0.8 persisted",
+    "keyword anchor/start4.0 retained",
+    "latest edits serialized"
+  ],
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "image_scale": "CSS pixels"
+    },
+    {
+      "width": 375,
+      "height": 1000,
+      "page_scroll_width": 360,
+      "inspected_controls_min_height": 44
+    }
+  ],
+  "failed_ui_probe": "A screenshot scroll raced with a second panel rerender; duplicate rerender removed, repeated saves rerun with actual HTTP response waits",
+  "private_config": "Final export server blocked repository/home private config reads and used explicit scoped settings config; earlier UI fixture was not covered by this guard",
+  "console": "Expected stale-reply400; fixture startup omitted update-check route; existing iframe sandbox warnings. No browser error-free acceptance claim."
+}

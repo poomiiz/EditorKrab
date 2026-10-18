@@ -42,6 +42,7 @@ if os.name == "nt":
 import kit_settings  # noqa: E402
 import style_lab_api  # noqa: E402
 import video_editor  # noqa: E402
+import project_lock  # noqa: E402
 import team_hub  # noqa: E402
 import team_workspace  # noqa: E402
 import drive  # noqa: E402
@@ -68,6 +69,8 @@ WIDGET_ORIGINS = _widget_origins(HELPER_URL)
 
 
 def jobs_running() -> bool:
+    if project_lock.busy():
+        return True
     if any(job.get("status") == "running" for job in list(kit_settings._jobs.values())):
         return True
     if any(proc.poll() is None for proc in list(video_editor._transcribe_jobs.values())):
@@ -94,16 +97,7 @@ app.include_router(window_router(PORT, exit_server, jobs_running, lambda: not ap
 
 @app.exception_handler(Exception)
 async def report_crash(request, exc: Exception) -> JSONResponse:
-    """A server error the code did not expect: tell the page, and send it to the team as an auto bug report."""
-    import traceback
-    from fastapi import HTTPException
-    from starlette.concurrency import run_in_threadpool
-    tb = traceback.format_exception(type(exc), exc, exc.__traceback__)
-    try:
-        await run_in_threadpool(kit_settings.report_bug, f"[auto] {type(exc).__name__}: {exc}",
-                                request.url.path, [line.strip()[:300] for line in tb[-10:]], True)
-    except HTTPException as sent:
-        print(f"auto bug report not sent: {sent.detail}", file=sys.stderr)
+    """Return the error to the local caller without sending diagnostics to an external service."""
     return JSONResponse({"detail": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 

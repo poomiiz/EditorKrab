@@ -28,3 +28,4 @@ input{border:1px solid #3a3c45;background:#16171b;color:#ececf1;padding:10px 12p
 @media(max-width:720px){main{grid-template-columns:1fr;gap:24px;max-width:420px}.brand{text-align:center;padding:0}.brand img{margin:auto;width:120px;height:120px}h1{margin-top:18px}.entry{border-left:0;border-top:1px solid #2a2c33;padding:28px 0 0}.slogan{font-size:20px}}
 .lang{position:fixed;top:16px;right:16px;width:auto;min-height:32px;padding:4px 12px;font-size:13px;font-weight:500;background:transparent;color:#9a9ca6}
 .lang:hover{color:#ececf1}
+.lang{min-height:44px}

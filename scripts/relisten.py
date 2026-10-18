@@ -6,11 +6,15 @@ Prints what the speech model hears over that line's time, a little wider. Change
 scripts/fix_text.py.
 """
 import sys
+import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 import capcut_edit  # noqa: E402
 
-if len(sys.argv) != 3:
-    sys.exit(__doc__)
-print(capcut_edit.relisten(sys.argv[1], sys.argv[2]))
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("project")
+parser.add_argument("text")
+parser.add_argument("--cue-id", help="Subtitle segment ID; required when wording repeats")
+args = parser.parse_args()
+print(capcut_edit.relisten(args.project, args.text, cue_id=args.cue_id))

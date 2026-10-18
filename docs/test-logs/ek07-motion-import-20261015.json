@@ -1,0 +1,38 @@
+{
+  "scope": "Actual editor UI import via Playwright with generated gray footage and sine tone; no speech/native/human acceptance",
+  "invalid_layout_http": 400,
+  "valid_layout_http": 200,
+  "published_motion_count": 1,
+  "anchor": {
+    "kind": "word",
+    "cue_id": "0",
+    "word": 2
+  },
+  "start": 4.0,
+  "duration": 1.0,
+  "ownership": {
+    "mode": "decorate",
+    "targets": [],
+    "caption_policy": "preserve"
+  },
+  "media": {
+    "duration": 1.0,
+    "fps": 30.0,
+    "width": 1920,
+    "height": 1080,
+    "sha256": "fb37e6fb72bb8198e4c5b1b36f0fb7e02439121e515afeeef8150bbe10544eac",
+    "alpha_decode": true
+  },
+  "source_hashes": {
+    "app/video_editor.py": "cb583a86c18dd05ba976c95542569c2b1bac65706deb4c6c3c977ebfbe8db4aa",
+    "app/web_ai_json.py": "018506be98ef122ec70a80a82bc48cc17f8b0a9987890920b529047da6afcee6",
+    "prompts/web_ai/clip.md": "dd3b077641383d0132c6a75085dfc068270894da65525544dc89c82110b5ed95",
+    "prompts/web_ai/schema.md": "6558b56533c009db173e4ec649082fc269f2e5d6066d5ecd975269c9a677003c"
+  },
+  "known_console_entries": [
+    "Fixture-only update-check endpoint404",
+    "Expected invalid import400",
+    "iframe sandbox warning"
+  ],
+  "screenshots": "Private only: DOM contains installed local preset names; not published"
+}

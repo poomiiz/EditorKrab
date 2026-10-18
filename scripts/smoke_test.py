@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "app"))
@@ -238,9 +239,78 @@ def stories_are_not_transcribed_twice():
             {"start": 1.0, "end": 3.0, "text": "หนึ่ง", "words": [[1.0, 3.0, "หนึ่ง"]]},
             {"start": 10.0, "end": 12.0, "text": "สอง", "words": [[10.0, 11.0, "ส"], [11.0, 12.0, "อง"]]},
             {"start": 20.0, "end": 22.0, "text": "สาม", "words": []}]), encoding="utf-8")
+        import hashlib
+        video_edit.transcript_file(str(video)).with_suffix(".meta.json").write_text(json.dumps({
+            "schema_version": 2, "sha256": hashlib.sha256(video.read_bytes()).hexdigest()}), encoding="utf-8")
         got = capcut_edit._from_transcript(str(video), 9.0, 15.0)
         assert got == [{"start": 1.0, "end": 3.0, "text": "สอง", "words": [[1.0, 2.0, "ส"], [2.0, 3.0, "อง"]]}], got
         assert capcut_edit._from_transcript(str(video), 11.0, 15.0) is None, "a phrase cut by the edge was reused"
+
+
+def transcription_detects_the_source_language():
+    import video_edit
+    from unittest.mock import patch
+    with patch.object(video_edit.kitconfig, "_load", return_value={}), \
+         patch.object(video_edit, "_get_model", return_value=(object(), "test")), \
+         patch.object(video_edit, "_extract_audio"), \
+         patch.object(video_edit, "_detect_language", return_value="th") as detect, \
+         patch.object(video_edit, "_batched", return_value=[]) as recognize:
+        video_edit.transcribe("source.mp4", 0, 30)
+        assert detect.call_count == 1
+        assert recognize.call_args.args[2] == "th"
+        video_edit.transcribe("source.mp4", 0, 30, language="en")
+        assert detect.call_count == 1, "an explicit source language was detected again"
+        assert recognize.call_args.args[2] == "en"
+
+
+def uncertain_turbo_language_uses_an_installed_model():
+    import video_edit
+    import numpy as np
+    from unittest.mock import Mock, patch
+    weak, stronger = Mock(), Mock()
+    weak.detect_language.return_value = ("th", 0.43, [("th", 0.43), ("en", 0.2)])
+    stronger.detect_language.return_value = ("th", 0.9, [("th", 0.9), ("en", 0.02)])
+    previous = video_edit._model
+    with patch("faster_whisper.audio.decode_audio", return_value=np.zeros(16000)), \
+         patch("faster_whisper.utils.download_model", return_value="installed") as cached, \
+         patch("faster_whisper.WhisperModel", return_value=stronger) as load:
+        assert video_edit._detect_language(weak, Path("source.wav"), model_size="large-v3-turbo") == "th"
+        assert cached.call_args.kwargs["local_files_only"] is True
+        load.assert_called_once_with("installed", device="cpu", compute_type="int8", local_files_only=True)
+        assert video_edit._model is previous
+        stronger.detect_language.return_value = weak.detect_language.return_value
+        try:
+            video_edit._detect_language(weak, Path("source.wav"), model_size="large-v3-turbo")
+            raise AssertionError("two uncertain detectors must not assume a language")
+        except video_edit.VideoEditError as exc:
+            assert "cannot tell the spoken language" in str(exc)
+        cached.side_effect = FileNotFoundError("not installed")
+        try:
+            video_edit._detect_language(weak, Path("source.wav"), model_size="large-v3-turbo")
+            raise AssertionError("a missing second model must not assume a language")
+        except video_edit.VideoEditError as exc:
+            assert "select the spoken language" in str(exc)
+
+
+def legacy_cli_uses_the_shared_language_detector():
+    import clipkit
+    import video_edit
+    import kitconfig
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+    model = Mock()
+    model.transcribe.return_value = ([], SimpleNamespace(language="en"))
+    args = SimpleNamespace(model="large-v3", device="cpu", input="source.mp4", language=None)
+    with patch.dict(kitconfig.CFG, {"speech_language": "auto"}), \
+         patch("faster_whisper.WhisperModel", return_value=model), \
+         patch.object(video_edit, "_detect_language", return_value="en") as detect:
+        try:
+            clipkit.cmd_transcribe(args)
+            raise AssertionError("empty recognition should report no speech")
+        except RuntimeError as exc:
+            assert "no speech found" in str(exc), exc
+        assert detect.call_count == 1
+        assert model.transcribe.call_args.kwargs["language"] == "en"
 
 
 def run_clip_follows_speech_language():
@@ -258,7 +328,7 @@ def run_clip_follows_speech_language():
             run_clip.stories(str(video), 60)
     finally:
         video_edit.transcribe, video_edit.probe = keep
-    assert asked == [None], f"run_clip chose the language itself: {asked}"
+    assert asked == [video_edit.speech_language()], f"run_clip ignored the configured language: {asked}"
 
 
 def run_clip_logs_step_times_for_the_benchmark():
@@ -288,23 +358,29 @@ def benchmark_measurements_are_isolated():
 def saved_stories_come_back_after_restart():
     # the split is saved beside the video; after ClipKit restarts, opening the file shows it again with no new AI round
     import video_editor
+    import video_edit
+    import web_ai_json
+    import web_ai_identity
+    import jobstore
+    from unittest.mock import patch
     from fastapi import HTTPException
-    with tempfile.TemporaryDirectory() as t:
+    with tempfile.TemporaryDirectory() as t, patch.object(jobstore, "STATE", Path(t)), \
+         patch.object(video_editor, "_story_jobs", jobstore.JobStore("story-smoke")), \
+         patch.object(video_editor, "Thread", side_effect=lambda target, args, **kw:
+                      SimpleNamespace(start=lambda: target(*args))):
         video = str(Path(t) / "talk.mp4")
         Path(video).write_bytes(b"x")
-        keep = video_editor._story_jobs.path
-        video_editor._story_jobs.path = Path(t) / "jobs-story-plan.json"  # keep test jobs out of this machine's state/
         try:
             video_editor.story_plan_status(video)
             raise AssertionError("a file never split returned a plan")
         except HTTPException as exc:
             assert exc.status_code == 404
         Path(video + ".transcript.json").write_text(json.dumps([{"start": 1.0, "end": 9.0, "text": "เงิน"}]), encoding="utf-8")
-        Path(video + ".stories.json").write_text(json.dumps([{"title": "เงิน", "start": 1, "end": 9}]), encoding="utf-8")
-        job = video_editor.story_plan_status(video)
+        web_ai_json.import_stories(video, {"clipkit_web_ai": 2, **web_ai_identity.issue("stories", video),
+            "step": "stories", "video": "talk.mp4", "stories": [{"title": "เงิน", "start": 1, "end": 9}]})
+        with patch.object(video_edit, "transcribe_file", return_value=[{"start": 1., "end": 9., "text": "เงิน"}]):
+            job = video_editor.story_plan_status(video)
         assert job["status"] == "done" and job["stories"][0]["title"] == "เงิน" and job["duration"] == 9.0, job
-        video_editor._story_jobs.pop(video)
-        video_editor._story_jobs.path = keep
 
 
 def name_check_works():
@@ -475,69 +551,91 @@ def web_ai_answers_are_checked():
     # the web AI's JSON goes into the same files the local agent writes; a wrong answer writes nothing
     import capcut_edit
     import web_ai_json as web_ai
+    import video_editor
+    import video_edit
+    import jobstore
     from video_edit import VideoEditError
-    with tempfile.TemporaryDirectory() as t:
+    from unittest.mock import patch
+    def identity(packet):
+        data = json.loads(packet.rsplit("```json", 1)[1].split("```", 1)[0])
+        return {key: data[key] for key in ("packet_id", "revision", "source_id")}
+
+    with tempfile.TemporaryDirectory() as t, patch.object(jobstore, "STATE", Path(t)), \
+         patch.object(video_editor, "_story_jobs", jobstore.JobStore("web-smoke")), \
+         patch.object(video_editor, "Thread", side_effect=lambda target, args, **kw:
+                      SimpleNamespace(start=lambda: target(*args))), \
+         patch.object(video_edit, "transcribe_file", side_effect=lambda file:
+                      json.loads(video_edit.transcript_file(file).read_text(encoding="utf-8"))):
         video = Path(t) / "ep.mov"
         video.write_bytes(b"")
         (Path(t) / "ep.mov.transcript.json").write_text(json.dumps(
             [{"start": 0.0, "end": 2.0, "text": "สวัสดี"}, {"start": 10.0, "end": 14.0, "text": "เรื่องเงิน"}]), encoding="utf-8")
         assert "เรื่องเงิน" in web_ai.export_stories(str(video)).read_text(encoding="utf-8")
         # what the person typed before the split leads the packet; clearing the box removes it
-        import video_editor
-        video_editor._story_jobs.path = Path(t) / "jobs-story-plan.json"
-        video_editor._story_jobs[str(video)] = {"status": "waiting"}  # a split already going: no Whisper here
         video_editor.story_plan(video_editor.StoryPlanRequest(file=str(video), brief="  vlog สบายๆ เน้นช่วงตลก "))
-        assert video_editor.brief(str(video)) == {"brief": "vlog สบายๆ เน้นช่วงตลก"}
+        assert video_editor.brief(str(video)) == {"brief": "vlog สบายๆ เน้นช่วงตลก", "max_minutes": None}
         packet = web_ai.export_stories(str(video)).read_text(encoding="utf-8")
+        assert packet.index("ใช้ AI บนเว็บได้") < packet.index("ทางเลือกสำหรับ AI ที่เขียนไฟล์"), "web AI must not require a local agent"
         assert packet.index("vlog สบายๆ เน้นช่วงตลก") < packet.index("เรื่องเงิน"), packet[:300]
         video_editor.story_plan(video_editor.StoryPlanRequest(file=str(video)))  # no brief sent: kept
         assert video_editor.brief(str(video))["brief"]
         video_editor.story_plan(video_editor.StoryPlanRequest(file=str(video), brief=""))
-        assert video_editor.brief(str(video)) == {"brief": ""}
-        assert "ความต้องการของผู้ตัดต่อ" not in web_ai.export_stories(str(video)).read_text(encoding="utf-8")
-        head = {"clipkit_web_ai": 1, "step": "stories", "video": "ep.mov"}
+        assert video_editor.brief(str(video)) == {"brief": "", "max_minutes": None}
+        packet = web_ai.export_stories(str(video)).read_text(encoding="utf-8")
+        assert "ความต้องการของผู้ตัดต่อ" not in packet
+        head = {"clipkit_web_ai": 2, **identity(packet), "step": "stories", "video": "ep.mov"}
         for bad in ({**head, "video": "other.mov", "stories": [{"title": "a", "start": 9, "end": 15}]},
-                    {**head, "stories": [{"title": "a", "start": 3, "end": 5}]}):  # wrong video / no speech
+                    {**head, "stories": [{"title": "a", "start": 3, "end": 5}]},
+                    {**head, "stories": [{"title": "a", "start": 9, "end": 15}]}):  # wrong video / no speech / past transcript
             try:
                 web_ai.import_answer("stories", str(video), json.dumps(bad))
                 raise AssertionError(f"accepted {bad}")
             except VideoEditError:
                 pass
         assert not (Path(t) / "ep.mov.stories.json").exists()
-        ans = "here:\n```json\n" + json.dumps({**head, "stories": [{"title": "เงิน", "start": 9, "end": 15}]}) + "\n```"
-        assert web_ai.import_answer("stories", str(video), ans)["stories"][0]["end"] == 15
+        ans = "here:\n```json\n" + json.dumps({**head, "stories": [{"title": "เงิน", "start": 10, "end": 14}]}) + "\n```"
+        assert web_ai.import_answer("stories", str(video), ans)["stories"][0]["end"] == 14
         # an AI on this machine saves its answer next to the file instead: imported once, then gone
         assert web_ai.import_answer("stories", str(video), "") == {"waiting": True}
         saved = web_ai.answer_file("stories", str(video))
-        assert str(saved) in web_ai.export_stories(str(video)).read_text(encoding="utf-8")
-        saved.write_text(json.dumps({**head, "stories": [{"title": "เงิน", "start": 9, "end": 14}]}), encoding="utf-8")
+        packet = web_ai.export_stories(str(video)).read_text(encoding="utf-8")
+        assert saved.name in packet
+        head.update(identity(packet))
+        saved.write_text(json.dumps({**head, "stories": [{"title": "เงิน", "start": 10, "end": 14}]}), encoding="utf-8")
         assert web_ai.import_answer("stories", str(video), "")["stories"][0]["end"] == 14 and not saved.exists()
 
         proj = Path(t) / "proj"
         proj.mkdir()
-        keep = capcut_edit.read_draft
-        capcut_edit.read_draft = lambda p: {"subtitles": [{"start": 0.0, "end": 2.0, "text": "เงินไม่พอใช้"}]}
-        try:
-            web_ai.export_clip(str(proj))
-            assert "ยาวราว" not in web_ai.export_clip(str(proj)).read_text(encoding="utf-8")
-            aimed = web_ai.export_clip(str(proj), 1.5).read_text(encoding="utf-8")
-            assert "ยาวราว 1.5 นาที" in aimed and aimed.index("ยาวราว") < aimed.index("## 1. Subtitle"), "the length aim is not in the cut rules"
-            good = {"clipkit_web_ai": 1, "step": "clip", "project": "proj", "hook": [{"text": "เงินหมด", "color": "red"}],
-                    "lines": [{"n": 1, "items": [["เงิน", "ไม่พอใช้", "empty wallet", {"look": "red"}]]}]}
-            for bad in ({**good, "lines": [{"n": 1, "items": [["เงิน", "พอใช้"]]}]},  # words changed
-                        {**good, "hook": [{"text": "x", "color": "blue"}]},
-                        {**good, "cut": [1]}):  # nothing left
-                try:
+        span = {"start": 0, "duration": 2_000_000}
+        draft = {"id": "draft", "duration": span["duration"], "canvas_config": {"width": 1080, "height": 1920},
+                 "materials": {"videos": [{"id": "v", "path": str(video)}], "texts": [
+                     {"id": "t", "font_size": 15, "content": json.dumps({"text": "เงินไม่พอใช้", "styles": []})}]},
+                 "tracks": [{"type": "video", "segments": [{"id": "v", "material_id": "v",
+                     "source_timerange": span, "target_timerange": span}]},
+                     {"type": "text", "segments": [{"id": "cue-1", "material_id": "t",
+                         "target_timerange": span, "clip": {"scale": {"x": 1, "y": 1}, "transform": {"x": 0, "y": 0}}}]}]}
+        (proj / "draft_content.json").write_text(json.dumps(draft), encoding="utf-8")
+        (proj / "clipkit_words.json").write_text(json.dumps({"cue:cue-1": [[0, 1, "เงิน"], [1, 2, "ไม่พอใช้"]]}), encoding="utf-8")
+        web_ai.export_clip(str(proj))
+        assert "ยาวราว" not in web_ai.export_clip(str(proj)).read_text(encoding="utf-8")
+        aimed = web_ai.export_clip(str(proj), 1.5).read_text(encoding="utf-8")
+        assert "ยาวราว 1.5 นาที" in aimed and aimed.index("ยาวราว") < aimed.index("## 1. Subtitle"), "the length aim is not in the cut rules"
+        good = {"clipkit_web_ai": 2, **identity(aimed), "step": "clip", "project": "proj", "hook": [{"text": "เงินหมด", "color": "red"}],
+                "lines": [{"n": 1, "cue_id": "cue-1", "items": [["เงิน", "ไม่พอใช้", "empty wallet", {"look": "red"}]]}]}
+        for bad in ({**good, "lines": [{"n": 1, "items": [["เงิน", "พอใช้"]]}]},  # words changed
+                    {**good, "hook": [{"text": "x", "color": "blue"}]},
+                    {**good, "cut": [1]}):  # nothing left
+            try:
+                with patch("host_platform.capcut_running", return_value=False):
                     web_ai.import_answer("clip", str(proj), json.dumps(bad))
-                    raise AssertionError(f"accepted {bad}")
-                except VideoEditError:
-                    pass
-            assert not (proj / "clipkit_punch.json").exists()
+                raise AssertionError(f"accepted {bad}")
+            except VideoEditError:
+                pass
+        assert not (proj / "clipkit_punch.json").exists()
+        with patch("host_platform.capcut_running", return_value=False):
             web_ai.import_answer("clip", str(proj), json.dumps(good))
-        finally:
-            capcut_edit.read_draft = keep
         punch = json.loads((proj / "clipkit_punch.json").read_text(encoding="utf-8"))
-        assert punch == {"เงินไม่พอใช้": [["เงิน", "ไม่พอใช้", "empty wallet", {"look": "red"}]]}, punch
+        assert punch == {"cue:cue-1": [["เงิน", "ไม่พอใช้", "empty wallet", {"look": "red"}]]}, punch
         assert json.loads((proj / "clipkit_hook.json").read_text(encoding="utf-8"))[0]["color"] == "red"
 
 
@@ -583,13 +681,15 @@ def emoji_pops_on_keywords():
 def speed_ramp_eases_into_normal_speed():
     # a source whose brightness is 25 x its own time: the ramped copy runs 3x at first, 1x after 0.6 s
     import render
+    import insert_plan
     import numpy as np
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / "count.mp4"
         subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "nullsrc=s=64x64:r=30:d=6,geq=lum='T*25':cb=128:cr=128",
                         "-c:v", "libx264", "-crf", "1", "-pix_fmt", "yuv420p", str(src)], check=True)
-        out = render.speed_ramp(str(src), 2.0, Path(tmp) / "c")
-        assert render.speed_ramp(str(src), 2.0, Path(tmp) / "c") == out  # made once, then reused
+        verified = {"source_sha256": insert_plan.file_digest(src), "source_duration": insert_plan._probe(src)["duration"]}
+        out = render.speed_ramp(str(src), 2.0, Path(tmp) / "c", **verified)
+        assert render.speed_ramp(str(src), 2.0, Path(tmp) / "c", **verified) == out  # made once, then reused
         info = render.probe(out)
         assert abs(info["duration"] - 2.0) < 0.1, info
         for at, source_t in ((0.3, 0.75), (0.6, 1.2), (1.6, 2.2)):
@@ -598,7 +698,7 @@ def speed_ramp_eases_into_normal_speed():
             got = np.frombuffer(r.stdout[:64 * 64], np.uint8).mean() / 25  # the Y plane, as geq wrote it
             assert abs(got - source_t) < 0.12, (at, got, source_t)
     try:
-        render.speed_ramp("x", 0, Path("."))
+        render.speed_ramp("x", 0, Path("."), source_sha256="", source_duration=1)
         raise AssertionError("a 0 s b-roll got a ramp")
     except render.VideoEditError:
         pass

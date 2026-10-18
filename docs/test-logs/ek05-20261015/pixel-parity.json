@@ -1,0 +1,65 @@
+[
+  {
+    "ratio": "portrait",
+    "canvas": [
+      1080,
+      1920
+    ],
+    "ass_cpu_exit": 0,
+    "ass_blue_bbox": [
+      353,
+      1116,
+      727,
+      1207
+    ],
+    "hf_blue_bbox": [
+      353,
+      1116,
+      727,
+      1207
+    ],
+    "max_edge_difference_px": 0
+  },
+  {
+    "ratio": "landscape",
+    "canvas": [
+      1920,
+      1080
+    ],
+    "ass_cpu_exit": 0,
+    "ass_blue_bbox": [
+      855,
+      625,
+      1065,
+      675
+    ],
+    "hf_blue_bbox": [
+      855,
+      626,
+      1064,
+      676
+    ],
+    "max_edge_difference_px": 1
+  },
+  {
+    "ratio": "square",
+    "canvas": [
+      1080,
+      1080
+    ],
+    "ass_cpu_exit": 0,
+    "ass_blue_bbox": [
+      435,
+      625,
+      645,
+      675
+    ],
+    "hf_blue_bbox": [
+      435,
+      626,
+      644,
+      676
+    ],
+    "max_edge_difference_px": 1
+  }
+]

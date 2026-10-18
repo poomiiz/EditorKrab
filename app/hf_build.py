@@ -9,6 +9,9 @@ from __future__ import annotations
 import atomic
 import html
 import json
+import cue_data
+import os
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -17,15 +20,62 @@ import render
 import video_edit
 
 
+class BuildBusy(video_edit.VideoEditError):
+    pass
+
+
+@contextmanager
+def build_lock(path: str):
+    """One OS-held reservation across app and CLI processes; closing releases it after a crash."""
+    import hashlib
+    import jobstore
+    root = jobstore.STATE / "render-locks"
+    root.mkdir(parents=True, exist_ok=True)
+    key = hashlib.sha256(os.path.normcase(str(Path(path).resolve())).encode()).hexdigest()
+    with (root / f"{key}.lock").open("a+b") as lock:
+        if not lock.tell():
+            lock.write(b"\0")
+            lock.flush()
+        lock.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise BuildBusy("โปรเจกต์หรือไฟล์ส่งออกนี้กำลังสร้างอยู่ · รอให้งานเดิมเสร็จ") from exc
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+
+
 def _local(out: Path, path: str, name: str | None = None) -> str:
-    """A file the composition points at, inside its own folder (the renderer takes only local or https files).
-    Small files (b-roll, music, effects, font) are copied once; same name = same file."""
+    """Content-addressed local copies never alias equal-size files with the same basename."""
     import shutil
+    import tempfile
+    import insert_plan
     src = Path(path)
-    dst = out / "media" / (name or src.name)
+    digest = insert_plan.file_digest(src)
+    dst = out / "media" / (digest + src.suffix.lower())
     dst.parent.mkdir(exist_ok=True)
-    if not dst.is_file() or dst.stat().st_size != src.stat().st_size:
-        shutil.copy2(src, dst)
+    if not dst.is_file() or insert_plan.file_digest(dst) != digest:
+        fd, temporary = tempfile.mkstemp(prefix=".asset-", suffix=src.suffix, dir=dst.parent)
+        os.close(fd)
+        temp = Path(temporary)
+        try:
+            shutil.copy2(src, temp)
+            if insert_plan.file_digest(temp) != digest or insert_plan.file_digest(src) != digest:
+                raise render.VideoEditError("asset changed while copying; finish saving it before exporting")
+            temp.replace(dst)
+        finally:
+            temp.unlink(missing_ok=True)
     return "media/" + quote(dst.name)
 
 
@@ -35,15 +85,14 @@ def _proxy(out: Path, src: str, segs: list[dict], skin: float = 0) -> str:
     live player shows it: made once per cut list and skin strength."""
     import hashlib
     import subprocess
-    key = hashlib.md5(json.dumps([[(s["media_start"], s["dur"]) for s in segs], round(skin, 2), render.SKIN_FILTER, render.EDGE_FADE, 2]).encode()).hexdigest()[:10]
+    import tempfile
+    import insert_plan
+    source = Path(src)
+    identity = insert_plan.file_digest(source)
+    key = hashlib.sha256(json.dumps([identity, [(s["media_start"], s["dur"]) for s in segs], round(skin, 2), render.SKIN_FILTER, render.EDGE_FADE, 3]).encode()).hexdigest()
     dst = out / "media" / f"footage_{key}.mp4"
     dst.parent.mkdir(exist_ok=True)
     if not dst.is_file():
-        for old in dst.parent.glob("footage_*.mp4"):
-            try:
-                old.unlink()
-            except OSError:  # still open in the editor's player: removed on a later build
-                pass
         a, b = min(s["media_start"] for s in segs), max(s["media_start"] + s["dur"] for s in segs)
         # size down once, before the cuts: trimming 36 pieces off 4K frames took 336 s, this order 78 s (same file)
         size = "scale='if(gt(iw,ih),min(1920,iw),-2)':'if(gt(iw,ih),-2,min(1920,ih))'"
@@ -53,12 +102,39 @@ def _proxy(out: Path, src: str, segs: list[dict], skin: float = 0) -> str:
                         for i, s in enumerate(segs))
         graph = parts + "".join(f"[v{i}][a{i}]" for i in range(len(segs))) + f"concat=n={len(segs)}:v=1:a=1[cv][ca];[cv]" + \
             (render.SKIN_FILTER.format(skin=skin) if skin > 0 else "null") + "[sv]"  # smoothing after the size-down: 4x less work
-        r = subprocess.run([render.FFMPEG, "-v", "error", "-y", "-ss", f"{a:.3f}", "-to", f"{b:.3f}", "-i", src,
-                            "-filter_complex", graph, "-map", "[sv]", "-map", "[ca]", "-r", "30", "-c:v", "libx264",
-                            "-preset", "veryfast", "-crf", "18", "-g", "15", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
-                            str(dst)], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
-        if r.returncode or not dst.is_file():
-            raise render.VideoEditError("could not prepare the footage: " + r.stderr[-300:])
+        fd, name = tempfile.mkstemp(prefix="footage_", suffix=".tmp.mp4", dir=dst.parent)
+        os.close(fd)
+        temp = Path(name)
+        try:
+            r = subprocess.run([render.FFMPEG, "-v", "error", "-y", "-ss", f"{a:.3f}", "-to", f"{b:.3f}", "-i", src,
+                                "-filter_complex", graph, "-map", "[sv]", "-map", "[ca]", "-r", "30", "-c:v", "libx264",
+                                "-preset", "veryfast", "-crf", "18", "-g", "15", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+                                str(temp)], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
+            if r.returncode or not temp.stat().st_size:
+                raise render.VideoEditError("could not prepare the footage: " + r.stderr[-300:])
+            temp.replace(dst)
+        finally:
+            temp.unlink(missing_ok=True)
+    return "media/" + dst.name
+
+
+def _motion(out: Path, source: str) -> str:
+    """Browser-decodable alpha video; CapCut keeps the original transparent MOV."""
+    import hashlib
+    import subprocess
+    import insert_plan
+    src = Path(source)
+    key = hashlib.sha256(f"alpha-v1:{insert_plan.file_digest(src)}".encode()).hexdigest()
+    dst = out / "media" / f"motion_{key}.webm"
+    dst.parent.mkdir(exist_ok=True)
+    if not dst.is_file():
+        temp = dst.with_suffix(".tmp.webm")
+        result = subprocess.run([render.FFMPEG, "-v", "error", "-y", "-i", str(src), "-an", "-c:v", "libvpx-vp9",
+                                 "-lossless", "1", "-pix_fmt", "yuva420p", "-auto-alt-ref", "0", str(temp)],
+                                capture_output=True, text=True, timeout=600)
+        if result.returncode:
+            raise render.VideoEditError("could not prepare transparent motion: " + result.stderr[-300:])
+        temp.replace(dst)
     return "media/" + dst.name
 
 
@@ -66,10 +142,41 @@ def _css_color(rgb: list[float]) -> str:
     return "#%02x%02x%02x" % tuple(max(0, min(255, round(c * 255))) for c in rgb[:3])
 
 
-def build(path: str) -> Path:
-    t = render.render_draft(path, "", dry=True)
+def build(path: str, *, repair: bool = False) -> Path:
+    with build_lock(path):
+        return _build(path, repair=repair)
+
+
+def subtitle_html(event: dict, identifier: str, font_face: str = "ClipKit Thai") -> str:
+    """Serialize the measured plan; the timed outer clip never receives animation visibility."""
+    return (f'<div id="{identifier}" class="clip subtitle-event" data-role="{event["role"]}" '
+            f'data-start="{event["start"]:.6f}" data-duration="{event["end"] - event["start"]:.6f}" data-track-index="3" '
+            f'style="position:absolute;inset:0">'
+            f'<div class="subtitle-glyph" style="left:{event["center_x_px"]:.6f}px;top:{event["center_y_px"]:.6f}px;'
+            f'width:max-content;font-family:{font_face};font-size:{event["size_px"]:.6f}px;line-height:{render.LINE_H};'
+            f'color:{_css_color(event["fill"])};-webkit-text-stroke:{event["outline_px"] * 2:.6f}px {_css_color(event["stroke"])};'
+            f'text-shadow:0 {event["shadow"]}px {event["shadow"] * 2}px rgba(0,0,0,.7)">{html.escape(event["text"])}</div></div>')
+
+
+def subtitle_animation(event: dict, identifier: str) -> str:
+    selector = f'#{identifier} > .subtitle-glyph'
+    base = f'tl.set("{selector}",{{xPercent:-50,yPercent:-50,rotation:{event["rotation"]:g}}},0);'
+    if event["effect"] == "pop":
+        return base + f'tl.fromTo("{selector}",{{scale:1.3}},{{scale:1,duration:0.14,ease:"none"}},{event["start"]:.6f});'
+    if event["effect"] == "fade":
+        return base + f'tl.fromTo("{selector}",{{opacity:0}},{{opacity:1,duration:0.08,ease:"none"}},{event["start"]:.6f});'
+    return base
+
+
+def _build(path: str, *, final: bool = False, audio_check=None, repair: bool = False) -> Path:
+    import web_ai_transaction
+    web_ai_transaction.recover("clip", path)
+    t = render.render_draft(path, "", dry=True, final=final, repair=repair)
+    render.motion_plan.verify_timeline(path, t)
+    t["broll"] = render.insert_playback(path, t["broll"], materialize=True)
     W, H, D = t["width"], t["height"], t["duration"]
     st = t["style"] or {}
+    subtitle_font = render._font(render.pair_look(st, W, H).get("font"))[1]
     k = min(W, H) / 1080 * render.CAPCUT_PX
     box, lh = render.safe_box(st), float(st.get("line_h", render.LINE_H))
     fit = t["fit"]
@@ -105,97 +212,65 @@ def build(path: str) -> Path:
         anim.append(f'tl.set(".cam",{{scale:{render.ZOOM}}},{a:.3f});tl.set(".cam",{{scale:1}},{b:.3f});')
     # b-roll over the speaker
     for b in t["broll"]:
-        if b.get("file") and video_edit.is_image(b["file"]):
-            els.append(f'<img id="{nid("b")}" class="clip" src="{_local(out, b["file"])}" data-start="{b["start"]:.3f}" '
-                       f'data-duration="{b["dur"]:.3f}" data-track-index="2" '
-                       f'style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">')
+        frame = b["frame"]
+        rectangle = f'position:absolute;left:{frame["left"]}px;top:{frame["top"]}px;width:{frame["width"]}px;height:{frame["height"]}px'
+        if b["kind"] == "image":
+            els.append(f'<img id="{nid("b")}" class="clip" src="{_local(out, b["file"])}" data-start="{b["start"]:.9f}" '
+                       f'data-duration="{b["dur"]:.9f}" data-track-index="2" '
+                       f'style="{rectangle}">')
         elif b.get("file"):
-            els.append(f'<video id="{nid("b")}" class="clip" src="{_local(out, b["play"])}" muted playsinline data-start="{b["start"]:.3f}" '
-                       f'data-duration="{b["dur"]:.3f}" data-media-start="0" data-track-index="2" '
-                       f'style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>')
+            els.append(f'<video id="{nid("b")}" class="clip" src="{_local(out, b["play"])}" muted playsinline data-start="{b["start"]:.9f}" '
+                       f'data-duration="{b["dur"]:.9f}" data-media-start="{b["media_start"]:.9f}" data-track-index="2" '
+                       f'style="{rectangle}"></video>')
 
     def text(words: str, size: float, y: float, fill, stroke, width: float, a: float, b: float, grow: str = "both", floor: float = 0, one: bool = False,
-             x: float = 0, rot: float = 0, shadow: bool = False) -> str:
+             x: float = 0, rot: float = 0, shadow: bool = False, fixed: bool = False,
+             role: str = "normal", cue_id: str | None = None) -> str:
         # same as the ffmpeg export: one line only, a long subtitle goes on as the next piece (render.one_line)
         first = ""
-        for piece, pa, pb, px in render.one_line(words, render.DEFAULT_FONT, size * k, W * (box["w"] - abs(x)), a, b):
-            i = nid("t")
-            first = first or i
-            # a lead grows upward and a punch downward, so the pair never covers each other
-            top = H / 2 - y * H / 2 + {"up": px * 0.625, "down": -px * 0.625}.get(grow, 0)
-            top = max(top, floor) if grow == "down" else top
-            shift = {"up": "-100%", "down": "0"}.get(grow, "-50%")
-            # same safe box as the ffmpeg export (render.safe_box): clear of the apps' top bar, buttons and caption
-            block = px * lh
-            upper = top - {"-100%": block, "0": 0}.get(shift, block / 2)
-            top += min(max(upper, H * box["top"]), H * box["bottom"] - block) - upper
-            tops[i] = top
-            els.append(f'<div id="{i}" class="clip txt" data-start="{pa:.3f}" data-duration="{max(0.05, pb - pa - 0.034):.3f}" data-track-index="3" '  # one frame short: the next phrase never shares a frame
-                       f'style="top:{top:.0f}px;left:{5 + x * 50:g}%;transform:translateY({shift}) rotate({rot:g}deg);'
-                       f'{"text-shadow:4px 4px 6px rgba(0,0,0,.9);" if shadow else ""}font-size:{px:.0f}px;line-height:{lh};color:{_css_color(fill)};'
-                       f'-webkit-text-stroke:{px * width * 1.2 + 2:.1f}px {_css_color(stroke)}">{html.escape(piece)}</div>')
+        for piece, pa, pb, px in render.one_line(words, subtitle_font, size * k, W * (box["w"] - abs(x)), a, b, one=True, fixed=fixed):
+            for pa, pb in render.visible_spans(pa, pb, t.get("motions", []), role=role, cue_id=cue_id):
+                i = nid("t")
+                first = first or i
+                # a lead grows upward and a punch downward, so the pair never covers each other
+                top = H / 2 - y * H / 2 + {"up": px * 0.625, "down": -px * 0.625}.get(grow, 0)
+                top = max(top, floor) if grow == "down" else top
+                shift = {"up": "-100%", "down": "0"}.get(grow, "-50%")
+                # same safe box as the ffmpeg export (render.safe_box): clear of the apps' top bar, buttons and caption
+                block = px * lh
+                upper = top - {"-100%": block, "0": 0}.get(shift, block / 2)
+                top += min(max(upper, H * box["top"]), H * box["bottom"] - block) - upper
+                tops[i] = top
+                els.append(f'<div id="{i}" class="clip txt" data-start="{pa:.3f}" data-duration="{pb - pa:.3f}" data-track-index="3" '
+                           f'style="top:{top:.0f}px;left:{5 + x * 50:g}%;transform:translateY({shift}) rotate({rot:g}deg);'
+                           f'{"text-shadow:4px 4px 6px rgba(0,0,0,.9);" if shadow else ""}font-size:{px:.0f}px;line-height:{lh};color:{_css_color(fill)};'
+                           f'-webkit-text-stroke:{px * width * 1.2 + 2:.1f}px {_css_color(stroke)}">{html.escape(piece)}</div>')
         return first
 
     tops: dict[str, float] = {}
     look = t["look"]
-    if look == "pair":
-        P = render.pair_look(st)
-        held = ""
-        en = t.get("caption_en") or {}
-        thai = P["caption_lang"] == "th"  # the whole spoken line, going on with the voice
-        if thai:
-            en = {p["line"]: render.unbreak(p["line"]) for p in t["phrases"]}
-        below: dict[int, float] = {}
-        pairs = render.stacks([(p.get("opts") or {}).get("look") for p in t["phrases"]])  # emphasis: two beats, one row each
-        if P["caption"] and en:  # the preset's small translated caption: one per spoken line, also under the title
-            lines_at: dict[str, list[float]] = {}
-            for p in t["phrases"]:
-                s = lines_at.setdefault(p["line"], [p["start"], p["end"]])
-                s[1] = max(s[1], p["end"])
-            for line, (a, b) in lines_at.items():
-                if en.get(line):
-                    text(en[line], *P["caption"], a, b, shadow=P["caption_shadow"])
-        for j, p in enumerate(t["phrases"]):
-            a, b = p["start"], p["end"]
-            white, colour, rgb = render._shown(p["lead"], p["punch"], p.get("opts"), held)
-            held = white or held
-            if t["hook"] and a < render.HOOK_DUR:  # the clip title owns the first seconds
-                continue
-            lead_id = ""
-            if white:
-                i = lead_id = text(white, *P["lead"], a, b, "up", one=bool(colour))
-                if (p.get("opts") or {}).get("look") != "hold":
-                    anim.append(f'tl.fromTo("#{i}",{{opacity:0}},{{opacity:1,duration:0.08}},{a:.3f});')
-            if colour:
-                hit = min(b - 0.05, max(a + 0.2, a + 0.6)) if white else a
-                part = P["punch"] if rgb is None else P["punch"][:2] + (rgb,) + P["punch"][3:]
-                if j in pairs:  # first beat: the upper row, on until the second beat is done
-                    part, b2 = part[:1] + (render.upper_row(P, W, H),) + part[2:], t["phrases"][pairs[j]]["end"]
-                    i = text(colour, *part, hit, b2)
-                    below[pairs[j]] = tops[i] + part[0] * k * lh / 2  # the second beat starts under it
-                else:
-                    i = text(colour, *part, hit, b, "down", max(tops.get(lead_id, 0), below.get(j, 0)) + 8, one=bool(white))
-                anim.append(f'tl.fromTo("#{i}",{{scale:1.3}},{{scale:1,duration:0.14}},{hit:.3f});')
-            second = (p.get("opts") or {}).get("second")
-            if second and P["second"]:  # the second person's short reaction, off centre and tilted
-                x, rot = P["second_at"]
-                text(second, *P["second"], a, b, x=x, rot=rot)
-            if P["caption"] and not en:
-                text((p["lead"] + " " + p["punch"]).strip(), *P["caption"], a, b, shadow=P["caption_shadow"])
+    subtitle_fonts = {}
+    if look == "pair" or "plain_events" in t:
+        for event in render.pair_events_from_timeline(t):
+            face = subtitle_fonts.setdefault(event["font_file"], f"ClipKitSubtitle{len(subtitle_fonts)}")
+            i = nid("t")
+            els.append(subtitle_html(event, i, face))
+            anim.append(subtitle_animation(event, i))
     else:
         for p in t["phrases"]:
             if t["hook"] and p["start"] < render.HOOK_DUR:
                 continue
-            i = text(p["lead"], 16, -0.6, [1, 1, 1], [0, 0, 0], 0.08, p["start"], p["end"])
-            if look == "pop":
-                anim.append(f'tl.fromTo("#{i}",{{scale:0.7}},{{scale:1,duration:0.2,ease:"back.out(2)"}},{p["start"]:.3f});')
+            i = text(p["lead"], 16, -0.6, [1, 1, 1], [0, 0, 0], 0.08, p["start"], p["end"], cue_id=p.get("cue_id"))
+            if i and look == "pop":
+                  anim.append(f'tl.fromTo("#{i}",{{scale:0.7}},{{scale:1,duration:0.2,ease:"back.out(2)"}},{p["start"]:.3f});')
     # clip title: each line punches in, the second a beat after the first
     first = ""
     for j, h in enumerate(t["hook"]):  # j: n is the id counter
         i = text(h["text"], h["size"], h["y"], h["fill"], h["stroke"], h["width"], h["start"], h["end"],
-                 h["grow"], tops.get(first, 0) + 8, one=True)
+                 h["grow"], tops.get(first, 0) + 8, one=True, role="title")
         first = first or i
-        anim.append(f'tl.fromTo("#{i}",{{scale:1.2}},{{scale:1,duration:0.16}},{j * 0.15:.2f});')
+        if i:
+            anim.append(f'tl.fromTo("#{i}",{{scale:1.2}},{{scale:1,duration:0.16}},{j * 0.15:.2f});')
     # progress bar along the bottom edge, filling over the clip (same as render.progress_bar)
     if t["progress"]:
         els.append(f'<div id="{nid("p")}" class="clip pbar" data-start="0" data-duration="{D:.3f}" data-track-index="6" '
@@ -209,22 +284,29 @@ def build(path: str) -> Path:
         els.append(f'<img id="{i}" class="clip" src="{_local(out, e["file"])}" data-start="{e["at"]:.3f}" data-duration="{e["dur"]:.3f}" '
                    f'data-track-index="7" style="position:absolute;left:{ex}px;top:{ey}px;width:{es}px;height:{es}px">')
         anim.append(f'tl.fromTo("#{i}",{{scale:0,opacity:0}},{{scale:1,opacity:1,duration:0.18,ease:"back.out(2.5)"}},{e["at"]:.3f});')
+    for index, motion in enumerate(t.get("motions", [])):
+        els.append(f'<video id="{nid("o")}" class="clip" src="{_motion(out, motion["file"])}" muted playsinline '
+                   f'data-start="{motion["start"]:.3f}" data-duration="{motion["duration"]:.3f}" data-media-start="0" '
+                   f'data-track-index="{8 + index}" style="position:absolute;top:0;left:50%;height:100%;width:auto;transform:translateX(-50%)"></video>')
     # sound: quiet steady music bed, pops on punches, whooshes as b-roll comes in
-    mu = t["music"]
+    mu, fx = t["music"], t["sfx"]
+    sounds = {kind: render._sfx(kind) for kind in ("pop", "whoosh")} if fx.get("on") else {}
+    audio_files = ([mu["file"]] if mu.get("file") else []) + list(sounds.values())
+    if audio_check is not None:
+        audio_check({str(Path(file).resolve()): file for file in audio_files})
     if mu.get("file"):
         els.append(f'<audio id="{nid("m")}" src="{_local(out, mu["file"])}" data-start="0" data-duration="{D:.3f}" '
                    f'data-media-start="0" data-track-index="4" data-volume="{mu["volume"]}"></audio>')
-    fx = t["sfx"]
     if fx.get("on"):
-        pop_s, whoosh_s = render.sfx_len("pop"), render.sfx_len("whoosh")
+        pop_s, whoosh_s = render.sfx_len("pop", sounds["pop"]), render.sfx_len("whoosh", sounds["whoosh"])
         for tp in t["pops"]:
-            els.append(f'<audio id="{nid("s")}" src="{_local(out, render._sfx("pop"))}" data-start="{tp:.3f}" data-duration="{pop_s:.2f}" '
+            els.append(f'<audio id="{nid("s")}" src="{_local(out, sounds["pop"])}" data-start="{tp:.3f}" data-duration="{pop_s:.2f}" '
                        f'data-track-index="5" data-volume="{0.5 * fx["volume"]:.2f}"></audio>')
         for b in t["broll"]:
             if b.get("file"):
-                els.append(f'<audio id="{nid("s")}" src="{_local(out, render._sfx("whoosh"))}" data-start="{max(0, b["start"] - 0.15):.3f}" '
+                els.append(f'<audio id="{nid("s")}" src="{_local(out, sounds["whoosh"])}" data-start="{max(0, b["start"] - 0.15):.3f}" '
                            f'data-duration="{whoosh_s:.2f}" data-track-index="5" data-volume="{0.35 * fx["volume"]:.2f}"></audio>')
-    font = _local(out, render.DEFAULT_FONT)
+    font = _local(out, subtitle_font)
     # the HyperFrames runtime (clip windows, media sync, seeking) for the live player; the renderer brings its own
     runtime = _local(out, str(Path(__file__).with_name("hyperframe.runtime.iife.js")))
     page = f"""<!doctype html>
@@ -233,11 +315,13 @@ def build(path: str) -> Path:
 <script src="{runtime}"></script>
 <style>
 @font-face{{font-family:"ClipKit Thai";src:url("{font}")}}
+{chr(10).join('@font-face{font-family:"'+face+'";font-weight:700;src:url("'+_local(out,file)+'")}' for file,face in subtitle_fonts.items())}
 *{{margin:0;padding:0;box-sizing:border-box}}
 html,body{{width:{W}px;height:{H}px;overflow:hidden;background:#000}}
 .cam{{transform-origin:{W / 2 - fit["x"]}px {H / 2 - fit["y"]}px}}
-.txt{{position:absolute;left:5%;width:90%;white-space:nowrap;transform:translateY(-50%);text-align:center;font-family:"ClipKit Thai",sans-serif;
+.txt,.subtitle-glyph{{position:absolute;white-space:nowrap;text-align:center;font-family:"ClipKit Thai",sans-serif;
   font-weight:700;line-height:1.25;paint-order:stroke fill;text-shadow:0 3px 8px rgba(0,0,0,.45)}}
+.txt{{left:5%;width:90%;transform:translateY(-50%)}}
 </style></head><body>
 {svg}
 <div id="root" data-composition-id="main" data-start="0" data-duration="{D:.3f}" data-width="{W}" data-height="{H}">
@@ -246,8 +330,10 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;background:#000}}
 <script>
 const tl = gsap.timeline({{paused: true}});
 {chr(10).join(anim)}
+document.fonts.ready.then(() => {{
 window.__timelines = window.__timelines || {{}};
 window.__timelines["main"] = tl;
+}});
 </script>
 </body></html>
 """

@@ -11,46 +11,114 @@ Run from the ClipKit folder. Stop and report `Blocked` with the exact error if a
 1. `python scripts/setup_workspace.py D:\ClipKit` (any folder) - makes `config.json` with every folder.
 2. `python scripts/doctor.py` - every line OK (WARN on "preview font" is fine). FAIL = tell the person which line
    and stop. Python packages: `scripts/setup.ps1`. Node.js LTS from nodejs.org. Speech model: `scripts/fetch_model.py`.
-3. Optional: free Pixabay key (pixabay.com/api/docs) as `"pixabay_key"` in `config.json` for automatic b-roll.
+3. Optional: Pixabay key (pixabay.com/api/docs) as `"pixabay_key"` in `config.json` to search stock candidates for review.
 
 ## One command: "ตัดคลิปนี้" / "ทำคลิปสั้นจากไฟล์นี้" (no ClipKit window needed)
 ```
-python scripts/run_clip.py "<video>" [--max 120] [--preset default] [--all] [--capcut] [--export] [--insert]
+python scripts/run_clip.py "<video>" [--max <approximate-seconds>] [--preset default] [--all] [--capcut] [--export] [--insert]
 ```
-Ask only what is missing: the video path, and which subtitle preset (`default` when they have no preference;
+Before selecting stories, read the person's duration choice: approximate minutes or “ตามเนื้อหา” (`max_minutes: null`).
+Reuse the packet's choice and do not ask an extra question after the person attaches it to browser AI.
+`--max` expresses that target in seconds; story export accepts `--max-minutes`, the packet uses `max_minutes`
+and the preference is saved in `<video>.story-preferences.json`. A complete thought may be shorter or slightly longer: do not force a cut at
+the number, pad with filler, or assume every clip must be 1-3 minutes. Ask only what is missing: the video path,
+duration choice when preparing the packet (natural content is a valid choice), and which subtitle preset (`default` when they have no preference;
 list: the `presets/` folder; none they like: make one, see **Subtitle presets**). "ทำเป็นโปรเจกต์ CapCut" = add
 `--capcut`; "ขอไฟล์ MP4" = add `--export`. `--look` (pair, karaoke, pop, none) and `--shape` (portrait default)
 rarely change.
 It transcribes, splits into stories, makes one project per story (face crop, subtitles, silences trimmed,
-subtitle look, zoom cut), finds free Pixabay b-roll, makes the cover and the HyperFrames page, and writes
+subtitle look, zoom cut), prepares stock candidates, makes the cover and the HyperFrames page, and writes
 `<video> - ClipKit.html` with one Pixabay search link per b-roll spot. Rerunning skips every finished step.
 1. Run it. Output is one JSON line per step.
 2. `{"WAIT": ...}` (exit 2) = a thinking step is yours: do the pasted command(s) below (`แบ่งเรื่อง`, then
-   `เลือกคำเน้น` for each project), keep stories within `--max` seconds, then run the same command again.
+   `เลือกคำเน้น` for each project), choose complete stories near the duration preference, then run the same command again.
 3. Pilot rule: without `--all` only story 1 is built. Send the person the HTML file and wait for their OK
    before `--all`.
-4. Stock links: the person opens the links, downloads into each project's `clipkit_insert` folder (name starts with
-   the link number, e.g. `2 coffee.mp4`), then you run with `--insert`; or downloads them in link order into one empty
-   folder and you run with `--insert-from "<folder>"` (the page numbers links across all projects). Never log in to a stock site for them.
+4. Inserts: the person selects their own images/videos or downloads stock candidates into a folder. Run
+   `--insert-sheet "<folder>"` to create one complete browser/local AI prompt and contact sheets using the shared
+   registered asset catalog. `--insert-from "<folder>"` without a plan does the same and exits `WAIT` (2); filenames,
+   link numbers and download order never choose placements. Review candidates and import the explicit reply with
+   `--insert-from "<folder>" --insert-plan "<answer.json>"`. `--insert` only verifies/reuses accepted placements.
+   Original files remain in place. Existing music/SFX remain intact. Never log in to a stock site for them.
 5. `--capcut` also builds "<project> · CapCut": the same clip laid out in CapCut (subtitle roles on their own
    tracks, title, English caption, b-roll, clicks, music, zoom, skin) for a person to keep editing there.
 6. Before showing the person any project, do the `ClipKit: ตรวจคำผิด` steps below on it. This is not optional and
    applies whichever speech model is set (large-v3 or turbo); ClipKit's own clean-up (spacing, English terms,
    learned fixes) already runs inside every transcription.
-7. `--export` renders the MP4s (about 4 min per minute of clip); look at frames before saying done.
+7. `--export` renders the MP4s; measure the actual run rather than promising an unmeasured speed. Review frames
+   and audio before saying done, then record the time until the person approves the pilot.
 
 ## Commands pasted from the ClipKit app
 The app does the mechanical work; the thinking steps are yours. It shows the person a line to paste here.
-The same two steps (แบ่งเรื่อง, เลือกคำเน้น) can instead go to an AI in the browser: `scripts/web_ai.py` exports a file
-to upload and imports its JSON answer (`prompts/web_ai/schema.md`). The files it writes are the ones below.
+The same two steps (แบ่งเรื่อง, เลือกคำเน้น) use one answer contract for browser AI and optional local agents:
+`scripts/web_ai.py` exports a self-contained packet and imports its JSON answer (`prompts/web_ai/schema.md`).
+Always import the answer through this validator; do not write the resulting sidecars or `draft_content.json` directly.
+Manual editor controls remain available without AI; they edit the same project artifacts under the shared writer lock.
+
+**Current stories/clip answer contract is v2.** Copy `clipkit_web_ai: 2`, `step`, `video`/`project`, and the exact
+`packet_id`, `revision`, `source_id` from the exported packet. All three identifiers are opaque: never generate
+them, transplant them into an old answer or infer identity from a basename. Preserve each line's `n` and
+`cue_id`, including cut/group-continuation entries. Insert matching uses the same v2 `step: "clip"` envelope
+with `operation: "inserts"`, bound to its own exported packet. Legacy unbound v1 insert plans require fresh export.
+
+Each uploaded packet names only the local answer **basename**. Browser AI returns JSON without another prompt;
+an optional local agent saves that answer beside the packet. Exporting again keeps pending answers as
+`.answer.json.before-export-<timestamp>`; successful local imports retain `.answer.json.imported-<packet_id>`.
+Old v1 packets/answers remain readable history but cannot mutate stories or clips; export a new v2 packet.
+
+Every new/unreceipted answer needs the latest active packet and unchanged source/dependency revision, including
+transcript, brief, target, cue/word clock, native timelines, style and preset/font/template dependencies. After
+an edit or a new decision, export again. A committed packet plus the same canonical JSON answer returns its
+durable receipt even after later exports or edits: it does not cut twice or restore an earlier project state.
+The same packet with different content is rejected. CLI import, browser paste and local polling share this rule.
+
+Import validates/prepares all metadata and unique private motion assets in staging before applying under the
+writer lock. Ordinary failure rolls back; an interrupted application without a receipt recovers before the next
+edit/import. A durable receipt commits the successful result and must never be rolled back on retry. Recovery
+that finds unexpected external/native edits preserves both versions and stops for review; do not delete the
+recovery state, reseal a draft or bypass the importer to continue. Close CapCut before modifying its project.
+Successful JSON/import checks still require human viewing/listening and native CapCut acceptance before calling
+a clip done. Obtain approval of one pilot before building a batch.
+
+### Browser/local AI insert matching
+
+Run `python scripts/run_clip.py "<video>" [--all] --insert-sheet "<asset folder>"` after story selection.
+Attach every returned `upload` file to the chosen browser AI; the packet already contains all instructions.
+The CLI reply is `{ "clipkit_web_ai": 2, "step": "clip", "operation": "inserts", "projects": [...] }`.
+Keep one individually bound envelope for every requested project, with its exact identifiers and `place: []`
+when no image helps. The local agent can save the same JSON next to the packet and run the import command.
+
+Each placement selects a registered `asset_id`, a copied cue/whole-word anchor, a content-supported `reason`,
+`source_start`, `dur`, `focus_x` and `focus_y`. Use only actual anchors listed in the packet. Do not generate
+paths, invent word times, reuse a previous packet's asset list, select the first search hit without review,
+or claim a stock license is verified from an AI answer. Keep provenance/status supplied by the catalog.
+The source crop/offset and cue clock are validated by the same planner used in the manual editor.
+
+Projects commit separately. If a later project fails, the CLI reports completed receipts; fix the blocker and
+retry the same answer. A committed project is returned from its receipt rather than applied again. Invalid
+answers are preflighted before the first apply; concurrent changes can still stop a later project. Preserve
+the recovery state and both versions if an external edit prevents recovery.
 
 ### `ClipKit: แบ่งเรื่อง "<video path>"`
-1. Read `<video path>.transcript.json` (list of `{start, end, text}`, seconds). Missing = tell the person to press the button in the app again.
-   If `<video path>.brief.txt` is there, it is what the person wants from this video in their own words (style, mood, which parts):
-   choose and shape the stories to match it, still following every rule below.
-2. Split it following every rule in `prompts/story_split.md` (one point each, length follows the content (1-3 min; the clip step trims it), start on the hook, end on a finished sentence, skip greetings).
-3. Write `<video path>.stories.json` as UTF-8 JSON: `[{"title": "...", "summary": "...", "start": 12.3, "end": 95.0}]` with start/end taken from transcript lines.
-4. Reply with the list (number, title, length). The app picks the file up by itself within a few seconds.
+1. Run `python scripts/web_ai.py export stories "<video path>"` and read the complete packet
+   `<video path>.web-ai-stories.md`. It contains source rows (`cue_id`, `start`, `end`, `text`) and full-word
+   `words` clocks (`n`, `end_n`, `start`, `end`, `text`, seconds), the
+   person's brief and their saved duration choice. Missing transcript = report the error and ask them to
+   transcribe first. Choose and shape stories to match the brief while following the rules below.
+2. Read the packet's duration preference before selecting ranges. Follow `prompts/story_split.md`: one point each,
+   a meaningful opening and finished ending near that target, without a compulsory title or fixed length bracket.
+   Use source `start_anchor`/`end_anchor` (`cue_id`, `word` copied from `words[].n`) to choose whole-word edges
+   inside ASR rows. Word numbers may skip because partial Thai pieces form one complete word. With no word
+   clock, omit `word` and use the row edge. Numeric times, if included, must match the actual anchors. Retain
+   `reason` and `duration_reason`; duration deviation requests review and never authorizes truncation or approval.
+3. Write its complete v2 answer schema with the copied identity fields as UTF-8 to the named answer file beside
+   the packet, `<video path>.web-ai-stories.answer.json` (not directly to `.stories.json`).
+4. Run `python scripts/web_ai.py import stories "<video path>" "<video path>.web-ai-stories.answer.json"`
+   when working from the CLI. The active app AI box can poll/import the same answer; a duplicate returns its
+   receipt. The list and `.story-selection.json` binding commit together; never write either directly. Missing
+   or stale bindings require explicit validation/save, including legacy local lists. Reply with the list
+   (number, title, actual length versus target and review reason) after validation succeeds. For a changed answer, export
+   another packet rather than reusing its identifiers.
 
 ### `ClipKit: แปลซับเป็นอังกฤษ "<CapCut project folder>"`
 1. Read `<folder>/clipkit_subs_th.json` (list of `{start, end, text}`).
@@ -59,7 +127,8 @@ to upload and imports its JSON answer (`prompts/web_ai/schema.md`). The files it
 4. Tell the person to press "ซับขาว ภาษาอังกฤษ" again.
 
 ### `ClipKit: ตรวจคำผิด "<CapCut project folder>"`
-1. Read `<folder>/clipkit_lines.json` (subtitle lines in order) and `corrections.json` beside ClipKit if it is there
+1. Read `<folder>/clipkit_lines.json` (subtitle lines in order), project `clipkit_corrections.json`, and retained
+   machine `corrections.json` beside ClipKit if present. Project rules override machine rules.
    (`{wrong: {"right": ..., "n": times}}`, this person's earlier fixes).
 2. Find words the speech model misheard: wrong spellings, sound-alikes that make no sense in the sentence
    ("คัป" -> "ครับ", "กอ" -> "ก็"), names and brands spelled two ways in one clip. Keep the speaker's own words
@@ -78,7 +147,8 @@ to upload and imports its JSON answer (`prompts/web_ai/schema.md`). The files it
    them either, leave the line and list it for the person.
 3. Close-CapCut check: ask the person to close CapCut if it is open. Then for each line to change run
    `python scripts/fix_text.py "<folder>" "<line as it is>" "<fixed line>"` (the old version is kept and the
-   fix is learned for the next transcripts).
+   fix is learned only in this project for its next transcription). Use `--cue-id` for repeated lines.
+   Only an explicit request to share a correction across projects permits `--learn-global`.
 4. Reply with a short table: line number, line, wrong -> right, level (ร้ายแรง = meaning, name or number changes;
    ปานกลาง = spelling or grammar; เล็กน้อย = spacing, punctuation, consistency), then the suggestions and
    "ไม่แน่ใจ" lines, and incomplete lines the re-listen could not fill. Say "ไม่พบคำผิด" when there is nothing to
@@ -86,18 +156,36 @@ to upload and imports its JSON answer (`prompts/web_ai/schema.md`). The files it
 
 ### `ClipKit: เลือกคำเน้น "<CapCut project folder>"`
 For the sentence-pair subtitles (normal lead line + bigger emphasis punch line, in the project's preset).
-1. Read `<folder>/clipkit_lines.json` (list of subtitle line texts, in order) and the whole clip's meaning.
-2. For every line, split it into short phrases of about 2 seconds / 10-18 Thai letters, in speaking order,
-   breaking where a thought ends. Each phrase = `[lead, punch]`: the punch is the word or short phrase that
+First run `python scripts/web_ai.py export clip "<folder>"` and read `<folder>/clipkit_web_ai.md`.
+The rules below describe choices for the packet's `lines`, `hook`, `caption`, and `motion` fields.
+Save one complete answer to `<folder>/clipkit_web_ai.answer.json`; import it with
+`python scripts/web_ai.py import clip "<folder>" "<folder>/clipkit_web_ai.answer.json"` for CLI work,
+or let the active app AI box import it. Include the packet's exact v2 identity fields; a duplicate paste/poll/CLI
+import returns its receipt, while changing the answer requires a fresh export. The packet displays only
+`clipkit_web_ai.answer.json`; save it beside that packet, never invent an absolute path from an uploaded file.
+1. Read `<folder>/clipkit_lines.json` and the packet's original numbered ASR lines in context. Transport lines
+   may end mid-thought: group consecutive lines with `through: <last n>` on the head and `{n, cue_id}` continuations,
+   then cover the group's complete source text with semantic items. Never group across a cut; caption/motion
+   refer to heads. The shared importer preserves actual word times for browser AI and local agents; manual
+   consecutive-line merge uses the same helper.
+2. Read the packet's actual `words` clock. Split each line by meaning and spoken thought boundaries, in order;
+   never split by character count, a fixed number of seconds, or a fixed emphasis delay. Each phrase = `[lead, punch]`: the punch is the word or short phrase that
    carries the point (a feeling, a number, a result, a brand: "ถูกกดดัน", "20 ปี", "ไม่อิ่ม"), not just the
    last word. Lead + punch together must be that phrase's exact text (punch may come first: then lead is "").
    Every character of the line must be used once, in order (spaces may be dropped).
-   Keep each lead to about 15 Thai letters; split a longer phrase rather than letting the text shrink.
+   The normal lead stays visible while the punch appears at its real spoken-word start; both end together at
+   the next phrase. Never invent word times. Missing word times require a word-level transcription before
+   emphasis; unselected content can remain plain without claiming audio synchronization.
    Not every phrase deserves a coloured punch. Filler and connective talk ("อืมๆ", "เออจริงๆ", "แบบว่า",
    "อะไรอย่างนี้", repeated words) and phrases with no point get white only: `[text, ""]`. Colour only the
-   phrases that carry the message (a feeling, a number, a result, a key idea) - roughly half or fewer.
-   Every subtitle is one line and never leaves the frame (the reading caption is the only one that may be
-   longer): a long white or colour line goes on as the next piece in time with the voice, by itself.
+   phrases that carry the message. Cover every key idea, action, example, comparison/list item and result;
+   one idea may need several spoken emphasis beats. Do not cap the proportion or count of punches, or leave
+   an important point plain to meet a quota. Review the whole clip for missed emphasis without colouring every word.
+   Fit the preset's normal/emphasis roles to the chosen canvas and safe area. Choose another genuine thought
+   boundary when necessary; do not make letter-timed fragments just to fit the screen.
+   A learned `fixed_size` preset keeps each role's size and center throughout the clip, including sentence-pair
+   motion. If a phrase overflows, shorten its `show` without changing meaning or split at a real thought/word
+   boundary. Do not shrink individual phrases; keep source lead/punch and word timing intact.
    Display options - a 4th item `{"look": ..., "show": [white, colour]}` per phrase ("white" = the preset's
    normal text, "colour" = its emphasis text), measured from real hand-edited clips:
    - `pair` (default): white lead + coloured punch.
@@ -110,29 +198,25 @@ For the sentence-pair subtitles (normal lead line + bigger emphasis punch line, 
    - Two `color` phrases in a row stack in two beats, one row each: the first stays on the upper row until the
      second is done. Use `hold` instead when a white line has to stay; then the colour lines replace each other.
    - `color`: `"#rrggbb"` - this line's own emphasis colour (default the preset's).
-   - `second`: a short line from the second person (2-8 letters, may mean nothing: "ห๊ะ!", "จริงดิ", "โห"),
-     shown off centre and tilted for movement. Only when the preset has a `second` role (e.g. `4-levels`).
-   - `show`: the words on screen, rewritten short and clean ("ไปจ้างพนักงานขายซิ" ->
-     "จ้างเซลส์มาขาย", "มันคือแบบกูต้องทำอะไร" -> "ต้องทำอะไรก่อน?"). Keep the meaning, drop slang and
-     filler, max ~15 letters per line. Lead + punch still hold the exact spoken text (they give the timing).
+   - `second`: an actual short reaction spoken by the second person, shown off centre and tilted only when
+     the preset has a `second` role (e.g. `4-levels`); never invent a reaction.
+   - `show`: an optional shorter display wording that preserves the speaker's meaning. Lead + punch still
+     contain the exact spoken words for timing. It does not authorize invented claims or letter-based splits.
    Example item: `["บางคนบอกต้องลง", "ระบบ Crm", {"look": "hold", "show": ["", "ลงระบบ CRM"]}]`;
    with a b-roll search: `[lead, punch, "office team computer", {...}]`.
-3. B-roll: about one phrase in three that names something you can see (a product, food, a place, an action,
-   an emotion on a face), add a third item: a short English stock-footage search, e.g.
+3. B-roll: when a relevant image would clarify a product, food, place, action or visible reaction,
+   add a third item: a short English stock-footage search, e.g.
    `["เดี๋ยวมากิน", "กาแฟต่อ", "coffee cup cafe"]`. Concrete nouns, 2-4 words, no brand names.
-   Skip abstract phrases; never two b-roll phrases in a row.
-4. Write `<folder>/clipkit_punch.json` as `{"<line text>": [item, ...], ...}`, each item
+   Skip unsupported matches; do not add images to meet a count or frequency. A search query prepares
+   candidates only; the explicit insert plan selects the asset, spoken anchor and usable source interval.
+4. Fill the answer's `lines` with numbered entries and their items; the importer writes `clipkit_punch.json`. Each item is
    `[lead, punch]`, `[lead, punch, query]`, `[lead, punch, options]` or `[lead, punch, query, options]`
    covering every line.
-5. Clip title (every clip has one, on screen for the first 4 s; the subtitles start after it): write
-   `<folder>/clipkit_hook.json` as 1-2 lines `[{"text": "เริ่มทำธุรกิจใหม่", "color": "red"},
-   {"text": "ทำสิ่งนี้ก่อน", "color": "white"}]`. Short punchy promise of the clip, ~8-16 letters per line, not a
-   sentence from the talk. Colours per line: `white`, `orange` or `red`, any mix (red/white, white/orange,
-   orange/white, one big red word...) - pick by the content: red for a warning or shock, orange for the promise.
-   Examples of good titles: "ธุรกิจสมัยนี้ / ไม่ต้องแย่งทำเลอีกแล้ว", "ทำธุรกิจไม่เหนื่อย / ต้องรู้ 2 เรื่องนี้",
-   "เงิน 5 แสนก็ไม่เอา!", "Burn out".
-6. Only when the project's preset has a `caption` (e.g. `with-caption`): write `<folder>/clipkit_caption.json`
-   as `{"<line text>": "<translation>"}` for every line, in the preset's caption `language` (default English; skip this step for `"th"`, which shows the spoken line itself) -
+5. Clip title is optional: use `hook: []` unless requested or useful without obscuring important speech.
+   If used, choose 1-2 short lines supported by the source, with `white`, `orange` or `red` colours. The title
+   owns the first 4 seconds and suppresses subtitles there; check that this does not hide needed content.
+6. Only when the packet has a non-null `caption_language`: fill `caption` as `{"1": "<translation>", ...}`
+   for every retained line, in that language (otherwise use null) -
    short and natural ("If I want to start my own business from scratch, let's say..."). Brand names stay.
 7. Tell the person the clip is ready to review in ClipKit (แท็บ ส่งออก > ดูตัวอย่าง).
 

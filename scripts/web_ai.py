@@ -26,9 +26,10 @@ def main() -> None:
     ap.add_argument("step", choices=["stories", "clip"])
     ap.add_argument("target", help="the video (stories) or the ClipKit project folder (clip)")
     ap.add_argument("answer", nargs="?", help="import: the file holding the AI's answer")
+    ap.add_argument("--max-minutes", type=float, help="approximate clip target before selecting stories; keeps saved target when omitted")
     a = ap.parse_args()
     if a.action == "export":
-        out = (web_ai.export_stories if a.step == "stories" else web_ai.export_clip)(a.target)
+        out = (web_ai.export_stories if a.step == "stories" else web_ai.export_clip)(a.target, a.max_minutes)
         print(json.dumps({"upload": str(out)}, ensure_ascii=False))
         return
     if not a.answer:

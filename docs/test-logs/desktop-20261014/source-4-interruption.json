@@ -1,0 +1,8 @@
+{
+  "pid": 29240,
+  "parent_pid": 77272,
+  "created_at_epoch": 1791951435.0474727,
+  "elapsed_s": 520.925,
+  "status": "interrupted_by_test_operator",
+  "reason": "concurrent authenticated UI transcription occupied same 8 GiB GPU; release only this test worker; no normal benchmark conclusion"
+}
