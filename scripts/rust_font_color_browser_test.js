@@ -1,0 +1,57 @@
+async(page)=>{
+ const base='http://127.0.0.1:8871',project='font-color-static-'+Date.now();
+ const check=(v,m)=>{if(!v)throw Error(m)};
+ const saved=()=>page.waitForFunction(()=>['บันทึกแล้ว','พร้อมแก้ไข'].includes(document.querySelector('#saved').textContent),null,{polling:100});
+ const read=async()=>await(await page.request.get(`${base}/api/v1/drafts/${project}`)).json();
+ await page.goto(`${base}/?project=${project}`);await page.setViewportSize({width:1440,height:1100});
+ await page.locator('[data-step="5"]').click();await saved();
+ check(await page.locator('#headlineTemplate,#style,#textEffect').count()===0,'template/effect controls remain');
+ await page.locator('#addHeadline').click();await saved();
+ await page.locator('#text-text').fill('เริ่มจากสิ่งที่มี');await saved();
+ await page.locator('#text-font').fill('Arial');await saved();
+ await page.waitForFunction(()=>document.querySelector('#fontStatus').textContent==='ใช้ฟอนต์ในเครื่อง');
+ await page.locator('.color-more > summary').click();
+ await page.locator('#text-color-hex').fill('#24cbaa');await saved();
+ let state=await read();check(state.document.headline_items[0].font==='family:Arial','custom family not saved');
+ check(state.document.headline_items[0].color==='#24cbaa','HEX not saved');
+ check(await page.locator('[data-text-role=headline] span').evaluate(n=>n.style.fontFamily.startsWith('Arial')),'custom family not rendered');
+ await page.locator('#addHeadline').click();await saved();
+ await page.locator('#text-text').fill('ข้อความนิ่ง ปรับเอง');await saved();
+ check((await read()).document.headline_items[1].font==='system','new item inherited font/template');
+ await page.locator('#text-font').fill('EditorKrab Font Missing 736294');await saved();
+ await page.waitForFunction(()=>document.querySelector('#fontStatus').textContent.includes('ไม่พบฟอนต์นี้'));
+ const beforeInvalid=await read();await page.locator('#text-font').fill('bad; color:red');
+ check(await page.locator('#text-font').getAttribute('aria-invalid')==='true','unsafe font accepted');
+ check((await read()).revision===beforeInvalid.revision,'invalid font saved');
+ await page.locator('#text-font').fill('Tahoma');await saved();
+ await page.locator('#text-color-hex').fill('bad');check(await page.locator('#text-color-hex').getAttribute('aria-invalid')==='true','invalid HEX accepted');
+ await page.locator('#text-color').fill('#e67a3c');await saved();
+ check(await page.locator('#text-color-hex').inputValue()==='#e67a3c','native color did not sync HEX');
+ check(await page.locator('#text-color-hex').getAttribute('aria-invalid')===null,'corrected HEX remains invalid');
+ await page.reload();await page.locator('[data-text-role=headline]').first().waitFor();
+ state=await read();check(state.document.headline_items[0].font==='family:Arial'&&state.document.headline_items[1].font==='tahoma','reload lost fonts');
+ check(await page.locator('[data-text-role=headline]').first().evaluate(n=>getComputedStyle(n).animationName)==='none','default animated');
+ check(await page.locator('[data-text-role=headline]').first().evaluate(n=>getComputedStyle(n).backgroundColor)==='rgba(0, 0, 0, 0)','default plate remains');
+ await page.locator('[data-text-role=headline]').first().click();
+ await page.locator('.font-more > summary').click();
+ await page.evaluate(()=>window.queryLocalFonts=async()=>[{family:'Arial'},{family:'Tahoma'},{family:'Arial'},{family:'x;bad'}]);
+ await page.locator('#localFonts').click();await page.waitForFunction(()=>document.querySelector('#fontStatus').textContent.includes('อ่านแล้ว 2'));
+ check(await page.locator('#textFonts option[value="Arial"]').count()===1,'listed fonts duplicate');
+ await page.evaluate(()=>window.queryLocalFonts=async()=>{throw new DOMException('Denied','NotAllowedError')});
+ await page.locator('#localFonts').click();await page.waitForFunction(()=>document.querySelector('#fontStatus').textContent.includes('อ่านรายชื่อไม่ได้'));
+ check(await page.locator('#text-font').isEnabled(),'denial disabled manual font');
+ await page.evaluate(()=>window.queryLocalFonts=undefined);await page.locator('#localFonts').click();
+ check((await page.locator('#fontStatus').textContent()).includes('พิมพ์ชื่อฟอนต์แทน'),'unsupported fallback absent');
+ // A legacy plate remains readable and keeps stored data without reapplying the removed template.
+ const legacy=project+'-legacy',old={step:5,flow_version:2,title:'Legacy',language:'auto',files:[],plan:'',style:'bold16',headline_template:'plate',text_styles:{}};
+ const sample={text:'หัวข้อเดิม',font:'thai',size:80,color:'#ececf1',x:50,y:16};for(const key of ['headline','speech','emphasis','english'])old.text_styles[key]=sample;
+ check((await page.request.put(`${base}/api/v1/drafts/${legacy}`,{data:{operation_id:'fixture',expected_revision:0,document:old}})).status()===200,'legacy save failed');
+ await page.goto(`${base}/?project=${legacy}`);await page.locator('[data-text-role=headline]').waitFor();
+ check((await(await page.request.get(`${base}/api/v1/drafts/${legacy}`)).json()).revision===1,'legacy read created revision');
+ check(await page.locator('[data-text-role=headline]').evaluate(n=>getComputedStyle(n).backgroundColor)==='rgba(0, 0, 0, 0)','legacy template still applied');
+ await page.goto(`${base}/?project=${project}`);await page.locator('[data-text-role=headline]').first().waitFor();
+ for(const width of [1440,375]){await page.setViewportSize({width,height:1100});check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'page overflow');
+ check(await page.locator('#localFonts,#text-font,#text-color-hex').evaluateAll(nodes=>nodes.every(n=>n.getBoundingClientRect().height>=44)),'small controls');
+ await page.screenshot({path:`output/font-color-static-${width}.png`,fullPage:true});}
+ console.log(JSON.stringify({project,checks:['custom/local font CSS','independent colors','native and HEX sync','invalid values blocked','missing font warning','reload','permission denial/manual fallback','no templates/static default','legacy preserved','desktop/mobile']}));
+}
