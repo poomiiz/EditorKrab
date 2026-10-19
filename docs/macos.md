@@ -1,8 +1,8 @@
-# Mac setup — experimental
+# Mac setup for the older Python workflow
 
-The Mac setup path prepares a local Python environment and starts EditorKrab in your browser. Transcription uses the CPU. Apple GPU acceleration is not implemented.
+> **Not for the desktop app.** The EditorKrab desktop app described in the [README](../README.md) supports Windows only. This page covers the older Python tools, kept for existing users. It is unmaintained and has not been tested on real Mac hardware.
 
-These instructions cover version 0.29.1. Check [Releases](https://github.com/poomiiz/EditorKrab/releases) for availability. Installation checks or CI results do not prove that a CapCut draft opens correctly on every Mac; it still needs testing on real devices.
+The Mac setup path prepares a local Python environment and starts the older Python app in your browser. Transcription uses the CPU. Apple GPU acceleration is not implemented. Installation checks or CI results do not prove that a CapCut draft opens correctly on a Mac.
 
 ## Before you start
 
