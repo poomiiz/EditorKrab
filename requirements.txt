@@ -5,6 +5,7 @@ pythainlp==5.4.0
 budoux==0.9.3  # Japanese / Chinese phrase breaks (Google, Apache-2.0)
 soundfile==0.14.0
 fastapi==0.143.0
+starlette==1.6.0  # 1.9 returns request.url.path still percent-encoded, so the /review.html guard misses /%5Creview.html
 uvicorn==0.53.0
 pillow==12.3.0
 opencv-python==4.14.0.94  # OpenCV 5 dropped CascadeClassifier (face finding)

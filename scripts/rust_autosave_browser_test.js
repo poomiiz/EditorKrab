@@ -67,7 +67,7 @@ async (page) => {
     await page.locator('#plan').fill('winner'); await saved(page);
     await second.bringToFront();
     await second.locator('#plan').fill('stale tab');
-    await until(second, () => document.getElementById('saved').textContent === 'ร่างขัดแย้ง')
+    await until(second, () => document.getElementById('saved').textContent === 'งานชนกัน')
       .catch(async () => { throw Error('stale tab status: ' + await second.locator('#saved').textContent()); });
     check((await document()).document.plan === 'winner', 'stale tab overwrote newer draft');
     check(await second.locator('#fork').isVisible(), 'conflict recovery missing');

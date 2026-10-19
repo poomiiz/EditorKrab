@@ -24,6 +24,7 @@ use std::{convert::Infallible, path::PathBuf, time::Duration};
 use tokio::sync::watch;
 
 type Shared = Arc<Mutex<Store>>;
+type Asr = Arc<(AsrConfig, AsrSettings)>;
 type ApiError = (StatusCode, Json<Value>);
 
 #[derive(Clone)]
@@ -33,7 +34,391 @@ struct Runtime {
     picker: mpsc::Sender<PickCommand>,
     picker_busy: Arc<AtomicBool>,
     assets: PathBuf,
-    asr: Option<Arc<(AsrConfig, AsrSettings)>>,
+    // swapped in place when the in-app download finishes, so no restart is needed
+    asr: Arc<std::sync::RwLock<Option<Asr>>>,
+    setup: Arc<AsrSetup>,
+    download: Arc<Mutex<Download>>,
+    exports: Arc<Mutex<std::collections::HashMap<String, Export>>>,
+}
+impl Runtime {
+    fn asr(&self) -> Option<Asr> {
+        self.asr.read().ok().and_then(|v| v.clone())
+    }
+}
+
+/// Where the app looks for, and downloads, its speech tools.
+struct AsrSetup {
+    state_path: PathBuf,
+    data: PathBuf,
+    /// test-only override of the model to download (EDITORKRAB_DOWNLOAD_MANIFEST)
+    model: Option<editorkrab::asr_download::Item>,
+}
+#[derive(Clone, Default, serde::Serialize)]
+struct Download {
+    state: &'static str,
+    received: u64,
+    total: u64,
+    bytes_per_second: u64,
+    error: Option<String>,
+    #[serde(skip)]
+    cancel: Option<watch::Sender<bool>>,
+}
+
+fn ffprobe_path(setup: &AsrSetup) -> PathBuf {
+    match std::env::var("EDITORKRAB_FFPROBE") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => find_tool(&tool_roots(&setup.data), "ffmpeg", "ffprobe")
+            .unwrap_or_else(|| "ffprobe".into()),
+    }
+}
+
+/// Step 6 progress for one project; kept in memory, so a restart shows it as never started.
+#[derive(Clone, Default, serde::Serialize)]
+struct Export {
+    state: &'static str,
+    story: usize,
+    stories: usize,
+    progress: f64,
+    files: Vec<String>,
+    /// text roles the user ticked that the export cannot draw yet
+    skipped: Vec<String>,
+    error: Option<String>,
+    #[serde(skip)]
+    cancel: Option<watch::Sender<bool>>,
+}
+/// Finished clips go to the user's Videos folder (uploads live inside app data, so not "next to the source").
+fn export_dir() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("EDITORKRAB_EXPORT_DIR") {
+        return Some(path.into());
+    }
+    let (home, videos) = if cfg!(windows) {
+        (std::env::var("USERPROFILE").ok()?, "Videos")
+    } else if cfg!(target_os = "macos") {
+        (std::env::var("HOME").ok()?, "Movies")
+    } else {
+        (std::env::var("HOME").ok()?, "Videos")
+    };
+    Some(PathBuf::from(home).join(videos).join("EditorKrab"))
+}
+fn export_error(code: impl Into<String>) -> ApiError {
+    (StatusCode::CONFLICT, Json(json!({ "error": code.into() })))
+}
+async fn export_status(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Json<Export> {
+    let mut status = runtime
+        .exports
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&project)
+        .cloned()
+        .unwrap_or_default();
+    if status.state.is_empty() {
+        status.state = "idle";
+    }
+    Json(status)
+}
+async fn start_export(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Result<Json<Export>, ApiError> {
+    let asr = runtime
+        .asr()
+        .ok_or_else(|| export_error("transcription_not_configured"))?;
+    let id = project.clone();
+    let (draft, jobs) = database(runtime.clone(), move |store| {
+        Ok((
+            store.read(&id)?.ok_or(Error::NotFound)?,
+            store.list_jobs(&id)?,
+        ))
+    })
+    .await?;
+    let stories = editorkrab::export::plan(&draft.document, &jobs).map_err(export_error)?;
+    if let Some(missing) = stories
+        .iter()
+        .flat_map(|s| &s.sources)
+        .find(|p| !p.is_file())
+    {
+        return Err(export_error(format!(
+            "source_missing:{}",
+            missing.display()
+        )));
+    }
+    let folder = export_dir().ok_or_else(|| export_error("output_folder_unknown"))?;
+    let (cancel, signal) = watch::channel(false);
+    {
+        let mut all = runtime.exports.lock().unwrap_or_else(|e| e.into_inner());
+        if all.get(&project).is_some_and(|s| s.state == "running") {
+            return Ok(Json(all[&project].clone()));
+        }
+        all.insert(
+            project.clone(),
+            Export {
+                state: "running",
+                stories: stories.len(),
+                cancel: Some(cancel),
+                ..Export::default()
+            },
+        );
+    }
+    let ffmpeg = asr.0.ffmpeg.clone();
+    let ffprobe = ffprobe_path(&runtime.setup);
+    let work = PathBuf::from(format!(
+        "{}.export-work",
+        runtime.setup.state_path.display()
+    ))
+    .join(uuid::Uuid::new_v4().to_string());
+    tokio::spawn(run_export(
+        runtime.clone(),
+        project.clone(),
+        draft.document,
+        stories,
+        folder,
+        work,
+        ffmpeg,
+        ffprobe,
+        signal,
+    ));
+    Ok(export_status(State(runtime), Path(project)).await)
+}
+async fn cancel_export(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Json<Export> {
+    if let Some(cancel) = runtime
+        .exports
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&project)
+        .and_then(|s| s.cancel.as_ref())
+    {
+        let _ = cancel.send(true);
+    }
+    export_status(State(runtime), Path(project)).await
+}
+/// Opens the folder holding the exported clips, with the first one selected.
+async fn reveal_export(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let file = runtime
+        .exports
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&project)
+        .and_then(|s| s.files.first().cloned())
+        .ok_or_else(|| export_error("export_not_finished"))?;
+    let opened = if cfg!(windows) {
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{file}"))
+            .spawn()
+    } else {
+        let folder = std::path::Path::new(&file)
+            .parent()
+            .map(|p| p.to_path_buf());
+        std::process::Command::new(if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        })
+        .arg(folder.unwrap_or_default())
+        .spawn()
+    };
+    opened.map_err(|e| export_error(format!("reveal_failed:{e}")))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+#[allow(clippy::too_many_arguments)]
+async fn run_export(
+    runtime: Runtime,
+    project: String,
+    document: Value,
+    stories: Vec<editorkrab::export::Story>,
+    folder: PathBuf,
+    work: PathBuf,
+    ffmpeg: PathBuf,
+    ffprobe: PathBuf,
+    signal: watch::Receiver<bool>,
+) {
+    let update = |f: &(dyn Fn(&mut Export) + Sync)| {
+        let mut all = runtime.exports.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(status) = all.get_mut(&project) {
+            f(status);
+        }
+    };
+    let title = document["title"].as_str().unwrap_or("").to_owned();
+    let mut outcome: Result<(), String> = async {
+        tokio::fs::create_dir_all(&folder)
+            .await
+            .map_err(|e| format!("output_folder:{e}"))?;
+        for (n, story) in stories.iter().enumerate() {
+            update(&|s| {
+                s.story = n + 1;
+                s.progress = n as f64 / stories.len() as f64;
+            });
+            let (ass, skipped) = editorkrab::export::subtitles(story, &document);
+            update(&|s| s.skipped = skipped.clone());
+            let dir = work.join(n.to_string());
+            tokio::fs::create_dir_all(&dir)
+                .await
+                .map_err(|e| e.to_string())?;
+            tokio::fs::write(dir.join("subs.ass"), ass)
+                .await
+                .map_err(|e| e.to_string())?;
+            let partial = dir.join("out.mp4");
+            let total = story.duration_ms().max(1);
+            let base = n as f64 / stories.len() as f64;
+            let share = 1.0 / stories.len() as f64;
+            let progress = |done_ms: u64| {
+                let fraction = (done_ms as f64 / total as f64).min(1.0);
+                update(&|s| s.progress = base + share * fraction);
+            };
+            run_ffmpeg(
+                &ffmpeg,
+                &dir,
+                &editorkrab::export::ffmpeg_args(story, &partial),
+                signal.clone(),
+                progress,
+            )
+            .await?;
+            verify_export(&ffprobe, &partial, story.duration_ms()).await?;
+            let name = editorkrab::export::file_name(
+                &[title.trim(), story.title.as_str()]
+                    .into_iter()
+                    .filter(|t| !t.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" - "),
+                &format!("EditorKrab {}", n + 1),
+            );
+            let target = editorkrab::export::unused_path(&folder, &name);
+            // same drive: rename; otherwise copy, then the work folder is cleaned below
+            if tokio::fs::rename(&partial, &target).await.is_err() {
+                tokio::fs::copy(&partial, &target)
+                    .await
+                    .map_err(|e| format!("output_write:{e}"))?;
+            }
+            let shown = target.display().to_string();
+            update(&|s| s.files.push(shown.clone()));
+        }
+        Ok(())
+    }
+    .await;
+    let _ = tokio::fs::remove_dir_all(&work).await;
+    if outcome.is_ok() && *signal.borrow() {
+        outcome = Err("cancelled".into());
+    }
+    update(&|s| {
+        s.cancel = None;
+        match &outcome {
+            Ok(()) => {
+                s.state = "done";
+                s.progress = 1.0;
+            }
+            Err(e) if e == "cancelled" => s.state = "cancelled",
+            Err(e) => {
+                s.state = "failed";
+                s.error = Some(e.clone());
+            }
+        }
+    });
+}
+async fn run_ffmpeg(
+    ffmpeg: &std::path::Path,
+    dir: &std::path::Path,
+    args: &[String],
+    mut cancel: watch::Receiver<bool>,
+    progress: impl Fn(u64),
+) -> Result<(), String> {
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt};
+    let mut command = tokio::process::Command::new(ffmpeg);
+    command
+        .args(args)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    let mut child = command.spawn().map_err(|e| format!("ffmpeg_start:{e}"))?;
+    let mut lines = tokio::io::BufReader::new(child.stdout.take().ok_or("ffmpeg_stdout")?).lines();
+    let mut stderr = child.stderr.take().ok_or("ffmpeg_stderr")?;
+    let errors = tokio::spawn(async move {
+        let mut text = String::new();
+        let _ = stderr.read_to_string(&mut text).await;
+        text
+    });
+    loop {
+        tokio::select! {
+            line = lines.next_line() => match line {
+                Ok(Some(line)) => {
+                    if let Some(us) = line.strip_prefix("out_time_us=").and_then(|v| v.parse::<u64>().ok()) {
+                        progress(us / 1000);
+                    }
+                }
+                _ => break,
+            },
+            _ = async { drop(cancel.wait_for(|stop| *stop).await) } => {
+                let _ = child.kill().await;
+                return Err("cancelled".into());
+            }
+        }
+    }
+    let status = child.wait().await.map_err(|e| e.to_string())?;
+    if !status.success() {
+        let text = errors.await.unwrap_or_default();
+        let last = text
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("")
+            .trim();
+        return Err(format!("ffmpeg_failed:{last}"));
+    }
+    Ok(())
+}
+/// A clip is published only when ffprobe reads one video and one audio stream of the planned length.
+async fn verify_export(
+    ffprobe: &std::path::Path,
+    file: &std::path::Path,
+    expected_ms: u64,
+) -> Result<(), String> {
+    let mut command = tokio::process::Command::new(ffprobe);
+    command
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:stream=codec_type,width,height",
+            "-of",
+            "json",
+        ])
+        .arg(file);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    let out = command
+        .output()
+        .await
+        .map_err(|e| format!("ffprobe_start:{e}"))?;
+    let info: Value =
+        serde_json::from_slice(&out.stdout).map_err(|_| "export_unreadable".to_string())?;
+    let streams = info["streams"].as_array().cloned().unwrap_or_default();
+    let video = streams.iter().find(|s| s["codec_type"] == "video");
+    let has_audio = streams.iter().any(|s| s["codec_type"] == "audio");
+    let size_ok = video.is_some_and(|v| {
+        v["width"] == editorkrab::export::WIDTH && v["height"] == editorkrab::export::HEIGHT
+    });
+    let duration_ms = info["format"]["duration"]
+        .as_str()
+        .and_then(|d| d.parse::<f64>().ok())
+        .map(|d| (d * 1000.0) as u64)
+        .unwrap_or(0);
+    if !size_ok || !has_audio || duration_ms.abs_diff(expected_ms) > 500 {
+        return Err(format!(
+            "export_check_failed:video={size_ok},audio={has_audio},duration_ms={duration_ms},expected_ms={expected_ms}"
+        ));
+    }
+    Ok(())
 }
 
 async fn begin_upload(
@@ -213,7 +598,7 @@ async fn create_jobs(
 ) -> Result<Json<Vec<Job>>, ApiError> {
     for item in &body.items {
         if let Task::Transcribe { settings, .. } = &item.task {
-            let configured = runtime.asr.as_ref().ok_or((
+            let configured = runtime.asr().ok_or((
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Json(json!({"error":"transcription_not_configured"})),
             ))?;
@@ -243,14 +628,10 @@ async fn start_transcription(
     Path(project): Path<String>,
     Json(body): Json<editorkrab::transcription_jobs::StartRequest>,
 ) -> Result<Json<Vec<Job>>, ApiError> {
-    let configured = runtime
-        .asr
-        .as_ref()
-        .ok_or((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({"error":"transcription_not_configured"})),
-        ))?
-        .clone();
+    let configured = runtime.asr().ok_or((
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({"error":"transcription_not_configured"})),
+    ))?;
     if body.settings != configured.1 {
         return Err((
             StatusCode::CONFLICT,
@@ -367,16 +748,12 @@ async fn source_pauses(
     if query.end_ms <= query.start_ms || query.end_ms - query.start_ms > 3_600_000 {
         return Err(failure(Error::InvalidInput));
     }
-    let ffmpeg = runtime
-        .asr
-        .as_ref()
-        .map(|v| v.0.ffmpeg.clone())
-        .ok_or_else(|| {
-            (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"error":"transcription_not_configured"})),
-            )
-        })?;
+    let ffmpeg = runtime.asr().map(|v| v.0.ffmpeg.clone()).ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error":"transcription_not_configured"})),
+        )
+    })?;
     let store = runtime.store.clone();
     let path = tokio::task::spawn_blocking(move || -> Result<PathBuf, ApiError> {
         let store = store.lock().map_err(|_| failure(Error::Unavailable))?;
@@ -526,11 +903,8 @@ async fn transcribe_job(
     else {
         return Err("invalid_transcription_task".into());
     };
-    let (config, _) = runtime
-        .asr
-        .as_ref()
-        .ok_or("transcription_not_configured")?
-        .as_ref();
+    let asr = runtime.asr().ok_or("transcription_not_configured")?;
+    let (config, _) = asr.as_ref();
     let (cancel, signal) = watch::channel(false);
     let (progress, mut stages) = watch::channel("verifying");
     let task = editorkrab::native_asr::run_cached(
@@ -653,15 +1027,35 @@ async fn local_only(
     response
 }
 
-/// Transcription tools shipped beside the executable in `tools/`, so a fresh install works
-/// without environment variables. All three must exist; the largest model wins.
-fn bundled_asr_tools() -> Option<(PathBuf, PathBuf, PathBuf)> {
-    let tools = std::env::current_exe().ok()?.parent()?.join("tools");
+/// Transcription tools shipped beside the executable in `tools/`, or downloaded by the app into its
+/// data folder, so a fresh install works without environment variables. The largest model wins.
+struct Found {
+    engine: Option<PathBuf>,
+    model: Option<PathBuf>,
+    ffmpeg: Option<PathBuf>,
+}
+fn tool_roots(data: &std::path::Path) -> Vec<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("tools")))
+        .into_iter()
+        .chain([data.to_path_buf()])
+        .collect()
+}
+fn find_tool(roots: &[PathBuf], folder: &str, name: &str) -> Option<PathBuf> {
     let exe = if cfg!(windows) { ".exe" } else { "" };
-    let engine = tools.join("whisper").join(format!("whisper-cli{exe}"));
-    let ffmpeg = tools.join("ffmpeg").join(format!("ffmpeg{exe}"));
-    let model = std::fs::read_dir(tools.join("models"))
-        .ok()?
+    roots
+        .iter()
+        .map(|r| r.join(folder).join(format!("{name}{exe}")))
+        .find(|p| p.is_file())
+}
+fn find_asr_tools(data: &std::path::Path) -> Found {
+    let roots = tool_roots(data);
+    let first = |folder: &str, name: &str| find_tool(&roots, folder, name);
+    let model = roots
+        .iter()
+        .filter_map(|r| std::fs::read_dir(r.join("models")).ok())
+        .flatten()
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| {
@@ -669,8 +1063,224 @@ fn bundled_asr_tools() -> Option<(PathBuf, PathBuf, PathBuf)> {
                 .and_then(|n| n.to_str())
                 .is_some_and(|n| n.starts_with("ggml-") && n.ends_with(".bin"))
         })
-        .max_by_key(|p| p.metadata().map(|m| m.len()).unwrap_or(0))?;
-    (engine.is_file() && ffmpeg.is_file()).then_some((engine, model, ffmpeg))
+        .max_by_key(|p| p.metadata().map(|m| m.len()).unwrap_or(0));
+    Found {
+        engine: first("whisper", "whisper-cli"),
+        model,
+        ffmpeg: first("ffmpeg", "ffmpeg"),
+    }
+}
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
+async fn configure_asr(
+    whisper: PathBuf,
+    model: PathBuf,
+    ffmpeg: PathBuf,
+    state_path: &std::path::Path,
+) -> Result<Asr, BoxError> {
+    let config = AsrConfig {
+        whisper,
+        model,
+        ffmpeg,
+        workspace: PathBuf::from(format!("{}.asr-work", state_path.display())),
+        timeout: Duration::from_secs(3600),
+        threads: asr_threads(),
+    };
+    let capture = config.clone();
+    let settings = tokio::task::spawn_blocking(move || AsrSettings::read(&capture)).await??;
+    if !settings.valid() {
+        return Err("invalid transcription tools".into());
+    }
+    Ok(Arc::new((config, settings)))
+}
+// 2 threads left a 20-thread CPU mostly idle (docs/test-logs/rust-20261018/flow-run3.md); capped at 8 until a sweep is measured
+fn asr_threads() -> u16 {
+    std::thread::available_parallelism().map_or(2, |n| n.get().clamp(1, 8) as u16)
+}
+fn data_dir() -> PathBuf {
+    if let Ok(path) = std::env::var("EDITORKRAB_DATA") {
+        return path.into();
+    }
+    let base = std::env::var("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+        .unwrap_or_else(|_| PathBuf::from("."));
+    base.join("EditorKrab")
+}
+
+/// What the in-app download still has to fetch; an error names what it cannot fetch.
+fn download_plan(setup: &AsrSetup) -> Result<Vec<editorkrab::asr_download::Item>, String> {
+    let found = find_asr_tools(&setup.data);
+    if found.ffmpeg.is_none() {
+        return Err("ffmpeg_missing".into());
+    }
+    if found.engine.is_none() && !cfg!(windows) {
+        return Err("runtime_missing".into());
+    }
+    let mut items =
+        editorkrab::asr_download::plan(&setup.data, found.engine.is_none(), found.model.is_none());
+    if let Some(model) = &setup.model {
+        for item in items.iter_mut().filter(|i| !i.unzip) {
+            *item = model.clone();
+        }
+    }
+    Ok(items)
+}
+fn received(items: &[editorkrab::asr_download::Item]) -> u64 {
+    items
+        .iter()
+        .map(|i| match std::fs::metadata(i.part()) {
+            Ok(m) => m.len().min(i.size),
+            Err(_) if i.dest.exists() => i.size,
+            Err(_) => 0,
+        })
+        .sum()
+}
+fn download_error(code: String) -> ApiError {
+    let body = match code.strip_prefix("disk_space:") {
+        Some(rest) => {
+            let (drive, needed) = rest.rsplit_once(':').unwrap_or((rest, "0"));
+            json!({"error":"disk_space","drive":drive,"needed_bytes":needed.parse::<u64>().unwrap_or(0)})
+        }
+        None => json!({ "error": code }),
+    };
+    (StatusCode::CONFLICT, Json(body))
+}
+async fn download_status(State(runtime): State<Runtime>) -> Json<Download> {
+    let mut status = runtime
+        .download
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    if runtime.asr().is_some() {
+        status.state = "done";
+    } else if status.state.is_empty() || status.state == "idle" {
+        let setup = runtime.setup.clone();
+        match tokio::task::spawn_blocking(move || download_plan(&setup).map(|p| (received(&p), p)))
+            .await
+        {
+            Ok(Ok((have, plan))) => {
+                status.state = "idle";
+                status.total = plan.iter().map(|i| i.size).sum();
+                status.received = have;
+            }
+            Ok(Err(code)) => {
+                status.state = "failed";
+                status.error = Some(code);
+            }
+            Err(e) => {
+                status.state = "failed";
+                status.error = Some(e.to_string());
+            }
+        }
+    }
+    Json(status)
+}
+async fn start_download(State(runtime): State<Runtime>) -> Result<Json<Download>, ApiError> {
+    if runtime.asr().is_some() {
+        return Ok(download_status(State(runtime)).await);
+    }
+    let setup = runtime.setup.clone();
+    let items = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        let items = download_plan(&setup)?;
+        let free = editorkrab::asr_download::free_space(&setup.data)?;
+        let drive = editorkrab::asr_download::drive(&setup.data);
+        editorkrab::asr_download::check_space(free, &items, &drive)?;
+        Ok(items)
+    })
+    .await
+    .map_err(|e| download_error(e.to_string()))?
+    .map_err(download_error)?;
+    let (cancel, signal) = watch::channel(false);
+    {
+        let mut status = runtime.download.lock().unwrap_or_else(|e| e.into_inner());
+        if status.state == "running" {
+            return Ok(Json(status.clone()));
+        }
+        *status = Download {
+            state: "running",
+            total: items.iter().map(|i| i.size).sum(),
+            received: received(&items),
+            cancel: Some(cancel),
+            ..Download::default()
+        };
+    }
+    tokio::spawn(run_download(runtime.clone(), items, signal));
+    Ok(download_status(State(runtime)).await)
+}
+async fn cancel_download(State(runtime): State<Runtime>) -> Json<Download> {
+    if let Some(cancel) = &runtime
+        .download
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .cancel
+    {
+        let _ = cancel.send(true);
+    }
+    download_status(State(runtime)).await
+}
+async fn run_download(
+    runtime: Runtime,
+    items: Vec<editorkrab::asr_download::Item>,
+    signal: watch::Receiver<bool>,
+) {
+    let ticker = {
+        let (runtime, items) = (runtime.clone(), items.clone());
+        tokio::spawn(async move {
+            let mut last = (std::time::Instant::now(), received(&items));
+            loop {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                let now = (std::time::Instant::now(), received(&items));
+                let rate = now.1.saturating_sub(last.1) as f64
+                    / now.0.duration_since(last.0).as_secs_f64().max(0.001);
+                let mut status = runtime.download.lock().unwrap_or_else(|e| e.into_inner());
+                status.received = now.1;
+                status.bytes_per_second = rate as u64;
+                last = now;
+            }
+        })
+    };
+    let curl = if cfg!(windows) {
+        PathBuf::from(std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into()))
+            .join("System32")
+            .join("curl.exe")
+    } else {
+        PathBuf::from("curl")
+    };
+    let mut outcome = Ok(());
+    for item in &items {
+        if let Err(e) = editorkrab::asr_download::fetch(item, &curl, signal.clone()).await {
+            outcome = Err(e);
+            break;
+        }
+    }
+    if outcome.is_ok() {
+        let found = find_asr_tools(&runtime.setup.data);
+        outcome = match (found.engine, found.model, found.ffmpeg) {
+            (Some(engine), Some(model), Some(ffmpeg)) => {
+                match configure_asr(engine, model, ffmpeg, &runtime.setup.state_path).await {
+                    Ok(asr) => {
+                        *runtime.asr.write().unwrap_or_else(|e| e.into_inner()) = Some(asr);
+                        Ok(())
+                    }
+                    Err(e) => Err(format!("invalid_tools:{e}")),
+                }
+            }
+            _ => Err("invalid_tools".into()),
+        };
+    }
+    ticker.abort();
+    let mut status = runtime.download.lock().unwrap_or_else(|e| e.into_inner());
+    status.received = received(&items);
+    status.bytes_per_second = 0;
+    status.cancel = None;
+    match outcome {
+        Ok(()) => status.state = "done",
+        Err(e) if e == "cancelled" => status.state = "cancelled",
+        Err(e) => {
+            status.state = "failed";
+            status.error = Some(e);
+        }
+    }
 }
 
 async fn serve(
@@ -701,57 +1311,44 @@ async fn serve(
     store.initialize_jobs()?;
     store.recover_jobs()?;
     let (stopping, _) = watch::channel(false);
+    let data = data_dir();
     let asr = match (
         std::env::var("EDITORKRAB_WHISPER"),
         std::env::var("EDITORKRAB_WHISPER_MODEL"),
         std::env::var("EDITORKRAB_FFMPEG"),
     ) {
-        (Err(_), Err(_), Err(_)) => match bundled_asr_tools() {
-            None => None,
-            Some((engine, model, ffmpeg)) => {
-                let config = AsrConfig {
-                    whisper: engine,
-                    model,
-                    ffmpeg,
-                    workspace: PathBuf::from(format!("{}.asr-work", state_path.display())),
-                    timeout: Duration::from_secs(3600),
-                    threads: 2,
-                };
-                let capture = config.clone();
-                let settings =
-                    tokio::task::spawn_blocking(move || AsrSettings::read(&capture)).await??;
-                if !settings.valid() {
-                    return Err("invalid bundled transcription tools".into());
-                }
-                Some(Arc::new((config, settings)))
-            }
+        (Err(_), Err(_), Err(_)) => match find_asr_tools(&data) {
+            Found {
+                engine: Some(engine),
+                model: Some(model),
+                ffmpeg: Some(ffmpeg),
+            } => Some(configure_asr(engine, model, ffmpeg, &state_path).await?),
+            _ => None,
         },
         (Ok(engine), Ok(model), Ok(ffmpeg)) => {
-            let config = AsrConfig {
-                whisper: engine.into(),
-                model: model.into(),
-                ffmpeg: ffmpeg.into(),
-                workspace: PathBuf::from(format!("{}.asr-work", state_path.display())),
-                timeout: Duration::from_secs(3600),
-                threads: 2,
-            };
-            let capture = config.clone();
-            let settings =
-                tokio::task::spawn_blocking(move || AsrSettings::read(&capture)).await??;
-            if !settings.valid() {
-                return Err("invalid transcription configuration".into());
-            }
-            Some(Arc::new((config, settings)))
+            Some(configure_asr(engine.into(), model.into(), ffmpeg.into(), &state_path).await?)
         }
         _ => return Err(
             "configure EDITORKRAB_WHISPER, EDITORKRAB_WHISPER_MODEL and EDITORKRAB_FFMPEG together"
                 .into(),
         ),
     };
+    // test-only: download this model item instead of the pinned large-v3
+    let model = match std::env::var("EDITORKRAB_DOWNLOAD_MANIFEST") {
+        Ok(path) => Some(serde_json::from_slice(&std::fs::read(path)?)?),
+        Err(_) => None,
+    };
     let runtime = Runtime {
         store: Arc::new(Mutex::new(store)),
         stopping,
-        asr,
+        asr: Arc::new(std::sync::RwLock::new(asr)),
+        setup: Arc::new(AsrSetup {
+            state_path: state_path.clone(),
+            data,
+            model,
+        }),
+        download: Arc::new(Mutex::new(Download::default())),
+        exports: Arc::default(),
         picker,
         picker_busy: Arc::new(AtomicBool::new(false)),
         assets: PathBuf::from(format!(
@@ -759,8 +1356,7 @@ async fn serve(
             state_path.to_str().ok_or("state path is not Unicode")?
         )),
     };
-    let ffprobe =
-        PathBuf::from(std::env::var("EDITORKRAB_FFPROBE").unwrap_or_else(|_| "ffprobe".into()));
+    let ffprobe = ffprobe_path(&runtime.setup);
     let app = Router::new()
         .route(
             "/",
@@ -823,6 +1419,15 @@ async fn serve(
             }),
         )
         .route(
+            "/export.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/export.js"),
+                )
+            }),
+        )
+        .route(
             "/transcription.js",
             get(|| async {
                 (
@@ -834,8 +1439,28 @@ async fn serve(
         .route(
             "/api/v1/transcription/settings",
             get(|State(runtime): State<Runtime>| async move {
-                Json(runtime.asr.as_ref().map(|v| v.1.clone()))
+                Json(runtime.asr().map(|v| v.1.clone()))
             }),
+        )
+        .route(
+            "/api/v1/transcription/download",
+            get(download_status).post(start_download),
+        )
+        .route(
+            "/api/v1/transcription/download/cancel",
+            post(cancel_download),
+        )
+        .route(
+            "/api/v1/projects/{project}/export",
+            get(export_status).post(start_export),
+        )
+        .route(
+            "/api/v1/projects/{project}/export/cancel",
+            post(cancel_export),
+        )
+        .route(
+            "/api/v1/projects/{project}/export/reveal",
+            post(reveal_export),
         )
         .route(
             "/api/v1/projects/{project}/transcription",
@@ -856,7 +1481,16 @@ async fn serve(
         .route("/api/v1/sources/uploads", post(begin_upload))
         .route("/api/v1/sources/uploads/{id}", post(upload_chunk))
         .route("/api/v1/sources/uploads/{id}/finish", post(finish_upload))
-        .route("/favicon.ico", get(|| async { StatusCode::NO_CONTENT }))
+        // the app window (Edge/Chrome --app) shows this as its title-bar and taskbar icon
+        .route(
+            "/favicon.ico",
+            get(|| async {
+                (
+                    [("content-type", "image/x-icon")],
+                    include_bytes!("../../app/static/editorkrab-crab.ico").as_slice(),
+                )
+            }),
+        )
         .route(
             "/api/v1/projects/{project}/jobs",
             get(list_jobs).post(create_jobs),

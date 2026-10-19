@@ -5,117 +5,78 @@
   <img src="docs/brand/logo.png" alt="EditorKrab" width="460">
 </picture>
 
-EditorKrab helps turn talking-head footage into short videos. It prepares a draft with story cuts, subtitles and a cover, so you can review and finish the edit in CapCut or the local editor.
+EditorKrab is a desktop app that turns talking-head footage into short clips with subtitles. It runs on your own computer: videos, transcripts and projects stay on your machine.
 
-This is an early access project. Windows uses the existing installer. Mac support is experimental, and CapCut projects still need testing on real Macs. These instructions cover version 0.29.1. Check [Releases](https://github.com/poomiiz/EditorKrab/releases) for availability.
+This is an early access project for Windows 10/11. All six steps work, but it has only been tested on generated test speech so far. Keyword highlights, English translation, music and sound effects are not in the new app yet.
 
-[คู่มือภาษาไทย](docs/README.th.md) · [Documentation](docs/index.md) · [Report a bug](CONTRIBUTING.md)
+[คู่มือภาษาไทย](docs/README.th.md) · [Report a bug](CONTRIBUTING.md) · [Security](SECURITY.md)
 
-## What it does
+## How it works
 
-- Transcribes speech and prepares editable subtitles, with Thai layouts and support for other spoken languages.
-- Cuts stories from longer footage and removes pauses.
-- Adds subtitle styles, emphasis, covers and optional stock footage.
-- Creates CapCut drafts or a HyperFrames preview, then exports an MP4.
-- Records how long each step takes and includes a guide for comparing editing time. Real time savings have not been measured yet.
+The app has one window and six steps, with one main button per step.
 
-AI story selection and emphasis can require help from Claude Code, Codex or a web AI. If the script prints `WAIT`, complete that step and run the same command again. Review the draft before export and watch the exported video before delivery.
+1. **Add video:** pick a file or a whole folder. Press **Transcribe** to turn speech into text, then listen and fix any wrong words. Thai, English and other languages are detected automatically.
+2. **Send to AI:** download one file and attach it in any AI chat (ChatGPT, Gemini or Claude). The AI picks the parts to keep.
+3. **Paste the answer:** paste the AI's whole reply back into the app.
+4. **Subtitles:** choose what appears on screen. Drag to move a subtitle and drag a corner to resize it.
+5. **Title:** add title text and place it on the clip.
+6. **Get the clip:** press **Create clip**. The app makes one vertical 9:16 MP4 per story the AI picked, with the subtitles and title burned in, and saves them in `Videos\EditorKrab`. It never overwrites an existing file. Each file is checked for size, sound and length before it is saved.
+
+The work saves itself as you go. **Undo**, **Redo**, **Open** and **Download backup** are in the top bar.
 
 ## Install
 
-You need Git and a workspace folder for your footage, models, drafts and exports. Install CapCut desktop separately if you want to finish your draft there. Machine paths are stored in the local `config.json`.
+1. Download `EditorKrab-windows-x64.zip` from [Releases](https://github.com/poomiiz/EditorKrab/releases).
+2. Unzip it and double-click **Install EditorKrab**. The installer copies the app to `%LOCALAPPDATA%\Programs\EditorKrab` and adds Desktop and Start Menu shortcuts.
+3. Open **EditorKrab**. It opens in its own window using Microsoft Edge, which comes with Windows. Google Chrome also works.
 
-### Windows
+The download includes ffmpeg. The speech engine ([whisper.cpp](https://github.com/ggml-org/whisper.cpp)) and the Whisper large-v3 model are not included. The first time you transcribe, the app shows one button: **ดาวน์โหลดตัวถอดเสียง (3.1 GB)**.
+- The download shows progress, can be cancelled and resumes if the connection drops.
+- Each file is checked against a pinned checksum before it is used.
+- If there is not enough disk space, the app says how much more it needs.
 
-Windows 10/11. The setup script installs Python, ffmpeg, Node.js and the Python packages through the existing Windows setup flow.
+To update, download the new zip and run **Install EditorKrab** again. It replaces only the app files, so your projects and the speech model are kept.
+
+## Measured results
+
+These numbers come from our own test runs. They are not guarantees.
+
+| Test | Result | Source |
+|---|---|---|
+| English test speech, 68.6 s, large-v3 | 6.74% word error rate | [flow-run3](docs/test-logs/rust-20261018/flow-run3.md) |
+| Thai test speech, 45.1 s, large-v3 | 2.05% character error rate | [flow-run3](docs/test-logs/rust-20261018/flow-run3.md) |
+| Transcribe the English clip, 8 CPU threads (release build) | 94.1 s (was 332.6 s with 2 threads) | [flow-run3, run 4](docs/test-logs/rust-20261018/flow-run3.md) |
+| Transcribe the Thai clip, 8 CPU threads (release build) | 128.4 s (was 543.1 s with 2 threads) | [flow-run3, run 4](docs/test-logs/rust-20261018/flow-run3.md) |
+
+The test speech was generated from the scripts in that folder; it is not customer footage. The times were measured on one 20-thread desktop CPU, with whisper running on the CPU only. The app uses up to 8 threads because more threads gave little extra speed. Time saved compared with manual editing has not been measured.
+
+## Build from source
+
+You need [Rust](https://rustup.rs) (stable) on Windows.
 
 ```powershell
 git clone https://github.com/poomiiz/EditorKrab.git
 cd EditorKrab
-.\setup.cmd
+cargo build --manifest-path rust/Cargo.toml --release --locked
+cargo test --manifest-path rust/Cargo.toml --locked
 ```
 
-Enter a workspace folder when prompted. Open EditorKrab from its desktop shortcut after setup, or run `powershell -NoProfile -ExecutionPolicy Bypass -File app\start.ps1`. An NVIDIA GPU can run transcription with CUDA; setup uses CPU when no NVIDIA GPU is detected.
+The page and its scripts in `design/rust-flow/` are compiled into the exe. To build the same zip as a release, run `scripts/package-windows-app.ps1 -Exe rust/target/release/editorkrab.exe -Output dist/EditorKrab-windows-x64.zip`. The **release** workflow builds it on every `v*` tag. You can also run it by hand to get the zip as a workflow artifact.
 
-### Mac — experimental
+## Privacy
 
-Install Homebrew first, or provide Python 3.12, ffmpeg and Node.js yourself. Setup checks the tools, installs missing ones through Homebrew and prepares a local Python environment.
+The app serves its page only on `127.0.0.1:8871`, so nothing is reachable from other computers. Only two things leave your machine:
+- The one-time speech model download.
+- The file you attach to an AI chat yourself in step 2.
 
-```bash
-git clone https://github.com/poomiiz/EditorKrab.git
-cd EditorKrab
-bash scripts/setup.sh "$HOME/EditorKrab Workspace"
-./start.command
-```
+Keep client media, private projects and personal `config.json` files out of Git.
 
-Fresh Mac setups use the medium Whisper model on the CPU. Apple GPU acceleration is not implemented. See the [Mac guide](docs/macos.md) for prerequisites, settings and the checks still needed on real devices.
+## Older Python workflow
 
-### AI agent tools
+The repository still contains the earlier Python tools: `app/`, `scripts/run_clip.py`, the CapCut drafts and the agent skills in `skills/`. These tools are not the desktop app described above. See the [documentation index](docs/index.md) for them. The agent plugin ID remains `clip-kit` for existing users.
 
-These integrations are optional ways to guide the workflow. The plugin name remains `clip-kit` for existing users.
+## Contributing and license
 
-Claude Code:
+[Contributing](CONTRIBUTING.md) explains bug reports and pull requests. [Security](SECURITY.md) explains private vulnerability reporting. [Sponsor the project](https://github.com/sponsors/poomiiz) to support development.
 
-```text
-claude plugin marketplace add poomiiz/EditorKrab
-claude plugin install clip-kit@clip-kit
-```
-
-Codex:
-
-```text
-npx skills add poomiiz/EditorKrab --agent codex -g
-```
-
-Start an editing request with [make-clip](skills/make-clip/SKILL.md).
-
-## Update
-
-Use **Update** in the app, or run `python scripts/update.py` from the Windows clone. On Mac, use `.venv/bin/python scripts/update.py`.
-
-Updates follow the newest published `vX.Y.Z` tag. A merge to the main branch becomes available through Update after a release tag is published. The updater saves tracked local edits in a Git stash and local commits on a backup branch before moving to the release.
-
-Agent integrations have their own update step: `claude plugin marketplace update clip-kit`, or run the Codex install command again.
-
-## Make your first clip
-
-1. Select a source video and set the spoken language, shape and subtitle preset.
-2. Prepare one story as a pilot. Finish any AI steps requested by the workflow.
-3. Review the cut, subtitles, framing, sound and cover. Continue editing in CapCut if needed.
-4. Export an MP4 and watch it through. Use the [quality checklist](skills/clip-qc/SKILL.md) before making more clips.
-
-For the CLI pilot:
-
-```text
-python scripts/run_clip.py "<video>" --max 60 --capcut
-```
-
-On Mac, replace `python` with `.venv/bin/python`. Close CapCut and back up `draft_content.json` before a tool changes an existing draft.
-
-Free stock footage can come from Pixabay after you add an API key in Settings. You can also insert files downloaded from a library you have permission to use.
-
-## Measure editing time
-
-The benchmark compares manual CapCut editing with an EditorKrab draft followed by human editing. Both methods must deliver the same quality.
-
-The initial pilot uses eight source videos: an A/B pair at each of 1, 5, 20 and 60 minutes. Two editors complete sixteen sessions, producing one 30–60 second short per session. Each editor sees a source only once. Record active human time and observed elapsed time separately; keep failed sessions in the sheet.
-
-Use the [benchmark protocol](docs/benchmark.md) and [result sheet](docs/benchmark-sheet.csv). Retries within the same editing session share a `--trial-id` and stay in the timing log. This measures one short per source, so it does not establish long-form or batch performance.
-
-## Files, privacy and teams
-
-Footage and project folders are stored on your machine. Keep client media, private projects, credentials and personal `config.json` files out of Git.
-
-Some optional steps send information to other services: web AI receives the material you export or upload, and team accounts store metadata in Supabase. Drive upload does not grant public link access; add chosen reviewers in Google Drive. Existing public links are not revoked automatically. Report a problem opens GitHub for you to review and submit; automatic error reporting is disabled, including for old configurations. No logs or transcripts are attached automatically.
-
-The app uses Google sign-in before opening the editing pages. Sign-in, team permissions and synchronization still need testing with real accounts and devices. If you operate your own service, configure Supabase and Google OAuth before distributing it. Team synchronization uses Drive for desktop or Syncthing for footage and exports; private project folders stay with their owner. See [team setup](docs/team-setup.md) (Thai).
-
-## Documentation and contributions
-
-Start with the [documentation index](docs/index.md). [Contributing](CONTRIBUTING.md) explains bug reports and pull requests; [Security](SECURITY.md) explains private vulnerability reporting.
-
-[Sponsor the project](https://github.com/sponsors/poomiiz) to support development.
-
-EditorKrab was previously called ClipKit. Existing plugin IDs and file-format names remain compatible.
-
-[MIT license](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for separate licenses.
+[MIT license](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for ffmpeg, whisper.cpp and other components.

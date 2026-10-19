@@ -14,7 +14,7 @@ async (page) => {
     [{...source,path:'  '}]
   ]) {
     await page.locator('#openFile').setInputFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({...original.document,files}))});
-    await page.waitForFunction(()=>document.getElementById('error').textContent.includes('เปิดร่างไม่ได้'),null,{polling:100});
+    await page.waitForFunction(()=>document.getElementById('error').textContent.includes('เปิดไม่ได้'),null,{polling:100});
     check(await page.locator('#title').inputValue()===original.document.title,'invalid import replaced current draft');
     const stored=await (await page.request.get(base+'/api/v1/drafts/'+project)).json();
     check(stored.revision===original.revision,'invalid import reached durable outbox');

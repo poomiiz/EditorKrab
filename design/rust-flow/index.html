@@ -6,11 +6,11 @@
 <title>EditorKrab</title>
 <style>
 :root{color-scheme:dark;
---h:285;
---bg:oklch(17% .008 var(--h));--surface:oklch(20.5% .009 var(--h));--raised:oklch(24.5% .011 var(--h));--sunken:oklch(14.5% .007 var(--h));
---line:oklch(30% .012 var(--h));--line-strong:oklch(40% .014 var(--h));
+--h:258;
+--bg:oklch(20% .035 var(--h));--surface:#17243B;--raised:oklch(31% .05 var(--h));--sunken:oklch(16.5% .03 var(--h));
+--line:oklch(35% .045 var(--h));--line-strong:oklch(45% .045 var(--h));
 --txt:oklch(95% .006 var(--h));--txt-sub:oklch(82% .01 var(--h));--mut:oklch(66% .012 var(--h));
---acc:oklch(62% .19 var(--h));--acc-hover:oklch(67% .19 var(--h));--acc-soft:oklch(62% .19 var(--h) / .16);--on-acc:oklch(98% .005 var(--h));
+--acc:#FF785C;--acc-hover:oklch(78% .15 36);--acc-soft:rgb(255 120 92 / .16);--on-acc:#17243B;
 --ok:oklch(74% .15 160);--warn:oklch(80% .15 75);--danger:oklch(68% .19 25);
 --card:var(--surface);--card2:var(--raised);
 --radius:10px;--radius-sm:7px;--space-xs:4px;--space-sm:8px;--space-md:12px;--space-lg:16px;--space-xl:24px;--space-2xl:32px;
@@ -19,13 +19,13 @@
 --bg:oklch(97.5% .004 var(--h));--surface:oklch(99.2% .002 var(--h));--raised:oklch(95% .006 var(--h));--sunken:oklch(93.5% .007 var(--h));
 --line:oklch(89% .008 var(--h));--line-strong:oklch(78% .01 var(--h));
 --txt:oklch(22% .012 var(--h));--txt-sub:oklch(38% .012 var(--h));--mut:oklch(50% .012 var(--h));
---acc:oklch(50% .2 var(--h));--acc-hover:oklch(45% .2 var(--h));--acc-soft:oklch(50% .2 var(--h) / .1);
+--acc:#FF785C;--acc-hover:oklch(68% .18 36);--acc-soft:rgb(255 120 92 / .14);
 --ok:oklch(52% .13 160);--warn:oklch(55% .13 70);--danger:oklch(53% .19 25)}
 @media(prefers-color-scheme:light){:root:not([data-theme]){color-scheme:light;
 --bg:oklch(97.5% .004 var(--h));--surface:oklch(99.2% .002 var(--h));--raised:oklch(95% .006 var(--h));--sunken:oklch(93.5% .007 var(--h));
 --line:oklch(89% .008 var(--h));--line-strong:oklch(78% .01 var(--h));
 --txt:oklch(22% .012 var(--h));--txt-sub:oklch(38% .012 var(--h));--mut:oklch(50% .012 var(--h));
---acc:oklch(50% .2 var(--h));--acc-hover:oklch(45% .2 var(--h));--acc-soft:oklch(50% .2 var(--h) / .1);
+--acc:#FF785C;--acc-hover:oklch(68% .18 36);--acc-soft:rgb(255 120 92 / .14);
 --ok:oklch(52% .13 160);--warn:oklch(55% .13 70);--danger:oklch(53% .19 25)}}
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -250,9 +250,10 @@ main{display:block;padding:var(--space-md)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}button:active:not(:disabled){transform:none}}
 
 .transcript-panel{display:grid;gap:var(--space-md);padding-top:var(--space-lg);border-top:1px solid var(--line);min-width:0}.transcript-panel progress{width:100%;height:12px;accent-color:var(--acc)}#transcriptResult{display:grid;gap:var(--space-md);min-width:0}.transcript-rows{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-md)}.transcript-rows li{padding-block:var(--space-md);border-bottom:1px solid var(--line);min-width:0}.transcript-rows textarea{width:100%;min-height:80px;margin-top:var(--space-sm);resize:vertical;font:inherit}.transcript-rows label{display:grid;gap:var(--space-xs)}.transcript-panel audio{width:100%;max-width:100%}.transcript-panel .row{flex-wrap:wrap}.transcript-time{font-variant-numeric:tabular-nums}.stage[data-panel="4"] .stage-body{flex-direction:row}.qc{display:flex;flex-direction:column;gap:var(--space-sm);min-height:0;flex:0 0 min(34%,420px);padding:var(--space-md);border-right:1px solid var(--line)}.qc h2{font-size:1rem}.qc-problems{margin:0;padding-left:1.2em;color:var(--txt-sub)}.qc-actions{display:flex;gap:var(--space-sm);grid-column:2}.qc-edit{grid-column:2;display:flex;gap:var(--space-sm);flex-wrap:wrap}.qc-edit input{flex:1 1 14rem;min-width:0}.qc-list{list-style:none;margin:0;padding:0;display:grid;align-content:start;gap:var(--space-sm);overflow:auto;flex:1;min-height:0}.qc-finding{display:grid;grid-template-columns:5.5rem 1fr;gap:2px var(--space-md);align-items:baseline;padding-block:var(--space-sm);border-bottom:1px solid var(--line)}.qc-finding .badge{grid-row:span 5;align-self:start;justify-self:start}.qc-finding[data-severity=critical] .badge{color:var(--danger);border-color:var(--danger)}.qc-finding[data-severity=moderate] .badge{color:var(--warn);border-color:var(--warn)}.qc-head{font-size:.8125rem;color:var(--txt-sub);font-variant-numeric:tabular-nums}.qc-shown{font-weight:600;color:var(--txt)}.qc-fix{color:var(--txt-sub)}.qc-fix b{color:var(--ok);font-weight:600}.transcript-words{display:flex;flex-wrap:wrap;gap:2px 6px;margin-top:var(--space-xs);color:var(--mut)}.transcript-words span{border-radius:var(--radius-sm);padding-inline:2px;transition:background-color .15s var(--ease),color .15s var(--ease)}.transcript-words [data-on]{color:var(--txt);background:var(--acc-soft)}.transcript-suggest{font-size:.85em}.transcript-panel p{overflow-wrap:anywhere}.qc>button{align-self:start}
+.asr-download{display:grid;gap:var(--space-sm)}.export-panel{display:grid;gap:var(--space-md);align-content:start;max-width:560px;padding:var(--space-lg);min-width:0}.export-panel progress{width:100%;height:12px;accent-color:var(--acc)}.export-panel .row{display:flex;gap:var(--space-sm);flex-wrap:wrap}.export-files{margin:0;padding-left:1.2em;overflow-wrap:anywhere}.asr-download progress{width:100%;height:12px;accent-color:var(--acc)}
 
 /* layout v2: flush workspace, real columns, stepper rail, stronger hierarchy */
-:root{--panel:oklch(19% .009 var(--h));--side:340px;--space-3xl:48px}
+:root{--panel:oklch(22.5% .04 var(--h));--side:340px;--space-3xl:48px}
 :root[data-theme=light]{--panel:oklch(96.6% .005 var(--h))}
 @media(prefers-color-scheme:light){:root:not([data-theme]){--panel:oklch(96.6% .005 var(--h))}}
 h1{font-size:1.375rem;line-height:1.3;font-weight:700;letter-spacing:-.01em}
@@ -398,7 +399,7 @@ textarea{font-size:.75rem}
 <progress id="transcribeProgress" aria-label="ช่วงเสียงที่ถอดสำเร็จ" hidden></progress>
 <div class="row"><button id="transcribe" disabled>ถอดเสียง</button><button id="cancelTranscription" hidden>หยุดถอดเสียง</button><button id="retryTranscription" hidden>ลองช่วงที่ไม่สำเร็จ</button><button id="reloadAsr" hidden>ลองอีกครั้ง</button></div>
 <p id="transcribeError" class="field-warning" role="alert" hidden></p>
-<details id="transcribeSetup" hidden><summary>ทำไมถอดเสียงไม่ได้</summary><p>เครื่องนี้ยังไม่ได้ติดตั้งตัวถอดเสียง ให้ผู้ดูแลติดตั้งตามคู่มือ แล้วกดลองอีกครั้ง</p></details>
+<div id="asrDownload" class="asr-download" hidden><p id="asrDownloadNote" class="caption">ใช้ครั้งแรกต้องดาวน์โหลดตัวถอดเสียงก่อน</p><div class="row"><button id="asrDownloadStart" type="button">ดาวน์โหลดตัวถอดเสียง</button><button id="asrDownloadCancel" type="button" hidden>ยกเลิก</button></div><progress id="asrDownloadProgress" max="1" value="0" aria-label="ดาวน์โหลดตัวถอดเสียง" hidden></progress><p id="asrDownloadRate" class="caption" role="status" hidden></p><p id="asrDownloadError" class="field-warning" role="alert" hidden></p></div>
 </section>
 </aside>
 </div>
@@ -452,7 +453,14 @@ textarea{font-size:.75rem}
 <section class="stage" data-panel="6" hidden aria-labelledby="createTitle">
 <div class="stage-head"><div><h1 id="createTitle">รับคลิป</h1></div></div>
 <div class="stage-body">
-<div class="task-empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m10 8 5 3-5 3zM8 21h8"/></svg><h2>ยังสร้างคลิปไม่ได้</h2><p class="caption">ขั้นนี้ยังไม่เปิดใช้ ตอนนี้ใช้ได้ถึงขั้น 5</p></div>
+<div class="export-panel">
+<p id="exportStatus" class="caption" role="status"></p>
+<progress id="exportProgress" max="1" value="0" aria-label="สร้างคลิป" hidden></progress>
+<div class="row"><button id="exportStart" type="button" class="primary">สร้างคลิป</button><button id="exportCancel" type="button" hidden>ยกเลิก</button><button id="exportReveal" type="button" hidden>เปิดโฟลเดอร์</button></div>
+<p id="exportError" class="field-warning" role="alert" hidden></p>
+<p id="exportSkipped" class="caption" hidden></p>
+<ul id="exportFiles" class="export-files" hidden></ul>
+</div>
 </div>
 <div class="stage-foot"><button class="back" data-go="5">ย้อนกลับ</button><div class="actions"></div></div>
 </section>

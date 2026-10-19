@@ -62,7 +62,7 @@ fn rejects_wrong_language_translation_and_untrusted_clocks() {
         ("/params/translate", json!(true)),
         ("/params/language", json!("en")),
         ("/result/language", json!("")),
-        ("/transcription/0/offsets/to", json!(10001)),
+        ("/transcription/0/offsets/to", json!(13001)),
         ("/transcription/0/offsets/from", json!(-1)),
         ("/transcription/0/offsets/to", json!(0)),
         ("/transcription/0/tokens/2/p", json!(1.1)),
@@ -123,4 +123,19 @@ fn unknown_and_outside_token_clocks_do_not_become_caption_times() {
             .segments
             .is_empty()
     );
+}
+#[test]
+fn final_segment_running_past_the_chunk_end_is_clamped() {
+    // whisper.cpp often ends the last segment a little after the audio (14.0 s clip, segment to 15.28 s)
+    let mut value = payload();
+    value["transcription"][0]["offsets"]["to"] = json!(11280);
+    let result = parse(&serde_json::to_vec(&value).unwrap(), &context()).unwrap();
+    assert_eq!(result.segments[0].end_ms, 310000);
+    // an earlier segment past the end is still untrusted
+    let mut early = payload();
+    let mut second = early["transcription"][0].clone();
+    second["offsets"] = json!({"from":2000,"to":3000});
+    early["transcription"].as_array_mut().unwrap().push(second);
+    early["transcription"][0]["offsets"]["to"] = json!(11280);
+    assert!(parse(&serde_json::to_vec(&early).unwrap(), &context()).is_err());
 }
