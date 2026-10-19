@@ -137,7 +137,7 @@ export function createStyleEditor(read,write,layout,writeItems){
   for(const control of Object.values(controls))control.removeAttribute('aria-invalid');
   const current=values()[selected];
   $('textControls').hidden=!current;$('textSelectionHint').hidden=!!current;
-  $('textSelectionHint').textContent=headline?'ยังไม่มีหัวคลิป':'ติ๊กอย่างน้อย 1 อย่าง';
+  $('textSelectionHint').textContent=headline?'ยังไม่มีหัวคลิป':'ไม่ติ๊กเลย คลิปจะไม่มีซับ';
   $('sampleLabel').textContent=headline?'ข้อความบนหัวคลิป':'ข้อความตัวอย่าง';
   for(const key of fieldNames){controls[key].value=key==='font'?(current?fontName(current.font):''):(current?.[key] ?? (key==='color'?fallback.speech.color:''));controls[key].disabled=!enabled || !current;}
   for(const input of document.querySelectorAll('[data-role-option]')){input.checked=layout().roles.includes(input.dataset.roleOption);input.disabled=!enabled;}

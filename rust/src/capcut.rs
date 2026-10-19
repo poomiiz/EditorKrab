@@ -1,0 +1,482 @@
+//! Step 6 "แก้ต่อใน CapCut": each story as a native CapCut project, so a person can keep editing it.
+//! The footage is cut exactly like the MP4 export and the subtitles and headline items use the step
+//! 4/5 font, size, colour and position. Projects are written into the folder CapCut lists projects
+//! from, under a new name, so nothing that already exists there is replaced.
+use crate::export::{self, HEIGHT, Story, WIDTH};
+use serde_json::{Value, json};
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
+
+/// An empty CapCut project plus one footage and one text block, taken from a hand-made project
+/// with every name, path and machine id removed.
+const TEMPLATE: &str = include_str!("../data/capcut_template.json");
+/// Pixels per CapCut font-size unit on a 1080-wide canvas, as measured for the old app.
+const PX_PER_UNIT: f64 = 5.2;
+/// What the export falls back to (see `export::font`), so both outputs look the same.
+pub const FALLBACK_FONT: &str = "Leelawadee UI";
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Media {
+    pub duration_ms: u64,
+    pub width: u64,
+    pub height: u64,
+    pub has_audio: bool,
+}
+
+pub struct Draft {
+    pub content: Value,
+    pub meta: Value,
+    /// Step 4/5 fonts this machine does not have; CapCut shows the fallback font instead.
+    pub missing_fonts: Vec<String>,
+}
+
+fn id() -> String {
+    uuid::Uuid::new_v4().to_string().to_uppercase()
+}
+fn us(ms: u64) -> u64 {
+    ms * 1000
+}
+fn posix(path: &Path) -> String {
+    path.display().to_string().replace('\\', "/")
+}
+fn push(materials: &mut Value, kind: &str, value: Value) {
+    match materials.get_mut(kind).and_then(Value::as_array_mut) {
+        Some(list) => list.push(value),
+        None => materials[kind] = json!([value]),
+    }
+}
+/// A new segment for `material`, with fresh copies of the block's helper materials.
+fn segment(materials: &mut Value, block: &Value, kind: &str, mut material: Value) -> Value {
+    let material_id = id();
+    material["id"] = json!(material_id);
+    push(materials, kind, material);
+    let mut seg = block["seg"].clone();
+    seg["id"] = json!(id());
+    seg["material_id"] = json!(material_id);
+    let mut refs = Vec::new();
+    for helper in block["refs"].as_array().into_iter().flatten() {
+        let (Some(kind), mut helper) = (helper[0].as_str(), helper[1].clone()) else {
+            continue;
+        };
+        let helper_id = id();
+        helper["id"] = json!(helper_id);
+        push(materials, kind, helper);
+        refs.push(json!(helper_id));
+    }
+    seg["extra_material_refs"] = Value::Array(refs);
+    seg
+}
+/// `#rrggbb` as CapCut's 0-1 RGB list; anything else is white, like the export.
+fn rgb(value: &str) -> Value {
+    let hex = value.trim_start_matches('#');
+    let channel = |i: usize| {
+        hex.get(i..i + 2)
+            .and_then(|c| u8::from_str_radix(c, 16).ok())
+            .map_or(1.0, |c| f64::from(c) / 255.0)
+    };
+    if hex.len() != 6 {
+        return json!([1.0, 1.0, 1.0]);
+    }
+    json!([channel(0), channel(2), channel(4)])
+}
+
+/// One text on screen from `start_ms` for `duration_ms`, styled like the step 4/5 preview.
+fn text(
+    materials: &mut Value,
+    block: &Value,
+    words: &str,
+    start_ms: u64,
+    duration_ms: u64,
+    style: &Value,
+    font: &Path,
+) -> Value {
+    let family = export::font(style["font"].as_str().unwrap_or("system"));
+    let size = (style["size"].as_f64().unwrap_or(64.0) / PX_PER_UNIT * 100.0).round() / 100.0;
+    let colour = style["color"].as_str().unwrap_or("#ffffff");
+    let mut material = block["mat"].clone();
+    let mut body: Value = serde_json::from_str(material["content"].as_str().unwrap_or(""))
+        .expect("capcut_template.json text content is JSON");
+    let mut look = body["styles"][0].clone();
+    look["range"] = json!([0, words.encode_utf16().count()]);
+    look["size"] = json!(size);
+    look["fill"]["content"]["solid"]["color"] = rgb(colour);
+    look["font"] = json!({"path": posix(font), "id": ""});
+    body["text"] = json!(words);
+    body["styles"] = json!([look]);
+    material["content"] = json!(body.to_string());
+    material["name"] = json!(words.chars().take(20).collect::<String>());
+    material["font_path"] = json!(posix(font));
+    material["font_name"] = json!(family);
+    material["font_title"] = json!(family);
+    material["font_size"] = json!(size);
+    material["text_size"] = json!(size.round());
+    material["text_color"] = json!(colour.to_lowercase());
+    // the export draws each subtitle on one line; leave CapCut room so it does not wrap them
+    material["line_max_width"] = json!(0.9);
+    let mut seg = segment(materials, block, "texts", material);
+    seg["target_timerange"] = json!({"start": us(start_ms), "duration": us(duration_ms).max(1)});
+    // CapCut places a text by its centre, from -1 (left/bottom) to 1 (right/top)
+    let x = style["x"].as_f64().unwrap_or(50.0);
+    let y = style["y"].as_f64().unwrap_or(50.0);
+    seg["clip"]["transform"] = json!({"x": x / 50.0 - 1.0, "y": 1.0 - y / 50.0});
+    seg["clip"]["scale"] = json!({"x": 1.0, "y": 1.0});
+    seg
+}
+
+fn track(kind: &str, segments: Vec<Value>) -> Value {
+    json!({"type": kind, "attribute": 0, "flag": 0, "is_default_name": true, "id": id(), "segments": segments})
+}
+/// Texts that overlap in time cannot share a CapCut track, so each one goes on the first free lane.
+fn text_tracks(mut texts: Vec<Value>, render_index: u64) -> Vec<Value> {
+    let start = |s: &Value| s["target_timerange"]["start"].as_u64().unwrap_or(0);
+    let end = |s: &Value| start(s) + s["target_timerange"]["duration"].as_u64().unwrap_or(0);
+    texts.sort_by_key(start);
+    let mut lanes: Vec<Vec<Value>> = Vec::new();
+    for mut seg in texts {
+        seg["render_index"] = json!(render_index);
+        match lanes
+            .iter_mut()
+            .find(|lane| lane.last().is_some_and(|last| end(last) <= start(&seg)))
+        {
+            Some(lane) => lane.push(seg),
+            None => lanes.push(vec![seg]),
+        }
+    }
+    lanes.into_iter().map(|lane| track("text", lane)).collect()
+}
+
+/// The CapCut project for one story. `media` describes each of `story.sources`; `fonts` finds the
+/// file of an installed font family. `folder` is where the project will live inside `root`.
+pub fn build(
+    story: &Story,
+    document: &Value,
+    media: &[Media],
+    fonts: &dyn Fn(&str) -> Option<PathBuf>,
+    root: &Path,
+    folder: &Path,
+    now_us: u64,
+) -> Result<Draft, String> {
+    let template: Value = serde_json::from_str(TEMPLATE).expect("capcut_template.json is JSON");
+    let mut content = template["draft"].clone();
+    let mut materials = content["materials"].clone();
+    let mut missing_fonts: Vec<String> = Vec::new();
+    let mut font_file = |style: &Value| -> PathBuf {
+        let family = export::font(style["font"].as_str().unwrap_or("system"));
+        if let Some(file) = fonts(family) {
+            return file;
+        }
+        if !missing_fonts.iter().any(|f| f == family) {
+            missing_fonts.push(family.to_owned());
+        }
+        fonts(FALLBACK_FONT).unwrap_or_default()
+    };
+
+    let mut footage = Vec::new();
+    let mut at = 0;
+    for piece in &story.pieces {
+        let source = &story.sources[piece.source];
+        let info = media.get(piece.source).ok_or("capcut_media_missing")?;
+        let length = piece.end_ms - piece.start_ms;
+        let name = source
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let mut material = template["video"]["mat"].clone();
+        material["path"] = json!(posix(source));
+        material["material_name"] = json!(name);
+        material["name"] = json!(name);
+        material["type"] = json!("video");
+        material["duration"] = json!(us(info.duration_ms));
+        material["width"] = json!(info.width);
+        material["height"] = json!(info.height);
+        material["has_audio"] = json!(info.has_audio);
+        material["local_material_id"] = json!(id());
+        material["unique_id"] = json!(uuid::Uuid::new_v4().simple().to_string());
+        let mut seg = segment(&mut materials, &template["video"], "videos", material);
+        seg["source_timerange"] = json!({"start": us(piece.start_ms), "duration": us(length)});
+        seg["target_timerange"] = json!({"start": us(at), "duration": us(length)});
+        seg["volume"] = json!(1.0);
+        seg["last_nonzero_volume"] = json!(1.0);
+        seg["render_index"] = json!(0);
+        seg["track_render_index"] = json!(0);
+        // scale 1 fits the whole picture inside the 9:16 frame, like the export's black bars
+        seg["clip"]["scale"] = json!({"x": 1.0, "y": 1.0});
+        seg["clip"]["transform"] = json!({"x": 0.0, "y": 0.0});
+        footage.push(seg);
+        at += length;
+    }
+    let total = at;
+
+    let block = &template["text"];
+    let (lines, _) = export::speech_lines(story, document);
+    let speech_style = export::speech_style(document);
+    let speech_font = if lines.is_empty() {
+        PathBuf::new()
+    } else {
+        font_file(&speech_style)
+    };
+    let speech = lines
+        .iter()
+        .map(|(start, end, words)| {
+            text(
+                &mut materials,
+                block,
+                words,
+                *start,
+                end - start,
+                &speech_style,
+                &speech_font,
+            )
+        })
+        .collect();
+    let mut titles = Vec::new();
+    for item in export::headlines(document) {
+        let font = font_file(&item);
+        let words = item["text"].as_str().unwrap_or("").trim();
+        titles.push(text(&mut materials, block, words, 0, total, &item, &font));
+    }
+
+    let mut tracks = vec![track("video", footage)];
+    tracks.extend(text_tracks(speech, 14001));
+    tracks.extend(text_tracks(titles, 14002));
+    let name = folder
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let draft_id = id();
+    content["id"] = json!(draft_id);
+    content["name"] = json!(name);
+    content["duration"] = json!(us(total));
+    content["canvas_config"] =
+        json!({"ratio": "original", "width": WIDTH, "height": HEIGHT, "background": null});
+    content["tracks"] = Value::Array(tracks);
+    content["materials"] = materials;
+
+    let mut meta = template["meta"].clone();
+    meta["draft_fold_path"] = json!(posix(folder));
+    meta["draft_name"] = json!(name);
+    meta["draft_root_path"] = json!(posix(root));
+    meta["draft_id"] = json!(id());
+    meta["tm_draft_create"] = json!(now_us);
+    meta["tm_draft_modified"] = json!(now_us);
+    meta["tm_duration"] = json!(us(total));
+    Ok(Draft {
+        content,
+        meta,
+        missing_fonts,
+    })
+}
+
+/// `root/<title> · CapCut`, or `… (2)` and so on: a project folder that does not exist yet.
+pub fn unused_folder(root: &Path, title: &str) -> PathBuf {
+    let first = root.join(format!("{title} · CapCut"));
+    if !first.exists() {
+        return first;
+    }
+    (2..)
+        .map(|n| root.join(format!("{title} · CapCut ({n})")))
+        .find(|p| !p.exists())
+        .expect("unbounded")
+}
+/// Writes the project next to `folder` first and renames it into place, so CapCut never lists a
+/// half-written project, and an existing folder is never written into.
+pub fn write(folder: &Path, draft: &Draft) -> Result<(), String> {
+    let root = folder.parent().ok_or("capcut_folder_invalid")?;
+    let staging = root.join(format!(".editorkrab-{}", uuid::Uuid::new_v4().simple()));
+    let result = (|| {
+        std::fs::create_dir(&staging)?;
+        std::fs::write(
+            staging.join("draft_content.json"),
+            serde_json::to_vec(&draft.content)?,
+        )?;
+        std::fs::write(
+            staging.join("draft_meta_info.json"),
+            serde_json::to_vec(&draft.meta)?,
+        )?;
+        if folder.exists() {
+            return Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists));
+        }
+        std::fs::rename(&staging, folder)
+    })();
+    if let Err(e) = result {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(format!("capcut_write:{e}"));
+    }
+    Ok(())
+}
+
+/// The folder CapCut lists projects from: the one picked in CapCut's own settings, else its default.
+pub fn drafts_root() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("EDITORKRAB_CAPCUT_DRAFTS") {
+        return Some(path.into());
+    }
+    let data = if cfg!(windows) {
+        PathBuf::from(std::env::var("LOCALAPPDATA").ok()?).join("CapCut/User Data")
+    } else {
+        PathBuf::from(std::env::var("HOME").ok()?).join("Movies/CapCut/User Data")
+    };
+    let setting = std::fs::read_to_string(data.join("Config/globalSetting")).unwrap_or_default();
+    let custom = setting
+        .lines()
+        .find_map(|l| l.strip_prefix("currentCustomDraftPath="))
+        .map(|v| PathBuf::from(v.trim().replace("\\\\", "\\")))
+        .filter(|p| p.is_dir());
+    custom.or_else(|| Some(data.join("Projects/com.lveditor.draft")).filter(|p| p.is_dir()))
+}
+
+fn be16(b: &[u8], at: usize) -> Option<u16> {
+    Some(u16::from_be_bytes(b.get(at..at + 2)?.try_into().ok()?))
+}
+fn be32(b: &[u8], at: usize) -> Option<u32> {
+    Some(u32::from_be_bytes(b.get(at..at + 4)?.try_into().ok()?))
+}
+fn read_at(file: &mut File, at: u64, length: usize) -> Option<Vec<u8>> {
+    let mut buf = vec![0; length];
+    file.seek(SeekFrom::Start(at)).ok()?;
+    file.read_exact(&mut buf).ok()?;
+    Some(buf)
+}
+/// Family names and style name of every face in a TrueType/OpenType file or collection.
+pub fn font_names(path: &Path) -> Vec<(Vec<String>, String)> {
+    let Ok(mut file) = File::open(path) else {
+        return Vec::new();
+    };
+    let Some(head) = read_at(&mut file, 0, 12) else {
+        return Vec::new();
+    };
+    let faces: Vec<u64> = if &head[..4] == b"ttcf" {
+        let count = be32(&head, 8).unwrap_or(0).min(64) as usize;
+        read_at(&mut file, 12, count * 4)
+            .map(|b| {
+                (0..count)
+                    .filter_map(|i| be32(&b, i * 4))
+                    .map(u64::from)
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        vec![0]
+    };
+    let mut out = Vec::new();
+    for face in faces {
+        let Some(dir) = read_at(&mut file, face, 12) else {
+            continue;
+        };
+        let tables = be16(&dir, 4).unwrap_or(0) as usize;
+        let Some(records) = read_at(&mut file, face + 12, tables * 16) else {
+            continue;
+        };
+        let Some((offset, length)) = (0..tables).find_map(|i| {
+            (&records[i * 16..i * 16 + 4] == b"name")
+                .then(|| Some((be32(&records, i * 16 + 8)?, be32(&records, i * 16 + 12)?)))
+                .flatten()
+        }) else {
+            continue;
+        };
+        let Some(table) = read_at(&mut file, offset.into(), (length as usize).min(1 << 20)) else {
+            continue;
+        };
+        let (count, strings) = (
+            be16(&table, 2).unwrap_or(0) as usize,
+            be16(&table, 4).unwrap_or(0) as usize,
+        );
+        // name id -> (English Windows name?, text)
+        let mut names: HashMap<u16, (bool, String)> = HashMap::new();
+        for i in 0..count {
+            let r = 6 + i * 12;
+            let field = |n: usize| be16(&table, r + n);
+            let (Some(platform), Some(language), Some(name), Some(len), Some(at)) =
+                (field(0), field(4), field(6), field(8), field(10))
+            else {
+                break;
+            };
+            if ![1, 2, 16, 17].contains(&name) {
+                continue;
+            }
+            let start = strings + at as usize;
+            let Some(raw) = table.get(start..start + len as usize) else {
+                continue;
+            };
+            let value = match platform {
+                0 | 3 => String::from_utf16_lossy(
+                    &raw.as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|c| u16::from_be_bytes(*c))
+                        .collect::<Vec<_>>(),
+                ),
+                1 => raw.iter().map(|&b| b as char).collect(),
+                _ => continue,
+            };
+            let english = platform == 3 && language == 0x409;
+            if !names.get(&name).is_some_and(|(e, _)| *e) && !value.trim().is_empty() {
+                names.insert(name, (english, value.trim().to_owned()));
+            }
+        }
+        let get = |id: u16| names.get(&id).map(|(_, v)| v.clone());
+        let families: Vec<String> = [get(1), get(16)].into_iter().flatten().collect();
+        if !families.is_empty() {
+            out.push((families, get(17).or_else(|| get(2)).unwrap_or_default()));
+        }
+    }
+    out
+}
+/// Installed font families (lower case) and the file to use for each, preferring the regular style.
+pub fn installed_fonts(folders: &[PathBuf]) -> HashMap<String, PathBuf> {
+    let mut found: HashMap<String, (bool, PathBuf)> = HashMap::new();
+    for folder in folders {
+        let Ok(entries) = std::fs::read_dir(folder) else {
+            continue;
+        };
+        for path in entries.filter_map(|e| e.ok()).map(|e| e.path()) {
+            let font = path.extension().is_some_and(|e| {
+                ["ttf", "otf", "ttc", "otc"].contains(&e.to_string_lossy().to_lowercase().as_str())
+            });
+            if !font {
+                continue;
+            }
+            for (families, style) in font_names(&path) {
+                let regular = style.eq_ignore_ascii_case("regular");
+                for family in families {
+                    let key = family.to_lowercase();
+                    if !found.get(&key).is_some_and(|(r, _)| *r || !regular) {
+                        found.insert(key, (regular, path.clone()));
+                    }
+                }
+            }
+        }
+    }
+    found.into_iter().map(|(k, (_, p))| (k, p)).collect()
+}
+/// Where this machine keeps fonts, system-wide and per user.
+pub fn font_folders() -> Vec<PathBuf> {
+    let env = |k: &str| std::env::var(k).ok().map(PathBuf::from);
+    if cfg!(windows) {
+        [
+            env("WINDIR").map(|w| w.join("Fonts")),
+            env("LOCALAPPDATA").map(|l| l.join("Microsoft/Windows/Fonts")),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    } else if cfg!(target_os = "macos") {
+        [
+            Some(PathBuf::from("/System/Library/Fonts")),
+            Some(PathBuf::from("/Library/Fonts")),
+            env("HOME").map(|h| h.join("Library/Fonts")),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    } else {
+        [
+            Some(PathBuf::from("/usr/share/fonts")),
+            env("HOME").map(|h| h.join(".fonts")),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+}

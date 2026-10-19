@@ -189,7 +189,8 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
     Ok(out)
 }
 
-fn font(value: &str) -> &str {
+/// The family a step 4/5 font choice draws with.
+pub fn font(value: &str) -> &str {
     match value {
         "tahoma" => "Tahoma",
         // the UI's system stack falls back to Leelawadee UI for Thai, which also covers Latin
@@ -303,46 +304,67 @@ Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,
 [Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     );
     let total = story.duration_ms();
+    let (speech, skipped) = speech_lines(story, document);
+    let style = speech_style(document);
+    for (start, end, text) in &speech {
+        ass.push_str(&event(0, *start, *end, &style, text));
+    }
+    for item in headlines(document) {
+        ass.push_str(&event(
+            1,
+            0,
+            total,
+            &item,
+            item["text"].as_str().unwrap_or(""),
+        ));
+    }
+    (ass, skipped)
+}
+
+/// Step 4's speech style; a draft that never opened its style panel uses that panel's defaults.
+pub fn speech_style(document: &Value) -> Value {
+    match &document["text_styles"]["speech"] {
+        style @ Value::Object(_) => style.clone(),
+        _ => serde_json::json!({"font":"system","size":64,"color":"#ffffff","x":50,"y":69}),
+    }
+}
+/// Speech as one-line subtitles in output time (empty when speech is not ticked), and the
+/// ticked text roles that have nothing to draw yet.
+pub fn speech_lines(story: &Story, document: &Value) -> (Vec<(u64, u64, String)>, Vec<String>) {
     let roles: Vec<&str> = document["text_roles"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
         .collect();
-    let mut skipped = Vec::new();
+    let mut out = Vec::new();
     if roles.contains(&"speech") {
-        // a draft that never opened step 4's style panel has no text_styles; use that panel's defaults
-        let fallback =
-            serde_json::json!({"font":"system","size":64,"color":"#ffffff","x":50,"y":69});
-        let style = match &document["text_styles"]["speech"] {
-            Value::Object(_) => &document["text_styles"]["speech"],
-            _ => &fallback,
-        };
-        let size = style["size"].as_f64().unwrap_or(64.0);
+        let size = speech_style(document)["size"].as_f64().unwrap_or(64.0);
         let limit = (0.86 * WIDTH as f64 / (size * 0.55)).max(4.0) as usize;
         let mut at = 0;
         for p in &story.pieces {
             for (start, end, text) in lines(p, limit) {
-                ass.push_str(&event(0, at + start, at + end, style, &text));
+                out.push((at + start, at + end, text));
             }
             at += p.end_ms - p.start_ms;
         }
     }
-    for role in ["emphasis", "english"] {
-        if roles.contains(&role) {
-            skipped.push(role.to_owned());
-        }
-    }
-    let items = document["headline_items"]
+    let skipped = ["emphasis", "english"]
+        .into_iter()
+        .filter(|role| roles.contains(role))
+        .map(str::to_owned)
+        .collect();
+    (out, skipped)
+}
+/// Step 5's headline items that have text; each stays on screen for the whole clip.
+pub fn headlines(document: &Value) -> Vec<Value> {
+    document["headline_items"]
         .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|item| item["text"].as_str().is_some_and(|t| !t.trim().is_empty()))
         .cloned()
-        .unwrap_or_default();
-    for item in &items {
-        if let Some(text) = item["text"].as_str().filter(|t| !t.trim().is_empty()) {
-            ass.push_str(&event(1, 0, total, item, text));
-        }
-    }
-    (ass, skipped)
+        .collect()
 }
 
 /// ffmpeg arguments, run with the work folder as the current directory (holds `subs.ass`).
@@ -411,6 +433,17 @@ afade=t=out:st={fade:.3}:d=0.008[a{n}];",
     args
 }
 
+/// What the files for story `n` (0-based) are called: project title, then story title.
+pub fn story_name(project_title: &str, story: &Story, n: usize) -> String {
+    file_name(
+        &[project_title.trim(), story.title.as_str()]
+            .into_iter()
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>()
+            .join(" - "),
+        &format!("EditorKrab {}", n + 1),
+    )
+}
 /// A file name Windows accepts, from the story or project title.
 pub fn file_name(title: &str, fallback: &str) -> String {
     let clean: String = title

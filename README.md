@@ -7,7 +7,7 @@
 
 EditorKrab is a desktop app that turns talking-head footage into short clips with subtitles. It runs on your own computer: videos, transcripts and projects stay on your machine.
 
-This is an early access project for Windows 10/11. All six steps work, but it has only been tested on generated test speech so far. Keyword highlights, English translation, music and sound effects are not in the new app yet.
+This is an early access project for **Windows 10/11 only**. Mac and Linux are not supported: the desktop app has not been tested on them. All six steps work. Keyword highlights, English translation, music and sound effects are not in the new app yet. See [Known limits](#known-limits) before you rely on it.
 
 [คู่มือภาษาไทย](docs/README.th.md) · [Report a bug](CONTRIBUTING.md) · [Security](SECURITY.md)
 
@@ -62,6 +62,29 @@ These numbers come from our own test runs. They are not guarantees.
 | Transcribe the Thai clip, 8 CPU threads (release build) | 128.4 s (was 543.1 s with 2 threads) | [flow-run3, run 4](docs/test-logs/rust-20261018/flow-run3.md) |
 
 The test speech was generated from the scripts in that folder; it is not customer footage. The times were measured on one 20-thread desktop CPU, with whisper running on the CPU only. The app uses up to 8 threads because more threads gave little extra speed. Time saved compared with manual editing has not been measured.
+
+## Known limits
+
+- **Windows only.** There is no Mac or Linux build.
+- **CPU only.** Transcription runs on the CPU, even on a computer with an NVIDIA graphics card. A 75-second Thai clip took 221 s on our test CPU.
+- **One model.** The app uses Whisper large-v3 and nothing else.
+- **Language choice.** The menu offers only Automatic, Thai and English. Other languages rely on automatic detection, which got Urdu (detected as Hindi) and Maltese (detected as Arabic) wrong in our test.
+- **Ten languages fail to transcribe:** Hindi, Bengali, Tamil, Telugu, Kannada, Marathi, Gujarati, Punjabi, Swahili and Armenian. Whisper repeats one sentence with zero-length timings, and the app rejects the chunk. A retry with different settings was tried and removed because it made Thai worse, so transcription stays a single pass.
+- **Poor accuracy** in Malayalam, Nepali, Azerbaijani and Hebrew (more than 50% wrong in our test).
+
+### 60-language test
+
+We ran the real app through all six steps on [Google FLEURS](https://huggingface.co/datasets/google/fleurs) read speech (CC BY 4.0), about 75 seconds per language. Thai, Chinese, Japanese and Korean are scored by character error rate, the rest by word error rate.
+
+| Result | Languages |
+|---|---|
+| All six steps and export passed | 50 of 60 |
+| Error rate 15% or lower | 24 (best: Chinese 1.2%, German 3.7%, Polish 3.9%, Finnish 5.5%, Slovak 5.8%) |
+| Error rate 15–40% | 17 |
+| Error rate above 40% | 8 |
+| Transcription failed | 10 (listed above) |
+
+About 75 seconds of audio per language is a small sample, so do not compare languages that are a few points apart. These runs used a test build with GPU transcription to save time; the released app is CPU only. On the three languages run both ways, the CPU gave the same error rate for English and Japanese, and 10.6% versus 6.8% for Thai.
 
 ## Build from source
 

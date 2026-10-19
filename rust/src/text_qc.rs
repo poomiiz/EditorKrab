@@ -485,12 +485,25 @@ mod tests {
     #[test]
     fn flags_subtitle_loops() {
         let loop_text = "1979年苏联入侵阿富汗";
-        let mut items = vec![item("subtitle", "1979年伊朗人质危机的伊朗革命", 60000, 62040)];
+        let mut items = vec![item(
+            "subtitle",
+            "1979年伊朗人质危机的伊朗革命",
+            60000,
+            62040,
+        )];
         for n in 0..4 {
-            items.push(item("subtitle", loop_text, 62040 + n * 1000, 63040 + n * 1000));
+            items.push(item(
+                "subtitle",
+                loop_text,
+                62040 + n * 1000,
+                63040 + n * 1000,
+            ));
         }
         let found = check(&items).unwrap();
-        let loops: Vec<_> = found.iter().filter(|f| f.problem.contains("ซ้ำ 4 ท่อน")).collect();
+        let loops: Vec<_> = found
+            .iter()
+            .filter(|f| f.problem.contains("ซ้ำ 4 ท่อน"))
+            .collect();
         assert_eq!(loops.len(), 3, "{found:?}");
         assert_eq!(loops[0].start_ms, 63040);
         // two in a row is normal speech ("yes. yes.")
