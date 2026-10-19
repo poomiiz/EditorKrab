@@ -21,8 +21,10 @@ pub fn known(word: &str) -> bool {
 
 /// Words of `text`, whitespace kept as its own pieces, so joining them gives the text back.
 pub fn split(text: &str) -> Result<Vec<String>, String> {
+    // nlpo3 1.4.0 safe mode mangles any text past ~140 chars (Thai or Latin); speech segments are
+    // short enough that the unsafe search stays fast (a 2,400-char line splits in under 1 ms)
     let words = tokenizer()
-        .segment(text, true, false)
+        .segment(text, false, false)
         .map_err(|_| "word_split_failed")?;
     if words.concat() != text {
         return Err("word_split_lost_text".into());
@@ -43,6 +45,15 @@ mod tests {
                 words.iter().any(|w| w == word),
                 "{word} missing in {words:?}"
             );
+        }
+    }
+
+    #[test]
+    fn long_segments_join_back() {
+        let latin = " Local authorities are warning residents in the vicinity of the plant to stay indoors, turn off air conditioners, and not to drink tap water.";
+        let thai = "สวัสดีครับ วันนี้โอเคคัป ไปที่กองทัพ ".repeat(8);
+        for text in [latin, thai.as_str()] {
+            assert_eq!(super::split(text).unwrap().concat(), text);
         }
     }
 }
