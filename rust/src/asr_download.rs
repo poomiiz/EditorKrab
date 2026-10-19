@@ -112,11 +112,57 @@ pub async fn fetch(
             .await
             .map_err(|e| e.to_string())?;
     }
-    let have = tokio::fs::metadata(&part)
+    // A dropped connection (curl 56 at 79% of 3.1 GB, seen 2026-10-19) resumes from the .part
+    // instead of failing; only a run of failures with no new bytes gives up.
+    let mut stalled = 0;
+    loop {
+        let have = tokio::fs::metadata(&part)
+            .await
+            .map(|m| m.len())
+            .unwrap_or(0);
+        if have >= item.size {
+            break;
+        }
+        match curl_once(item, curl, &part, &mut cancel).await {
+            Ok(()) => break,
+            Err(e) if e == "cancelled" || e.starts_with("curl_missing") => return Err(e),
+            Err(e) => {
+                let now = tokio::fs::metadata(&part)
+                    .await
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+                stalled = if now > have { 0 } else { stalled + 1 };
+                if stalled >= RETRIES {
+                    return Err(e);
+                }
+                tokio::select! {
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(2)) => {}
+                    _ = async { drop(cancel.wait_for(|stop| *stop).await) } => return Err("cancelled".into()),
+                }
+            }
+        }
+    }
+    let check = part.clone();
+    let actual = tokio::task::spawn_blocking(move || sha256(&check))
         .await
-        .map(|m| m.len())
-        .unwrap_or(0);
-    if have < item.size {
+        .map_err(|e| e.to_string())??;
+    if actual != item.sha256 {
+        let _ = tokio::fs::remove_file(&part).await;
+        return Err("checksum_mismatch".into());
+    }
+    install(item, &part).await
+}
+
+/// Attempts in a row that add no bytes before a download is reported as failed.
+pub const RETRIES: u32 = 3;
+
+async fn curl_once(
+    item: &Item,
+    curl: &Path,
+    part: &Path,
+    cancel: &mut watch::Receiver<bool>,
+) -> Result<(), String> {
+    {
         let mut command = tokio::process::Command::new(curl);
         command
             .args(["--fail", "--location", "--silent", "--show-error"])
@@ -148,14 +194,11 @@ pub async fn fetch(
             return Err(format!("network:{}", message.trim()));
         }
     }
-    let check = part.clone();
-    let actual = tokio::task::spawn_blocking(move || sha256(&check))
-        .await
-        .map_err(|e| e.to_string())??;
-    if actual != item.sha256 {
-        let _ = tokio::fs::remove_file(&part).await;
-        return Err("checksum_mismatch".into());
-    }
+    Ok(())
+}
+
+/// Puts a verified download in place: a zip is unpacked into `dest`, anything else renamed to it.
+async fn install(item: &Item, part: &Path) -> Result<(), String> {
     if item.unzip {
         tokio::fs::create_dir_all(&item.dest)
             .await
