@@ -73,7 +73,9 @@ fn item(url: String, dir: &std::path::Path, sha: String) -> Item {
     }
 }
 fn hash(bytes: &[u8]) -> String {
-    let dir = folder("hash");
+    // one folder per call: tests run in parallel and `folder` empties the folder it returns
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let dir = folder(&format!("hash-{}", NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     let path = dir.join("x");
     std::fs::write(&path, bytes).unwrap();
     sha256(&path).unwrap()
@@ -136,4 +138,66 @@ fn reads_free_space_of_the_drive_holding_a_folder() {
     let dir = folder("free");
     let free = editorkrab::asr_download::free_space(&dir.join("not-yet").join("models")).unwrap();
     assert!(free > 0);
+}
+
+/// Like `serve`, but the first `drops` responses send only `cut` bytes and close the connection,
+/// the way the 3.1 GB model download died at 79% (curl 56).
+fn serve_dropping(body: Vec<u8>, cut: usize, drops: usize) -> (String, Arc<Mutex<Vec<String>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/model.bin", listener.local_addr().unwrap());
+    let ranges = Arc::new(Mutex::new(Vec::new()));
+    let seen = ranges.clone();
+    std::thread::spawn(move || {
+        for (n, stream) in listener.incoming().enumerate() {
+            let mut stream = stream.unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0; 1];
+            while !request.ends_with(b"\r\n\r\n") && stream.read(&mut byte).unwrap() == 1 {
+                request.push(byte[0]);
+            }
+            let text = String::from_utf8_lossy(&request).to_lowercase();
+            let start = text
+                .lines()
+                .find_map(|l| l.strip_prefix("range: bytes="))
+                .map(|r| {
+                    seen.lock().unwrap().push(r.to_owned());
+                    r.trim_end_matches('-').parse::<usize>().unwrap()
+                })
+                .unwrap_or(0);
+            let head = if start > 0 {
+                format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-{}/{}\r\nConnection: close\r\n\r\n",
+                    body.len() - start, start, body.len() - 1, body.len()
+                )
+            } else {
+                format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len())
+            };
+            let _ = stream.write_all(head.as_bytes());
+            let end = if n < drops { (start + cut).min(body.len()) } else { body.len() };
+            let _ = stream.write_all(&body[start..end]);
+        }
+    });
+    (url, ranges)
+}
+
+#[tokio::test]
+async fn a_dropped_connection_resumes_by_itself() {
+    let data = body();
+    let (url, ranges) = serve_dropping(data.clone(), 250_000, 2);
+    let dir = folder("dropped");
+    let item = item(url, &dir, hash(&data));
+    fetch(&item, &curl(), idle()).await.unwrap();
+    assert_eq!(ranges.lock().unwrap().as_slice(), ["250000-", "500000-"]);
+    assert_eq!(std::fs::read(&item.dest).unwrap(), data);
+}
+
+#[tokio::test]
+async fn gives_up_when_retries_add_no_bytes() {
+    let data = body();
+    let (url, _) = serve_dropping(data.clone(), 0, usize::MAX);
+    let dir = folder("stalled");
+    let item = item(url, &dir, hash(&data));
+    let error = fetch(&item, &curl(), idle()).await.unwrap_err();
+    assert!(error.starts_with("network:"), "{error}");
+    assert!(!item.dest.exists());
 }
