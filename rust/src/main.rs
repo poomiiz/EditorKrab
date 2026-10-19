@@ -34,6 +34,8 @@ struct Runtime {
     picker: mpsc::Sender<PickCommand>,
     picker_busy: Arc<AtomicBool>,
     assets: PathBuf,
+    /// where new project folders go unless the person picks another parent
+    projects_root: PathBuf,
     // swapped in place when the in-app download finishes, so no restart is needed
     asr: Arc<std::sync::RwLock<Option<Asr>>>,
     setup: Arc<AsrSetup>,
@@ -145,7 +147,11 @@ async fn start_export(
             missing.display()
         )));
     }
-    let folder = export_dir().ok_or_else(|| export_error("output_folder_unknown"))?;
+    let id = project.clone();
+    let folder = match database(runtime.clone(), move |store| store.project(&id)).await? {
+        Some(p) => PathBuf::from(p.folder).join(editorkrab::projects::EXPORTS),
+        None => export_dir().ok_or_else(|| export_error("output_folder_unknown"))?,
+    };
     let (cancel, signal) = watch::channel(false);
     {
         let mut all = runtime.exports.lock().unwrap_or_else(|e| e.into_inner());
@@ -426,9 +432,12 @@ async fn begin_upload(
     Json(body): Json<editorkrab::uploads::Begin>,
 ) -> Result<Json<editorkrab::uploads::Progress>, ApiError> {
     let assets = runtime.assets.clone();
-    database(runtime, move |store| store.begin_upload(&assets, &body))
-        .await
-        .map(Json)
+    database(runtime, move |store| {
+        let root = upload_root(store, &assets, &body.project)?;
+        store.begin_upload(&root, &body)
+    })
+    .await
+    .map(Json)
 }
 #[derive(Deserialize)]
 struct ChunkQuery {
@@ -442,7 +451,8 @@ async fn upload_chunk(
 ) -> Result<Json<editorkrab::uploads::Progress>, ApiError> {
     let assets = runtime.assets.clone();
     database(runtime, move |store| {
-        store.upload_chunk(&assets, &id, query.offset, &body)
+        let root = upload_root(store, &assets, &store.upload_project(&id)?)?;
+        store.upload_chunk(&root, &id, query.offset, &body)
     })
     .await
     .map(Json)
@@ -452,9 +462,12 @@ async fn finish_upload(
     Path(id): Path<String>,
 ) -> Result<Json<editorkrab::sources::Source>, ApiError> {
     let assets = runtime.assets.clone();
-    database(runtime, move |store| store.finish_upload(&assets, &id))
-        .await
-        .map(Json)
+    database(runtime, move |store| {
+        let root = upload_root(store, &assets, &store.upload_project(&id)?)?;
+        store.finish_upload(&root, &id)
+    })
+    .await
+    .map(Json)
 }
 
 #[derive(Deserialize)]
@@ -472,10 +485,8 @@ fn source_failure(error: SourceError) -> ApiError {
     (status, Json(json!({"error":code})))
 }
 
-async fn pick_sources(
-    State(runtime): State<Runtime>,
-    Json(body): Json<PickBody>,
-) -> Result<Json<Selection>, ApiError> {
+/// Shows one native dialog at a time; an empty list means the person cancelled.
+async fn pick(runtime: &Runtime, kind: PickKind) -> Result<Vec<PathBuf>, ApiError> {
     if runtime
         .picker_busy
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -488,12 +499,19 @@ async fn pick_sources(
     runtime
         .picker
         .send(PickCommand {
-            kind: body.kind,
+            kind,
             answer,
             lease,
         })
         .map_err(|_| failure(Error::Unavailable))?;
-    let paths = receive.await.map_err(|_| failure(Error::Unavailable))?;
+    receive.await.map_err(|_| failure(Error::Unavailable))
+}
+
+async fn pick_sources(
+    State(runtime): State<Runtime>,
+    Json(body): Json<PickBody>,
+) -> Result<Json<Selection>, ApiError> {
+    let paths = pick(&runtime, body.kind).await?;
     if paths.is_empty() {
         return Ok(Json(Selection {
             files: vec![],
@@ -519,6 +537,252 @@ async fn database<T: Send + 'static>(
     .await
     .map_err(|_| failure(Error::Unavailable))?
     .map_err(failure)
+}
+
+/// Copies of dropped videos go inside their project; old drafts without a folder keep the app folder.
+fn upload_root(store: &Store, assets: &std::path::Path, project: &str) -> Result<PathBuf, Error> {
+    Ok(match store.project(project)? {
+        Some(p) => PathBuf::from(p.folder).join(editorkrab::projects::MEDIA),
+        None => assets.to_path_buf(),
+    })
+}
+
+fn project_json(store: &Store, p: &editorkrab::projects::Project) -> Value {
+    let title = store
+        .read(&p.id)
+        .ok()
+        .flatten()
+        .and_then(|d| d.document["title"].as_str().map(str::to_owned))
+        .unwrap_or_default();
+    let exists = std::path::Path::new(&p.folder)
+        .join(editorkrab::projects::FILE)
+        .is_file();
+    json!({"id":p.id,"name":p.name,"folder":p.folder,"opened_at":p.opened_at,"title":title,"exists":exists})
+}
+
+async fn list_projects(State(runtime): State<Runtime>) -> Result<Json<Value>, ApiError> {
+    let root = runtime.projects_root.clone();
+    database(runtime, move |store| {
+        let projects: Vec<Value> = store
+            .projects()?
+            .iter()
+            .map(|p| project_json(store, p))
+            .collect();
+        Ok(json!({"projects":projects,"legacy":store.legacy_drafts()?,"default_parent":root}))
+    })
+    .await
+    .map(Json)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NewProject {
+    name: String,
+    parent: Option<String>,
+    /// an old draft that is getting its folder
+    id: Option<String>,
+}
+async fn create_project(
+    State(runtime): State<Runtime>,
+    Json(body): Json<NewProject>,
+) -> Result<Json<Value>, ApiError> {
+    let parent = body
+        .parent
+        .map(PathBuf::from)
+        .unwrap_or_else(|| runtime.projects_root.clone());
+    if !parent.is_absolute() {
+        return Err(failure(Error::InvalidInput));
+    }
+    database(runtime, move |store| {
+        let document = json!({"flow_version":2,"headline_items":[],"step":1,"title":body.name.trim(),
+            "language":"auto","files":[],"plan":"","style":"bold16"});
+        let project = store.create_project(&parent, &body.name, body.id.as_deref(), &document)?;
+        Ok(project_json(store, &project))
+    })
+    .await
+    .map(Json)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OpenProject {
+    folder: Option<String>,
+}
+async fn open_project(
+    State(runtime): State<Runtime>,
+    Json(body): Json<OpenProject>,
+) -> Result<Json<Value>, ApiError> {
+    let folder = match body.folder {
+        Some(folder) => PathBuf::from(folder),
+        None => match pick(&runtime, PickKind::ProjectFolder).await?.pop() {
+            Some(folder) => folder,
+            None => return Ok(Json(json!({"cancelled":true}))),
+        },
+    };
+    if !folder.join(editorkrab::projects::FILE).is_file() {
+        return Err(export_error("not_a_project"));
+    }
+    database(runtime, move |store| {
+        let project = store.open_project(&folder)?;
+        Ok(project_json(store, &project))
+    })
+    .await
+    .map(Json)
+}
+
+async fn pick_parent(State(runtime): State<Runtime>) -> Result<Json<Value>, ApiError> {
+    Ok(Json(
+        match pick(&runtime, PickKind::ProjectFolder).await?.pop() {
+            Some(folder) => json!({"folder":folder}),
+            None => json!({"cancelled":true}),
+        },
+    ))
+}
+
+fn trash(path: PathBuf) -> Result<(), ApiError> {
+    trash::delete(&path).map_err(|e| export_error(format!("trash_failed:{e}")))
+}
+
+/// The whole project folder goes to the Recycle Bin; the original videos it links stay where they are.
+async fn trash_project(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let id = project.clone();
+    let found = database(runtime.clone(), move |store| {
+        store.project(&id)?.ok_or(Error::NotFound)
+    })
+    .await?;
+    let folder = PathBuf::from(&found.folder);
+    if folder.exists() {
+        tokio::task::spawn_blocking(move || trash(folder))
+            .await
+            .map_err(|_| failure(Error::Unavailable))??;
+    }
+    database(runtime, move |store| store.forget(&project)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProjectFile {
+    path: String,
+}
+/// Removing footage never touches an original video: only a copy kept inside the project goes to the bin.
+async fn trash_project_file(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+    Json(body): Json<ProjectFile>,
+) -> Result<Json<Value>, ApiError> {
+    let found = database(runtime, move |store| {
+        store.project(&project)?.ok_or(Error::NotFound)
+    })
+    .await?;
+    let path = PathBuf::from(&body.path);
+    if !editorkrab::projects::inside(std::path::Path::new(&found.folder), &path) {
+        return Ok(Json(json!({"trashed":false})));
+    }
+    tokio::task::spawn_blocking(move || trash(path))
+        .await
+        .map_err(|_| failure(Error::Unavailable))??;
+    Ok(Json(json!({"trashed":true})))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CheckBody {
+    files: Vec<editorkrab::sources::Linked>,
+}
+async fn check_sources(Json(body): Json<CheckBody>) -> Result<Json<Value>, ApiError> {
+    if body.files.len() > 1000 {
+        return Err(failure(Error::InvalidInput));
+    }
+    let states = tokio::task::spawn_blocking(move || editorkrab::sources::check(&body.files))
+        .await
+        .map_err(|_| failure(Error::Unavailable))?;
+    Ok(Json(json!({ "states": states })))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RelinkBody {
+    /// the first one is the video being relinked; the rest are looked for beside it
+    missing: Vec<editorkrab::sources::Linked>,
+}
+async fn relink_source(
+    State(runtime): State<Runtime>,
+    Json(body): Json<RelinkBody>,
+) -> Result<Json<Value>, ApiError> {
+    if body.missing.is_empty() || body.missing.len() > 1000 {
+        return Err(failure(Error::InvalidInput));
+    }
+    let Some(path) = pick(&runtime, PickKind::Relink).await?.pop() else {
+        return Ok(Json(json!({"cancelled":true})));
+    };
+    tokio::task::spawn_blocking(move || {
+        let picked = editorkrab::sources::picked(&path).map_err(source_failure)?;
+        let others: Vec<Value> = editorkrab::sources::relink_siblings(
+            std::path::Path::new(&picked.path),
+            &body.missing[1..],
+        )
+        .into_iter()
+        .filter(|(_, s)| s.path != picked.path)
+        .map(|(old, source)| json!({"path":old,"source":source}))
+        .collect();
+        Ok(Json(json!({"picked":picked,"others":others})))
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))?
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LocateBody {
+    files: Vec<editorkrab::sources::Dropped>,
+}
+/// Where a dropped video probably already lives: this project's videos' folders first, then the usual user folders.
+async fn locate_sources(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+    Json(body): Json<LocateBody>,
+) -> Result<Json<Value>, ApiError> {
+    if body.files.len() > 1000 {
+        return Err(failure(Error::InvalidInput));
+    }
+    let mut roots = database(runtime, move |store| {
+        let mut roots: Vec<PathBuf> = store
+            .read(&project)?
+            .and_then(|d| d.document["files"].as_array().cloned())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|f| f["path"].as_str())
+            .filter_map(|p| std::path::Path::new(p).parent().map(|p| p.to_path_buf()))
+            .collect();
+        if let Some(p) = store.project(&project)? {
+            roots.push(p.folder.into());
+        }
+        Ok(roots)
+    })
+    .await?;
+    if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
+        let home = PathBuf::from(home);
+        for folder in [
+            "Desktop",
+            "Downloads",
+            "Videos",
+            "Movies",
+            "Documents",
+            "Pictures",
+            "OneDrive",
+        ] {
+            roots.push(home.join(folder));
+        }
+    }
+    let found =
+        tokio::task::spawn_blocking(move || editorkrab::sources::locate(&roots, &body.files))
+            .await
+            .map_err(|_| failure(Error::Unavailable))?;
+    Ok(Json(json!({ "files": found })))
 }
 
 #[derive(Deserialize)]
@@ -580,12 +844,15 @@ async fn save(
 ) -> Result<Json<Value>, ApiError> {
     let id = project.clone();
     let revision = database(runtime, move |store| {
-        store.save(
+        let revision = store.save(
             &id,
             &body.operation_id,
             body.expected_revision,
             &body.document,
-        )
+        )?;
+        // a retry of the same operation rewrites the file, so a failed write is never final
+        store.mirror(&id)?;
+        Ok(revision)
     })
     .await?;
     Ok(Json(json!({"project_id":project,"revision":revision})))
@@ -619,9 +886,33 @@ async fn copy_draft(
     Path(project): Path<String>,
     Json(body): Json<editorkrab::draft_copy::CopyRequest>,
 ) -> Result<Json<editorkrab::drafts::Draft>, ApiError> {
-    database(runtime, move |store| store.copy_draft(&project, &body))
-        .await
-        .map(Json)
+    database(runtime, move |store| {
+        let draft = store.copy_draft(&project, &body)?;
+        // a copy of a project gets its own folder beside the original
+        if store.project(&project)?.is_none()
+            && let Some(source) = body
+                .source_project
+                .as_deref()
+                .map(|id| store.project(id))
+                .transpose()?
+                .flatten()
+        {
+            let folder = std::path::Path::new(&source.folder);
+            let parent = folder.parent().ok_or(Error::InvalidInput)?;
+            let made =
+                editorkrab::projects::create_folder(parent, &format!("{} สำเนา", source.name))?;
+            let name = made
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_owned();
+            store.register(&project, &name, &made)?;
+            store.mirror(&project)?;
+        }
+        Ok(draft)
+    })
+    .await
+    .map(Json)
 }
 async fn start_transcription(
     State(runtime): State<Runtime>,
@@ -1351,6 +1642,11 @@ async fn serve(
         exports: Arc::default(),
         picker,
         picker_busy: Arc::new(AtomicBool::new(false)),
+        projects_root: std::env::var("EDITORKRAB_PROJECTS_DIR")
+            .map(PathBuf::from)
+            .ok()
+            .or_else(export_dir)
+            .ok_or("no folder for projects")?,
         assets: PathBuf::from(format!(
             "{}.assets",
             state_path.to_str().ok_or("state path is not Unicode")?
@@ -1408,6 +1704,29 @@ async fn serve(
             }),
         )
         .route("/api/v1/drafts/{project}", get(read).put(save))
+        .route(
+            "/projects.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/projects.js"),
+                )
+            }),
+        )
+        .route("/api/v1/projects", get(list_projects).post(create_project))
+        .route("/api/v1/projects/open", post(open_project))
+        .route("/api/v1/projects/parent", post(pick_parent))
+        .route("/api/v1/projects/{project}/trash", post(trash_project))
+        .route(
+            "/api/v1/projects/{project}/trash-file",
+            post(trash_project_file),
+        )
+        .route("/api/v1/sources/check", post(check_sources))
+        .route("/api/v1/sources/relink", post(relink_source))
+        .route(
+            "/api/v1/projects/{project}/sources/locate",
+            post(locate_sources),
+        )
         .route("/api/v1/drafts/{project}/copy", post(copy_draft))
         .route(
             "/text-qc.js",
