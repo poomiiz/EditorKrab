@@ -2,6 +2,7 @@ pub mod asr_download;
 pub mod chunk_cache;
 pub mod draft_copy;
 pub mod drafts;
+pub mod export;
 pub mod jobs;
 pub mod media;
 pub mod native_asr;

@@ -1,0 +1,378 @@
+//! Step 6: turns the saved draft (AI plan + subtitle and headline styles) into one 9:16 MP4 per story.
+//! The plan only names transcript segments; times, text and source files come from finished jobs.
+use crate::jobs::{Job, Task};
+use serde::Serialize;
+use serde_json::Value;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+pub const WIDTH: u32 = 1080;
+pub const HEIGHT: u32 = 1920;
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Piece {
+    /// Index into `Story::sources`.
+    pub source: usize,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub text: String,
+    /// Timed dictionary words (source time); empty when the engine gave none.
+    pub words: Vec<(String, u64, u64)>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Story {
+    pub id: String,
+    pub title: String,
+    pub sources: Vec<PathBuf>,
+    pub pieces: Vec<Piece>,
+}
+impl Story {
+    pub fn duration_ms(&self) -> u64 {
+        self.pieces.iter().map(|p| p.end_ms - p.start_ms).sum()
+    }
+}
+
+struct Spoken {
+    path: PathBuf,
+    start_ms: u64,
+    end_ms: u64,
+    text: String,
+    words: Vec<(String, u64, u64)>,
+}
+
+/// Every segment of every finished transcription in the project, with hand corrections applied.
+fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
+    // same rule as the step 1 editor: a correction applies only to the exact text it was made on
+    let edits: HashMap<(&str, &str), (&str, &str)> = document["transcript_edits"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| {
+            Some((
+                (e["job_id"].as_str()?, e["segment_id"].as_str()?),
+                (e["original_text"].as_str()?, e["text"].as_str()?),
+            ))
+        })
+        .collect();
+    let mut found = HashMap::new();
+    for job in jobs.iter().filter(|j| j.status == "succeeded") {
+        let Task::Transcribe { path, .. } = &job.task else {
+            continue;
+        };
+        let segments = job
+            .result
+            .as_ref()
+            .and_then(|r| r["transcript"]["segments"].as_array());
+        for s in segments.into_iter().flatten() {
+            let (Some(id), Some(start_ms), Some(end_ms), Some(text)) = (
+                s["id"].as_str(),
+                s["start_ms"].as_u64(),
+                s["end_ms"].as_u64(),
+                s["text"].as_str(),
+            ) else {
+                continue;
+            };
+            let edited = edits
+                .get(&(job.id.as_str(), id))
+                .filter(|(original, _)| *original == text);
+            // a corrected line no longer matches its timed words, so it is split by length instead
+            let words = match edited {
+                Some(_) => Vec::new(),
+                None => s["words"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|w| {
+                        Some((w["text"].as_str()?.to_owned(), w["start_ms"].as_u64()?, w["end_ms"].as_u64()?))
+                    })
+                    .collect(),
+            };
+            let text = edited.map_or(text, |(_, fixed)| fixed);
+            found.insert(
+                id.to_owned(),
+                Spoken {
+                    path: PathBuf::from(path),
+                    start_ms,
+                    end_ms,
+                    text: text.trim().to_owned(),
+                    words,
+                },
+            );
+        }
+    }
+    found
+}
+
+/// The stories to render, in plan order. Any unknown segment is an error, never a silent skip.
+pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
+    let raw = document["plan"].as_str().unwrap_or("").trim();
+    if raw.is_empty() {
+        return Err("plan_missing".into());
+    }
+    let reply: Value = serde_json::from_str(raw).map_err(|_| "plan_invalid".to_string())?;
+    let stories = reply["stories"]
+        .as_array()
+        .filter(|s| !s.is_empty())
+        .ok_or("plan_has_no_stories")?;
+    let spoken = spoken(document, jobs);
+    let mut out = Vec::new();
+    for (n, story) in stories.iter().enumerate() {
+        let ids = story["segment_ids"]
+            .as_array()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| format!("story_empty:{}", n + 1))?;
+        let mut sources: Vec<PathBuf> = Vec::new();
+        let mut pieces = Vec::new();
+        for id in ids {
+            let id = id.as_str().ok_or("plan_invalid")?;
+            let s = spoken
+                .get(id)
+                .ok_or_else(|| format!("segment_unknown:{id}"))?;
+            if s.end_ms <= s.start_ms {
+                continue;
+            }
+            let source = match sources.iter().position(|p| p == &s.path) {
+                Some(i) => i,
+                None => {
+                    sources.push(s.path.clone());
+                    sources.len() - 1
+                }
+            };
+            pieces.push(Piece {
+                source,
+                start_ms: s.start_ms,
+                end_ms: s.end_ms,
+                text: s.text.clone(),
+                words: s.words.clone(),
+            });
+        }
+        if pieces.is_empty() {
+            return Err(format!("story_empty:{}", n + 1));
+        }
+        out.push(Story {
+            id: story["id"]
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("story-{}", n + 1)),
+            title: story["title"].as_str().unwrap_or("").trim().to_owned(),
+            sources,
+            pieces,
+        });
+    }
+    Ok(out)
+}
+
+fn font(value: &str) -> &str {
+    match value {
+        "tahoma" => "Tahoma",
+        // the UI's system stack falls back to Leelawadee UI for Thai, which also covers Latin
+        "system" | "thai" => "Leelawadee UI",
+        other => other.strip_prefix("family:").unwrap_or("Leelawadee UI"),
+    }
+}
+/// `#rrggbb` to ASS `&HBBGGRR&`.
+fn colour(value: &str) -> String {
+    let hex = value.trim_start_matches('#');
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return "&HFFFFFF&".into();
+    }
+    format!("&H{}{}{}&", &hex[4..6], &hex[2..4], &hex[0..2]).to_uppercase()
+}
+fn clock(ms: u64) -> String {
+    let cs = ms / 10;
+    format!(
+        "{}:{:02}:{:02}.{:02}",
+        cs / 360_000,
+        cs / 6000 % 60,
+        cs / 100 % 60,
+        cs % 100
+    )
+}
+fn escape(text: &str) -> String {
+    text.replace('\\', "\u{29F5}")
+        .replace('{', "(")
+        .replace('}', ")")
+        .replace(['\r', '\n'], " ")
+}
+/// One positioned text event; size and position use the same 1080-wide frame as the step 4/5 preview.
+fn event(layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
+    let x = style["x"].as_f64().unwrap_or(50.0) / 100.0 * WIDTH as f64;
+    let y = style["y"].as_f64().unwrap_or(50.0) / 100.0 * HEIGHT as f64;
+    format!(
+        "Dialogue: {layer},{},{},Text,,0,0,0,,{{\\an5\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}}}{}\n",
+        clock(start),
+        clock(end),
+        font(style["font"].as_str().unwrap_or("system")),
+        style["size"].as_u64().unwrap_or(64),
+        colour(style["color"].as_str().unwrap_or("#ffffff")),
+        escape(text)
+    )
+}
+
+fn thai(c: char) -> bool {
+    ('\u{0E00}'..='\u{0E7F}').contains(&c)
+}
+/// Rough glyph count for line fitting: Thai vowel and tone marks take no width of their own.
+fn units(text: &str) -> usize {
+    text.chars()
+        .filter(|&c| !matches!(c, '\u{0E31}' | '\u{0E34}'..='\u{0E3A}' | '\u{0E47}'..='\u{0E4E}'))
+        .count()
+}
+fn join(line: &mut String, word: &str) {
+    let gap = line.chars().last().is_some_and(|c| !thai(c))
+        && word.chars().next().is_some_and(|c| !thai(c));
+    if gap {
+        line.push(' ');
+    }
+    line.push_str(word);
+}
+/// One piece's speech as single on-screen lines that fit the frame, timed from 0 at the piece start.
+/// Thai has no spaces for libass to wrap at, so lines are broken here on dictionary words.
+pub fn lines(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
+    let length = piece.end_ms - piece.start_ms;
+    let local = |ms: u64| ms.clamp(piece.start_ms, piece.end_ms) - piece.start_ms;
+    let mut out: Vec<(u64, u64, String)> = Vec::new();
+    if piece.words.is_empty() {
+        let chars: Vec<char> = piece.text.chars().collect();
+        let count = units(&piece.text).div_ceil(limit).max(1);
+        let per = chars.len().div_ceil(count).max(1);
+        for (n, part) in chars.chunks(per).enumerate() {
+            let text = part.iter().collect::<String>().trim().to_owned();
+            if !text.is_empty() {
+                let (n, count) = (n as u64, count as u64);
+                out.push((length * n / count, length * (n + 1) / count, text));
+            }
+        }
+        return out;
+    }
+    let mut line = String::new();
+    let mut start = 0;
+    for (word, from, _) in &piece.words {
+        let word = word.trim();
+        if word.is_empty() {
+            continue;
+        }
+        if !line.is_empty() && units(&line) + 1 + units(word) > limit {
+            out.push((start, local(*from), std::mem::take(&mut line)));
+        }
+        if line.is_empty() {
+            start = if out.is_empty() { 0 } else { local(*from) };
+        }
+        join(&mut line, word);
+    }
+    if !line.is_empty() {
+        out.push((start, length, line));
+    }
+    out
+}
+
+/// What step 4/5 shows on screen, as ASS: headline items for the whole clip, speech lines in time.
+/// Returns the subtitle file and the text roles that were asked for but have nothing to draw yet.
+pub fn subtitles(story: &Story, document: &Value) -> (String, Vec<String>) {
+    let mut ass = format!(
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: {WIDTH}\nPlayResY: {HEIGHT}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n\
+[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n\
+Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,1,5,60,60,0,1\n\n\
+[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+    );
+    let total = story.duration_ms();
+    let roles: Vec<&str> = document["text_roles"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let mut skipped = Vec::new();
+    if roles.contains(&"speech") {
+        // a draft that never opened step 4's style panel has no text_styles; use that panel's defaults
+        let fallback = serde_json::json!({"font":"system","size":64,"color":"#ffffff","x":50,"y":69});
+        let style = match &document["text_styles"]["speech"] {
+            Value::Object(_) => &document["text_styles"]["speech"],
+            _ => &fallback,
+        };
+        let size = style["size"].as_f64().unwrap_or(64.0);
+        let limit = (0.86 * WIDTH as f64 / (size * 0.55)).max(4.0) as usize;
+        let mut at = 0;
+        for p in &story.pieces {
+            for (start, end, text) in lines(p, limit) {
+                ass.push_str(&event(0, at + start, at + end, style, &text));
+            }
+            at += p.end_ms - p.start_ms;
+        }
+    }
+    for role in ["emphasis", "english"] {
+        if roles.contains(&role) {
+            skipped.push(role.to_owned());
+        }
+    }
+    let items = document["headline_items"].as_array().cloned().unwrap_or_default();
+    for item in &items {
+        if let Some(text) = item["text"].as_str().filter(|t| !t.trim().is_empty()) {
+            ass.push_str(&event(1, 0, total, item, text));
+        }
+    }
+    (ass, skipped)
+}
+
+/// ffmpeg arguments, run with the work folder as the current directory (holds `subs.ass`).
+pub fn ffmpeg_args(story: &Story, output: &Path) -> Vec<String> {
+    let mut args: Vec<String> = ["-hide_banner", "-nostdin", "-y", "-progress", "pipe:1", "-nostats"]
+        .map(String::from)
+        .into();
+    for source in &story.sources {
+        args.push("-i".into());
+        args.push(source.display().to_string());
+    }
+    let mut graph = String::new();
+    for (n, p) in story.pieces.iter().enumerate() {
+        let (a, b) = (p.start_ms as f64 / 1000.0, p.end_ms as f64 / 1000.0);
+        graph.push_str(&format!(
+            "[{s}:v]trim=start={a:.3}:end={b:.3},setpts=PTS-STARTPTS,scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=decrease,\
+pad={WIDTH}:{HEIGHT}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[v{n}];\
+[{s}:a]atrim=start={a:.3}:end={b:.3},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,afade=t=in:d=0.008,\
+afade=t=out:st={fade:.3}:d=0.008[a{n}];",
+            s = p.source,
+            fade = ((b - a) - 0.008).max(0.0),
+        ));
+    }
+    for n in 0..story.pieces.len() {
+        graph.push_str(&format!("[v{n}][a{n}]"));
+    }
+    graph.push_str(&format!(
+        "concat=n={}:v=1:a=1[cv][ca];[cv]ass=subs.ass[vout]",
+        story.pieces.len()
+    ));
+    args.extend(
+        [
+            "-filter_complex", &graph, "-map", "[vout]", "-map", "[ca]", "-c:v", "libx264", "-preset",
+            "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart", "-f", "mp4",
+        ]
+        .map(String::from),
+    );
+    args.push(output.display().to_string());
+    args
+}
+
+/// A file name Windows accepts, from the story or project title.
+pub fn file_name(title: &str, fallback: &str) -> String {
+    let clean: String = title
+        .chars()
+        .map(|c| if r#"<>:"/\|?*"#.contains(c) || c.is_control() { ' ' } else { c })
+        .collect();
+    let clean = clean.split_whitespace().collect::<Vec<_>>().join(" ");
+    let clean: String = clean.chars().take(80).collect();
+    let clean = clean.trim_end_matches(['.', ' ']).to_owned();
+    if clean.is_empty() { fallback.to_owned() } else { clean }
+}
+/// `folder/name.mp4`, or `name (2).mp4` and so on: an export never replaces an existing file.
+pub fn unused_path(folder: &Path, name: &str) -> PathBuf {
+    let first = folder.join(format!("{name}.mp4"));
+    if !first.exists() {
+        return first;
+    }
+    (2..)
+        .map(|n| folder.join(format!("{name} ({n}).mp4")))
+        .find(|p| !p.exists())
+        .expect("unbounded")
+}

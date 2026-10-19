@@ -3,6 +3,7 @@ import {watchJobs} from './jobs.js';
 import {uploadFile} from './uploads.js';
 import {createTranscription,validTranscriptEdits} from './transcription.js';
 import {createTextQc} from './text-qc.js';
+import {createExport} from './export.js';
 import {createStyleEditor,validTextStyles,validHeadlineItems,defaults} from './text-style.js';
 const $ = id => document.getElementById(id);
 const key = 'editorkrab-rust-flow-prototype-v1';
@@ -91,6 +92,7 @@ async function save() {
 }
 function renderSteps() {
   const done=stepsDone();
+  exporter?.refresh();
   for (const b of document.querySelectorAll('[data-step]')) {
     const n=Number(b.dataset.step),finished=!!done[n] && n!==activeStep(draft);
     if (n === activeStep(draft)) b.setAttribute('aria-current', 'step');
@@ -388,3 +390,5 @@ try {
 } finally {document.body.dataset.loading='false';}
 }
 render(); start();
+// Step 6 builds from the saved draft only, so it waits for autosave like the AI packet does.
+var exporter=createExport({project:projectId,planReady,saved:()=>!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved});
