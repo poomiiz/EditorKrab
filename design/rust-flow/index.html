@@ -355,6 +355,14 @@ h1{font-size:1.0625rem}h2{font-size:.8125rem}small,.caption{font-size:.75rem}
 .headline-optional{padding:0 var(--space-xl)}
 textarea{font-size:.75rem}
 }
+/* desktop: stages with little content center their one action instead of leaving dead space */
+@media(min-width:761px) and (min-height:561px){
+.stage:not([data-has-files]) .split-main{height:100%}.stage:not([data-has-files]) .split-main .drop{flex:1;min-height:320px}
+.stage[data-panel="2"] .stage-body{display:flex;flex-direction:column;justify-content:center}
+.stage[data-panel="2"] .ai-steps{margin:0 auto;width:100%;max-width:880px}
+.stage[data-panel="6"] .stage-body{display:grid;place-items:center}
+.stage[data-panel="6"] .export-panel{justify-items:center;text-align:center;width:min(560px,100%)}
+}
 </style>
 </head>
 <body data-loading="true">
