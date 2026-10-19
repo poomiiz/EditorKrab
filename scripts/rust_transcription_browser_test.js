@@ -42,8 +42,8 @@ async(page)=>{
  // the copy button hands over the same packet as text, ready to paste into a chat
  await page.evaluate(()=>{navigator.clipboard.writeText=async text=>{window.__copied=text}});
  await page.locator('#transcriptCopy').click();await page.waitForFunction(()=>window.__copied,null,{timeout:120000});
- const copied=await page.evaluate(()=>window.__copied),pasted=JSON.parse(copied.slice(copied.indexOf('{')));
- check(copied.startsWith(packet.instructions)&&pasted.content_hash===packet.content_hash&&JSON.stringify(pasted.content)===JSON.stringify(packet.content),'copied packet differs from download');
+ const clipText=await page.evaluate(()=>window.__copied),pasted=JSON.parse(clipText.slice(clipText.indexOf('{')));
+ check(clipText.startsWith(packet.instructions)&&pasted.content_hash===packet.content_hash&&JSON.stringify(pasted.content)===JSON.stringify(packet.content),'copied packet differs from download');
  await page.locator('[data-step="1"]').click();await complete();await page.locator('#transcribe').click();
  await page.waitForFunction(()=>!document.querySelector('#transcribe').disabled,null,{timeout:120000});
  const after=(await(await page.request.get(`${base}/api/v1/projects/${project}/jobs`)).json()).filter(j=>j.task.kind==='transcribe');
