@@ -23,6 +23,8 @@ use std::sync::{
 use std::{convert::Infallible, path::PathBuf, time::Duration};
 use tokio::sync::watch;
 
+mod agent;
+
 type Shared = Arc<Mutex<Store>>;
 type Asr = Arc<(AsrConfig, AsrSettings)>;
 type ApiError = (StatusCode, Json<Value>);
@@ -1498,6 +1500,8 @@ async fn serve(
         .route("/api/v1/projects/{project}/events", get(events))
         .route("/api/v1/jobs/{id}/cancel", post(cancel_job))
         .route("/api/v1/jobs/{id}/retry", post(retry_job))
+        // agents (Claude, ChatGPT, ...) drive the same project through MCP; `--mcp` bridges stdio here
+        .route("/mcp", post(agent::endpoint))
         .layer(axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024))
         .layer(axum::middleware::from_fn(local_only))
         .with_state(runtime.clone());
@@ -1518,6 +1522,13 @@ async fn serve(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if std::env::args().nth(1).as_deref() == Some("--mcp") {
+        let port: u16 = std::env::var("EDITORKRAB_RUST_PORT")
+            .unwrap_or_else(|_| "8871".into())
+            .parse()?;
+        editorkrab::mcp::bridge(port)?;
+        return Ok(());
+    }
     let (picker, requests) = mpsc::channel();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

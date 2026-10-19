@@ -300,6 +300,7 @@ main{padding:0;gap:0}
 .ai-steps li.current::before{background:var(--acc);box-shadow:none;color:var(--on-acc);font-weight:700}
 .ai-steps li:not(.current){color:var(--mut)}.ai-steps li:not(.current) h2{color:var(--txt-sub);font-weight:500}
 .ai-steps p{margin-top:2px}
+.packet-actions{display:flex;flex-wrap:wrap;gap:var(--space-sm)}
 /* stage 3 */
 .stage[data-panel="3"] .stage-body{padding-bottom:var(--space-xl)}
 .plan-status{align-self:center}
@@ -323,7 +324,7 @@ main{padding:0;gap:0}
 .stage-head{padding:var(--space-lg) var(--space-md) var(--space-md)}
 .stage-body{padding:0 var(--space-md) var(--space-md)}
 .stage-foot,.support{padding-inline:var(--space-md)}
-.ai-steps li{grid-template-columns:32px minmax(0,1fr)}.ai-steps li>button{grid-column:2}
+.ai-steps li{grid-template-columns:32px minmax(0,1fr)}.ai-steps li>button,.ai-steps li>.packet-actions{grid-column:2}
 .stage[data-has-files] .drop{flex-direction:column}.stage[data-has-files] .drop .row{margin-left:0}
 }
 /* density v3: editing-tool scale on mouse screens; touch keeps 44px targets */
@@ -408,7 +409,7 @@ textarea{font-size:.75rem}
 <section class="stage" data-panel="2" hidden aria-labelledby="aiTitle">
 <div class="stage-head"><div><h1 id="aiTitle">ส่งให้ AI ช่วยตัด</h1><p>AI เลือกช่วงที่จะใช้ในคลิป</p></div></div>
 <div class="stage-body">
-<ol class="ai-steps"><li class="current"><div><h2 id="transcriptPacketTitle">ถอดเสียงในขั้น 1 ก่อน</h2><p id="transcriptPacketHint" class="caption">เมื่อถอดครบ จะรวมคำพูดกับคำสั่งให้ AI ในไฟล์เดียว</p><p id="transcriptPacketError" class="field-warning" role="alert" hidden></p></div><button id="transcriptPacket" class="primary" disabled>ดาวน์โหลดไฟล์</button><button id="transcriptGoPrepare" class="primary" data-go="1" hidden>ไปขั้น 1</button></li><li><div><h2>แนบไฟล์ในแชท AI</h2><p class="caption">เช่น ChatGPT, Gemini หรือ Claude</p></div></li><li><div><h2>คัดลอกคำตอบทั้งหมด</h2><p class="caption">แล้วไปวางในขั้นถัดไป</p></div></li></ol>
+<ol class="ai-steps"><li class="current"><div><h2 id="transcriptPacketTitle">ถอดเสียงในขั้น 1 ก่อน</h2><p id="transcriptPacketHint" class="caption">เมื่อถอดครบ จะรวมคำพูดกับคำสั่งให้ AI ในไฟล์เดียว</p><p id="transcriptPacketError" class="field-warning" role="alert" hidden></p></div><div class="packet-actions"><button id="transcriptPacket" class="primary" disabled>ดาวน์โหลดไฟล์</button><button id="transcriptCopy" disabled hidden>คัดลอกให้ AI</button><button id="transcriptGoPrepare" class="primary" data-go="1" hidden>ไปขั้น 1</button></div></li><li><div><h2>แนบไฟล์ หรือวางข้อความที่คัดลอกในแชท AI</h2><p class="caption">เช่น ChatGPT, Gemini หรือ Claude</p></div></li><li><div><h2>คัดลอกคำตอบทั้งหมด</h2><p class="caption">แล้วไปวางในขั้นถัดไป</p></div></li></ol>
 </div>
 <div class="stage-foot"><button class="back" data-go="1">ย้อนกลับ</button><div class="actions"><button data-go="3">ถัดไป</button></div></div>
 </section>

@@ -39,6 +39,11 @@ async(page)=>{
  check(packet.content.sources.length===1&&packet.content.sources[0].segments[0].text===corrected,'packet missed correction or included silent transcript');
  check(packet.content.sources[0].segments[0].original_text===original&&packet.content.sources[0].segments[0].alignment==='unverified','raw provenance lost');
  check(!JSON.stringify(packet).includes('C:\\')&&!JSON.stringify(packet).includes('D:\\'),'machine paths leaked in AI packet');
+ // the copy button hands over the same packet as text, ready to paste into a chat
+ await page.evaluate(()=>{navigator.clipboard.writeText=async text=>{window.__copied=text}});
+ await page.locator('#transcriptCopy').click();await page.waitForFunction(()=>window.__copied,null,{timeout:120000});
+ const copied=await page.evaluate(()=>window.__copied),pasted=JSON.parse(copied.slice(copied.indexOf('{')));
+ check(copied.startsWith(packet.instructions)&&pasted.content_hash===packet.content_hash&&JSON.stringify(pasted.content)===JSON.stringify(packet.content),'copied packet differs from download');
  await page.locator('[data-step="1"]').click();await complete();await page.locator('#transcribe').click();
  await page.waitForFunction(()=>!document.querySelector('#transcribe').disabled,null,{timeout:120000});
  const after=(await(await page.request.get(`${base}/api/v1/projects/${project}/jobs`)).json()).filter(j=>j.task.kind==='transcribe');
@@ -72,5 +77,5 @@ async(page)=>{
  await page.waitForURL(url=>![project,copiedId].includes(url.searchParams.get('project')),{timeout:120000});await complete();
  check(await field.inputValue()===corrected,'backup import lost correction');
  check(!errors.length,'browser runtime errors '+errors.join('; '));
- console.log(JSON.stringify({project,copiedId,checks:['native whisper inference','silent insert skipped without removal','actual chunk status','correction source binding','typing focus','autosave/reopen/undo/redo','source audio206+seek','AI packet corrected+original text/no paths','repeat start reuses job','stale language blocked','375/1440 layout+44px','conflict copy after server ack','backup restore preserving raw jobs'],errors}));
+ console.log(JSON.stringify({project,copiedId,checks:['native whisper inference','silent insert skipped without removal','actual chunk status','correction source binding','typing focus','autosave/reopen/undo/redo','source audio206+seek','AI packet corrected+original text/no paths','copy-to-AI matches download','repeat start reuses job','stale language blocked','375/1440 layout+44px','conflict copy after server ack','backup restore preserving raw jobs'],errors}));
 }

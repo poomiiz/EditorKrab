@@ -4,6 +4,7 @@ pub mod draft_copy;
 pub mod drafts;
 pub mod export;
 pub mod jobs;
+pub mod mcp;
 pub mod media;
 pub mod native_asr;
 pub mod sources;

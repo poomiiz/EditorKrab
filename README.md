@@ -16,13 +16,26 @@ This is an early access project for Windows 10/11. All six steps work, but it ha
 The app has one window and six steps, with one main button per step.
 
 1. **Add video:** pick a file or a whole folder. Press **Transcribe** to turn speech into text, then listen and fix any wrong words. Thai, English and other languages are detected automatically.
-2. **Send to AI:** download one file and attach it in any AI chat (ChatGPT, Gemini or Claude). The AI picks the parts to keep.
+2. **Send to AI:** download one file and attach it in any AI chat (ChatGPT, Gemini or Claude), or press **คัดลอกให้ AI** and paste the same content straight into the chat. The AI picks the parts to keep.
 3. **Paste the answer:** paste the AI's whole reply back into the app.
 4. **Subtitles:** choose what appears on screen. Drag to move a subtitle and drag a corner to resize it.
 5. **Title:** add title text and place it on the clip.
 6. **Get the clip:** press **Create clip**. The app makes one vertical 9:16 MP4 per story the AI picked, with the subtitles and title burned in, and saves them in `Videos\EditorKrab`. It never overwrites an existing file. Each file is checked for size, sound and length before it is saved.
 
 The work saves itself as you go. **Undo**, **Redo**, **Open** and **Download backup** are in the top bar.
+
+## Use from an AI agent (MCP)
+
+While the app is open, an agent such as Claude Code, Claude Desktop or Codex can run the same steps through the [Model Context Protocol](https://modelcontextprotocol.io). The tools are `import_videos`, `transcribe`, `get_project`, `get_transcript`, `set_clips` and `export_clips`. Each answer includes an `open_in_app` link, so you can open the project the agent is working on and adjust it by hand.
+
+- **HTTP:** point the agent at `http://127.0.0.1:8871/mcp`.
+- **stdio:** for agents that only start a command, run the app's exe with `--mcp`. It relays to the open app, and says so when the app is not running. For example, in Claude Code:
+
+```powershell
+claude mcp add editorkrab -- "$env:LOCALAPPDATA\Programs\EditorKrab\EditorKrab.exe" --mcp
+```
+
+The agent reads the transcript text and file names to choose clips, so that text goes to whichever AI service the agent uses.
 
 ## Install
 
