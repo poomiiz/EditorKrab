@@ -9,7 +9,7 @@ export function validTranscriptEdits(value){
 }
 export function createTranscription({project,read,state,writeEdit,changed}){
  const jobs=new Map();let settings=null,configuration='loading',download=null,downloadError='',downloadTimer=0,busy=false,stopStarting=false,page=0,chosen='',rowsKey='',audio,stopAt=0;
- let settingsGeneration=0,notice='',playing=null;const suggestions=new Map(),fixAsked=new Set();
+ let settingsGeneration=0,notice='',packetNotice='',playing=null;const suggestions=new Map(),fixAsked=new Set();
  const failed=new Set(['failed','cancelled']);
  const messages={transcription_not_configured:'ยังไม่ได้ติดตั้งตัวถอดเสียง',transcription_settings_changed:'ตัวถอดเสียงเปลี่ยนแล้ว กดลองอีกครั้ง',source_changed:'ไฟล์เปลี่ยนแล้ว เลือกไฟล์ใหม่',transcription_source_changed:'ไฟล์เปลี่ยนแล้ว เลือกไฟล์ใหม่',draft_conflict:'งานเปลี่ยนแล้ว รอให้บันทึกก่อนลองใหม่',revision_conflict:'งานเปลี่ยนแล้ว รอให้บันทึกก่อนลองใหม่',transcription_chunk_limit_exceeded:'ไฟล์ยาวเกิน 500 นาที แบ่งไฟล์ก่อนถอดเสียง',transcription_cache_corrupt:'ข้อความที่ถอดไว้เสีย ถอดเสียงใหม่'};
  async function request(url,body){
@@ -96,6 +96,7 @@ export function createTranscription({project,read,state,writeEdit,changed}){
   $('reloadAsr').hidden=configuration==='ready'||configuration==='loading';$('reloadAsr').disabled=busy;
   paintDownload();
   $('transcribeError').textContent=notice;$('transcribeError').hidden=!notice;
+  $('transcriptPacketError').textContent=packetNotice;$('transcriptPacketError').hidden=!packetNotice;
   const phases={verifying:'กำลังตรวจไฟล์',extracting:'กำลังเตรียมเสียง',transcribing:'กำลังถอดเสียง',cache:'กำลังเปิดข้อความที่ถอดไว้'};
   $('transcribeState').textContent=busy?'เตรียมงาน':running.length?'กำลังทำ':complete()?'ถอดครบแล้ว':configuration==='loading'?'กำลังตรวจ':configuration==='ready'?'พร้อม':'ยังใช้ไม่ได้';
   $('transcribeHint').textContent=configuration==='missing'?'ดาวน์โหลดตัวถอดเสียงก่อนใช้ครั้งแรก':configuration==='error'?'ตรวจตัวถอดเสียงไม่ได้ กดลองอีกครั้ง':configuration==='loading'?'กำลังเตรียม':!read().files.length?'เลือกไฟล์ที่มีเสียงก่อน':!files.length?'รออ่านไฟล์ และตรวจว่ามีเสียง':!ready?'รอให้บันทึกงานสำเร็จก่อนเริ่ม':running.length?(phases[running.find(j=>j.status==='running')?.step] || 'รอคิว')+` · สำเร็จ ${completed}/${all.length} ช่วง`:all.length?`สำเร็จ ${completed}/${all.length} ช่วง`+(waiting?' · มีไฟล์ที่ยังตรวจไม่สำเร็จ':'')+(silent?` · ข้าม ${silent} ไฟล์ไม่มีเสียง`:''):'เลือกไฟล์ที่มีเสียงก่อน';
@@ -157,7 +158,7 @@ export function createTranscription({project,read,state,writeEdit,changed}){
  $('transcriptRows').onfocusout=event=>{if(!$('transcriptRows').contains(event.relatedTarget))queueMicrotask(()=>paintRows());};
  $('transcriptPacket').onclick=async()=>{
   if($('transcriptPacket').disabled)return;
-  busy=true;notice='';refresh();
+  busy=true;packetNotice='';refresh();
   try{
    const saved=state(),snapshotDraft=structuredClone(read());
    for(const file of eligible())await request(`/api/v1/projects/${encodeURIComponent(project)}/transcription`,{request_id:crypto.randomUUID(),revision:saved.revision,source_id:file.source_id,settings});
@@ -168,7 +169,7 @@ export function createTranscription({project,read,state,writeEdit,changed}){
    if(!state().saved||state().revision!==saved.revision||JSON.stringify(snapshotDraft)!==JSON.stringify(read())||!complete())throw Error('งานเปลี่ยนแล้ว ดาวน์โหลดใหม่อีกครั้ง');
    const packet={schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,content,instructions:'แบ่งเรื่องและเรียงช่วงพูดโดยอ้าง segment_ids ที่ให้เท่านั้น ห้ามสร้างเวลาใหม่ รักษาตอนจบให้ครบ ไม่ถือว่าคนละไฟล์คือกล้องซิงก์กัน เวลาระดับคำและคนพูดยังไม่ยืนยัน ส่ง JSON ตาม response_schema',response_schema:{schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,stories:[{id:'story-1',title:'ชื่อเรื่อง',segment_ids:[]}]}};
    const url=URL.createObjectURL(new Blob([JSON.stringify(packet,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='editorkrab-transcript-ai.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-  }catch(error){notice=error.message;}finally{busy=false;refresh();}
+  }catch(error){packetNotice=error.message;}finally{busy=false;refresh();}
  };
  queueMicrotask(loadSettings);
  // Every subtitle line as it will show (hand edit if any), timed on its own source file.
