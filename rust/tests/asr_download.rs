@@ -75,7 +75,10 @@ fn item(url: String, dir: &std::path::Path, sha: String) -> Item {
 fn hash(bytes: &[u8]) -> String {
     // one folder per call: tests run in parallel and `folder` empties the folder it returns
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let dir = folder(&format!("hash-{}", NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    let dir = folder(&format!(
+        "hash-{}",
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     let path = dir.join("x");
     std::fs::write(&path, bytes).unwrap();
     sha256(&path).unwrap()
@@ -167,13 +170,23 @@ fn serve_dropping(body: Vec<u8>, cut: usize, drops: usize) -> (String, Arc<Mutex
             let head = if start > 0 {
                 format!(
                     "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-{}/{}\r\nConnection: close\r\n\r\n",
-                    body.len() - start, start, body.len() - 1, body.len()
+                    body.len() - start,
+                    start,
+                    body.len() - 1,
+                    body.len()
                 )
             } else {
-                format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len())
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                )
             };
             let _ = stream.write_all(head.as_bytes());
-            let end = if n < drops { (start + cut).min(body.len()) } else { body.len() };
+            let end = if n < drops {
+                (start + cut).min(body.len())
+            } else {
+                body.len()
+            };
             let _ = stream.write_all(&body[start..end]);
         }
     });
