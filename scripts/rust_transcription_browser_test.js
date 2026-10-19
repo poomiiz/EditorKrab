@@ -27,6 +27,9 @@ async(page)=>{
  await page.waitForFunction(()=>document.querySelector('#transcriptAudioHost audio').currentTime>2.5);
  await page.evaluate(()=>document.querySelector('#transcriptAudioHost audio').pause());
  check(responses.includes(206),'source audio range did not return206');
+ await field.fill('   ');await saved();await page.locator('[data-step="2"]').click();await page.locator('#transcriptPacket').click();
+ await page.waitForFunction(()=>document.querySelector('#transcriptPacketError').getClientRects().length>0,null,{timeout:30000});check(await page.locator('#transcribeError').isHidden(),'step 2 error shown on step 1 line');
+ await page.locator('[data-step="1"]').click();await field.fill(corrected);await saved();
  await page.locator('[data-step="2"]').click();
  await page.evaluate(()=>{const create=URL.createObjectURL;URL.createObjectURL=function(blob){window.__packetBlob=blob;return create.call(this,blob)}});
  const download=page.waitForEvent('download',{timeout:120000});await page.locator('#transcriptPacket').click();
