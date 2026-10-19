@@ -1,4 +1,5 @@
 pub mod asr_download;
+pub mod capcut;
 pub mod chunk_cache;
 pub mod draft_copy;
 pub mod drafts;
