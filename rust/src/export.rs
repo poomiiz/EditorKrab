@@ -83,7 +83,11 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
                     .into_iter()
                     .flatten()
                     .filter_map(|w| {
-                        Some((w["text"].as_str()?.to_owned(), w["start_ms"].as_u64()?, w["end_ms"].as_u64()?))
+                        Some((
+                            w["text"].as_str()?.to_owned(),
+                            w["start_ms"].as_u64()?,
+                            w["end_ms"].as_u64()?,
+                        ))
                     })
                     .collect(),
             };
@@ -285,7 +289,8 @@ Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,
     let mut skipped = Vec::new();
     if roles.contains(&"speech") {
         // a draft that never opened step 4's style panel has no text_styles; use that panel's defaults
-        let fallback = serde_json::json!({"font":"system","size":64,"color":"#ffffff","x":50,"y":69});
+        let fallback =
+            serde_json::json!({"font":"system","size":64,"color":"#ffffff","x":50,"y":69});
         let style = match &document["text_styles"]["speech"] {
             Value::Object(_) => &document["text_styles"]["speech"],
             _ => &fallback,
@@ -305,7 +310,10 @@ Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,
             skipped.push(role.to_owned());
         }
     }
-    let items = document["headline_items"].as_array().cloned().unwrap_or_default();
+    let items = document["headline_items"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     for item in &items {
         if let Some(text) = item["text"].as_str().filter(|t| !t.trim().is_empty()) {
             ass.push_str(&event(1, 0, total, item, text));
@@ -316,9 +324,16 @@ Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,
 
 /// ffmpeg arguments, run with the work folder as the current directory (holds `subs.ass`).
 pub fn ffmpeg_args(story: &Story, output: &Path) -> Vec<String> {
-    let mut args: Vec<String> = ["-hide_banner", "-nostdin", "-y", "-progress", "pipe:1", "-nostats"]
-        .map(String::from)
-        .into();
+    let mut args: Vec<String> = [
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        "-progress",
+        "pipe:1",
+        "-nostats",
+    ]
+    .map(String::from)
+    .into();
     for source in &story.sources {
         args.push("-i".into());
         args.push(source.display().to_string());
@@ -344,9 +359,28 @@ afade=t=out:st={fade:.3}:d=0.008[a{n}];",
     ));
     args.extend(
         [
-            "-filter_complex", &graph, "-map", "[vout]", "-map", "[ca]", "-c:v", "libx264", "-preset",
-            "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
-            "-movflags", "+faststart", "-f", "mp4",
+            "-filter_complex",
+            &graph,
+            "-map",
+            "[vout]",
+            "-map",
+            "[ca]",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "20",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-movflags",
+            "+faststart",
+            "-f",
+            "mp4",
         ]
         .map(String::from),
     );
@@ -358,12 +392,22 @@ afade=t=out:st={fade:.3}:d=0.008[a{n}];",
 pub fn file_name(title: &str, fallback: &str) -> String {
     let clean: String = title
         .chars()
-        .map(|c| if r#"<>:"/\|?*"#.contains(c) || c.is_control() { ' ' } else { c })
+        .map(|c| {
+            if r#"<>:"/\|?*"#.contains(c) || c.is_control() {
+                ' '
+            } else {
+                c
+            }
+        })
         .collect();
     let clean = clean.split_whitespace().collect::<Vec<_>>().join(" ");
     let clean: String = clean.chars().take(80).collect();
     let clean = clean.trim_end_matches(['.', ' ']).to_owned();
-    if clean.is_empty() { fallback.to_owned() } else { clean }
+    if clean.is_empty() {
+        fallback.to_owned()
+    } else {
+        clean
+    }
 }
 /// `folder/name.mp4`, or `name (2).mp4` and so on: an export never replaces an existing file.
 pub fn unused_path(folder: &Path, name: &str) -> PathBuf {

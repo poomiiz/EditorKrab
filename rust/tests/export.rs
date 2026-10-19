@@ -21,13 +21,28 @@ fn job(id: &str, status: &str, path: &str, segments: Value) -> Job {
 }
 fn jobs() -> Vec<Job> {
     vec![
-        job("j1", "succeeded", "C:/clips/a.mp4", json!([
-            {"id": "a0", "text": " สวัสดีครับ", "start_ms": 0, "end_ms": 1500},
-            {"id": "a1", "text": " วันนี้", "start_ms": 1500, "end_ms": 4000},
-            {"id": "a2", "text": " ตอนจบ", "start_ms": 9000, "end_ms": 10000}
-        ])),
-        job("j2", "succeeded", "C:/clips/b.mp4", json!([{"id": "b0", "text": "second file", "start_ms": 200, "end_ms": 1200}])),
-        job("j3", "failed", "C:/clips/c.mp4", json!([{"id": "c0", "text": "x", "start_ms": 0, "end_ms": 1}])),
+        job(
+            "j1",
+            "succeeded",
+            "C:/clips/a.mp4",
+            json!([
+                {"id": "a0", "text": " สวัสดีครับ", "start_ms": 0, "end_ms": 1500},
+                {"id": "a1", "text": " วันนี้", "start_ms": 1500, "end_ms": 4000},
+                {"id": "a2", "text": " ตอนจบ", "start_ms": 9000, "end_ms": 10000}
+            ]),
+        ),
+        job(
+            "j2",
+            "succeeded",
+            "C:/clips/b.mp4",
+            json!([{"id": "b0", "text": "second file", "start_ms": 200, "end_ms": 1200}]),
+        ),
+        job(
+            "j3",
+            "failed",
+            "C:/clips/c.mp4",
+            json!([{"id": "c0", "text": "x", "start_ms": 0, "end_ms": 1}]),
+        ),
     ]
 }
 fn document(plan: Value) -> Value {
@@ -62,9 +77,15 @@ fn stories_follow_the_plan_order_across_files_with_corrections() {
 #[test]
 fn unknown_or_failed_segments_and_bad_plans_are_errors() {
     let bad = |p: Value| plan(&document(p), &jobs()).unwrap_err();
-    assert_eq!(bad(json!({"stories": [{"segment_ids": ["a0", "c0"]}]})), "segment_unknown:c0");
+    assert_eq!(
+        bad(json!({"stories": [{"segment_ids": ["a0", "c0"]}]})),
+        "segment_unknown:c0"
+    );
     assert_eq!(bad(json!({"stories": []})), "plan_has_no_stories");
-    assert_eq!(bad(json!({"stories": [{"segment_ids": []}]})), "story_empty:1");
+    assert_eq!(
+        bad(json!({"stories": [{"segment_ids": []}]})),
+        "story_empty:1"
+    );
     let mut doc = document(json!({}));
     doc["plan"] = json!("not json");
     assert_eq!(plan(&doc, &jobs()).unwrap_err(), "plan_invalid");

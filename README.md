@@ -7,7 +7,7 @@
 
 EditorKrab is a desktop app that turns talking-head footage into short clips with subtitles. It runs on your own computer: videos, transcripts and projects stay on your machine.
 
-This is an early access project for Windows 10/11. The app currently works through step 5. Step 6, which produces the finished clip, is not enabled yet.
+This is an early access project for Windows 10/11. All six steps work, but it has only been tested on generated test speech so far. Keyword highlights, English translation, music and sound effects are not in the new app yet.
 
 [คู่มือภาษาไทย](docs/README.th.md) · [Report a bug](CONTRIBUTING.md) · [Security](SECURITY.md)
 
@@ -20,7 +20,7 @@ The app has one window and six steps, with one main button per step.
 3. **Paste the answer:** paste the AI's whole reply back into the app.
 4. **Subtitles:** choose what appears on screen. Drag to move a subtitle and drag a corner to resize it.
 5. **Title:** add title text and place it on the clip.
-6. **Get the clip:** not enabled yet.
+6. **Get the clip:** press **Create clip**. The app makes one vertical 9:16 MP4 per story the AI picked, with the subtitles and title burned in, and saves them in `Videos\EditorKrab`. It never overwrites an existing file. Each file is checked for size, sound and length before it is saved.
 
 The work saves itself as you go. **Undo**, **Redo**, **Open** and **Download backup** are in the top bar.
 

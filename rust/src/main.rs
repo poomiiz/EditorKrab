@@ -123,10 +123,15 @@ async fn start_export(
     State(runtime): State<Runtime>,
     Path(project): Path<String>,
 ) -> Result<Json<Export>, ApiError> {
-    let asr = runtime.asr().ok_or_else(|| export_error("transcription_not_configured"))?;
+    let asr = runtime
+        .asr()
+        .ok_or_else(|| export_error("transcription_not_configured"))?;
     let id = project.clone();
     let (draft, jobs) = database(runtime.clone(), move |store| {
-        Ok((store.read(&id)?.ok_or(Error::NotFound)?, store.list_jobs(&id)?))
+        Ok((
+            store.read(&id)?.ok_or(Error::NotFound)?,
+            store.list_jobs(&id)?,
+        ))
     })
     .await?;
     let stories = editorkrab::export::plan(&draft.document, &jobs).map_err(export_error)?;
@@ -135,7 +140,10 @@ async fn start_export(
         .flat_map(|s| &s.sources)
         .find(|p| !p.is_file())
     {
-        return Err(export_error(format!("source_missing:{}", missing.display())));
+        return Err(export_error(format!(
+            "source_missing:{}",
+            missing.display()
+        )));
     }
     let folder = export_dir().ok_or_else(|| export_error("output_folder_unknown"))?;
     let (cancel, signal) = watch::channel(false);
@@ -156,8 +164,11 @@ async fn start_export(
     }
     let ffmpeg = asr.0.ffmpeg.clone();
     let ffprobe = ffprobe_path(&runtime.setup);
-    let work = PathBuf::from(format!("{}.export-work", runtime.setup.state_path.display()))
-        .join(uuid::Uuid::new_v4().to_string());
+    let work = PathBuf::from(format!(
+        "{}.export-work",
+        runtime.setup.state_path.display()
+    ))
+    .join(uuid::Uuid::new_v4().to_string());
     tokio::spawn(run_export(
         runtime.clone(),
         project.clone(),
@@ -203,10 +214,16 @@ async fn reveal_export(
             .arg(format!("/select,{file}"))
             .spawn()
     } else {
-        let folder = std::path::Path::new(&file).parent().map(|p| p.to_path_buf());
-        std::process::Command::new(if cfg!(target_os = "macos") { "open" } else { "xdg-open" })
-            .arg(folder.unwrap_or_default())
-            .spawn()
+        let folder = std::path::Path::new(&file)
+            .parent()
+            .map(|p| p.to_path_buf());
+        std::process::Command::new(if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        })
+        .arg(folder.unwrap_or_default())
+        .spawn()
     };
     opened.map_err(|e| export_error(format!("reveal_failed:{e}")))?;
     Ok(StatusCode::NO_CONTENT)
@@ -242,7 +259,9 @@ async fn run_export(
             let (ass, skipped) = editorkrab::export::subtitles(story, &document);
             update(&|s| s.skipped = skipped.clone());
             let dir = work.join(n.to_string());
-            tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
+            tokio::fs::create_dir_all(&dir)
+                .await
+                .map_err(|e| e.to_string())?;
             tokio::fs::write(dir.join("subs.ass"), ass)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -254,8 +273,14 @@ async fn run_export(
                 let fraction = (done_ms as f64 / total as f64).min(1.0);
                 update(&|s| s.progress = base + share * fraction);
             };
-            run_ffmpeg(&ffmpeg, &dir, &editorkrab::export::ffmpeg_args(story, &partial), signal.clone(), progress)
-                .await?;
+            run_ffmpeg(
+                &ffmpeg,
+                &dir,
+                &editorkrab::export::ffmpeg_args(story, &partial),
+                signal.clone(),
+                progress,
+            )
+            .await?;
             verify_export(&ffprobe, &partial, story.duration_ms()).await?;
             let name = editorkrab::export::file_name(
                 &[title.trim(), story.title.as_str()]
@@ -342,7 +367,12 @@ async fn run_ffmpeg(
     let status = child.wait().await.map_err(|e| e.to_string())?;
     if !status.success() {
         let text = errors.await.unwrap_or_default();
-        let last = text.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+        let last = text
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("")
+            .trim();
         return Err(format!("ffmpeg_failed:{last}"));
     }
     Ok(())
@@ -355,12 +385,23 @@ async fn verify_export(
 ) -> Result<(), String> {
     let mut command = tokio::process::Command::new(ffprobe);
     command
-        .args(["-v", "error", "-show_entries", "format=duration:stream=codec_type,width,height", "-of", "json"])
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:stream=codec_type,width,height",
+            "-of",
+            "json",
+        ])
         .arg(file);
     #[cfg(windows)]
     command.creation_flags(0x0800_0000);
-    let out = command.output().await.map_err(|e| format!("ffprobe_start:{e}"))?;
-    let info: Value = serde_json::from_slice(&out.stdout).map_err(|_| "export_unreadable".to_string())?;
+    let out = command
+        .output()
+        .await
+        .map_err(|e| format!("ffprobe_start:{e}"))?;
+    let info: Value =
+        serde_json::from_slice(&out.stdout).map_err(|_| "export_unreadable".to_string())?;
     let streams = info["streams"].as_array().cloned().unwrap_or_default();
     let video = streams.iter().find(|s| s["codec_type"] == "video");
     let has_audio = streams.iter().any(|s| s["codec_type"] == "audio");
@@ -1413,8 +1454,14 @@ async fn serve(
             "/api/v1/projects/{project}/export",
             get(export_status).post(start_export),
         )
-        .route("/api/v1/projects/{project}/export/cancel", post(cancel_export))
-        .route("/api/v1/projects/{project}/export/reveal", post(reveal_export))
+        .route(
+            "/api/v1/projects/{project}/export/cancel",
+            post(cancel_export),
+        )
+        .route(
+            "/api/v1/projects/{project}/export/reveal",
+            post(reveal_export),
+        )
         .route(
             "/api/v1/projects/{project}/transcription",
             post(start_transcription),
