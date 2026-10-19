@@ -9,7 +9,7 @@ export function createExport({project,saved,planReady}){
  let status={state:'idle'},error='',timer=0,busy=false;
  function paint(){
   const running=status.state==='running',done=status.state==='done',ready=planReady();
-  $('exportStart').hidden=running;$('exportStart').disabled=busy||!ready||!saved();
+  $('exportStart').hidden=running||(!ready&&!done);$('exportGoPlan').hidden=running||done||ready;$('exportStart').disabled=busy||!ready||!saved();
   $('exportStart').textContent=done?'สร้างใหม่อีกครั้ง':'สร้างคลิป';
   $('exportStart').classList.toggle('primary',!done);$('exportReveal').classList.toggle('primary',done);
   $('exportCancel').hidden=!running;
