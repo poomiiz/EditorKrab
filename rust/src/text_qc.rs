@@ -157,6 +157,7 @@ pub fn check(items: &[Item]) -> Result<Vec<Finding>, String> {
         check_item(item, &mut found)?;
     }
     consistency(items, &mut found);
+    repeats(items, &mut found);
     found.sort_by(|a, b| {
         (a.start_ms, a.severity, &a.problem).cmp(&(b.start_ms, b.severity, &b.problem))
     });
@@ -381,6 +382,42 @@ fn consistency(items: &[Item], found: &mut Vec<Finding>) {
     }
 }
 
+/// The same subtitle 3+ times in a row: speech recognition stuck in a loop, not real speech.
+fn repeats(items: &[Item], found: &mut Vec<Finding>) {
+    let mut subtitles: Vec<&Item> = items.iter().filter(|i| i.kind == "subtitle").collect();
+    subtitles.sort_by(|a, b| (&a.source, a.start_ms).cmp(&(&b.source, b.start_ms)));
+    let same = |a: &Item, b: &Item| a.source == b.source && a.text.trim() == b.text.trim();
+    let mut start = 0;
+    while start < subtitles.len() {
+        let mut end = start + 1;
+        while end < subtitles.len() && same(subtitles[start], subtitles[end]) {
+            end += 1;
+        }
+        if end - start >= 3 {
+            // The first one may be real speech; flag the copies after it.
+            for item in &subtitles[start + 1..end] {
+                found.push(Finding {
+                    start_ms: item.start_ms,
+                    end_ms: item.end_ms,
+                    kind: item.kind.clone(),
+                    id: item.id.clone(),
+                    source: item.source.clone(),
+                    language: language(&item.text),
+                    shown: item.text.clone(),
+                    category: "content",
+                    problem: format!(
+                        "ซับเดียวกันซ้ำ {} ท่อนติดกัน (ถอดเสียงวนซ้ำ ฟังแล้วแก้หรือลบ)",
+                        end - start
+                    ),
+                    fix: None,
+                    severity: Severity::Moderate,
+                });
+            }
+        }
+        start = end;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -444,6 +481,24 @@ mod tests {
             ])
             .is_empty()
         );
+    }
+    #[test]
+    fn flags_subtitle_loops() {
+        let loop_text = "1979年苏联入侵阿富汗";
+        let mut items = vec![item("subtitle", "1979年伊朗人质危机的伊朗革命", 60000, 62040)];
+        for n in 0..4 {
+            items.push(item("subtitle", loop_text, 62040 + n * 1000, 63040 + n * 1000));
+        }
+        let found = check(&items).unwrap();
+        let loops: Vec<_> = found.iter().filter(|f| f.problem.contains("ซ้ำ 4 ท่อน")).collect();
+        assert_eq!(loops.len(), 3, "{found:?}");
+        assert_eq!(loops[0].start_ms, 63040);
+        // two in a row is normal speech ("yes. yes.")
+        let p = problems(&[
+            item("subtitle", "ใช่", 0, 1000),
+            item("subtitle", "ใช่", 1000, 2000),
+        ]);
+        assert!(p.iter().all(|s| !s.contains("ท่อนติดกัน")), "{p:?}");
     }
     #[test]
     fn rejects_bad_input() {
