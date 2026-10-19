@@ -42,9 +42,6 @@ The user signed in through Google in a headed Playwright browser. The motion pag
 
 [Metadata, checksums and sampled alpha](desktop-20261014/motion-results.json) show transparent and opaque pixels at three times per MOV. Sampled frames were visually inspected; Thai text is visible and stays in frame. These samples do not inspect every frame, every text length, or prove CapCut import compatibility. The page's advertised 20–40 seconds is an estimate; exact render-duration measurements were not successfully captured, so no measured render-speed claim is made.
 
-![Hook sampled frames](desktop-20261014/hook-frames.png)
-![Number sampled frames](desktop-20261014/stat-frames.png)
-![Sentence-pair sampled frames](desktop-20261014/pair-frames.png)
 
 ## Real MP4 pilot: technical pass, editorial fail
 
@@ -58,8 +55,6 @@ Five frames at 1, 3.5, 5.5, 15 and 29 seconds were inspected. Motion overlays pl
 
 Playwright checked actual supplied filenames at 1440×900 and 375×844. At 375px, document scroll width was 375px and each tile's client/scroll width was 337px. At desktop, each tile's client/scroll width matched; long title text was ellipsized inside its content box. PNG dimensions were verified independently. Only the displayed folder path was redacted in the public captures, after layout loaded.
 
-![Desktop filename fix](desktop-20261014/filename-final-desktop.png)
-![Mobile filename fix](desktop-20261014/filename-final-mobile.png)
 
 The added-line raw-colour diff check produced no matches. An independent reviewer found two cache issues (final metadata failure and actual CPU fallback model identity); both were corrected with regression tests. The reviewer reran the checkpoint suite successfully and found no remaining serious regression. This focused review does not certify the entire interface or accessibility.
 
