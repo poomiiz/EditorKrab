@@ -6,6 +6,7 @@ pub mod export;
 pub mod jobs;
 pub mod media;
 pub mod native_asr;
+pub mod projects;
 pub mod sources;
 pub mod styles;
 pub mod transcription;

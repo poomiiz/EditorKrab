@@ -79,6 +79,7 @@ impl Store {
         let store = Self(connection);
         store.initialize_jobs()?;
         store.initialize_uploads()?;
+        store.initialize_projects()?;
         Ok(store)
     }
 

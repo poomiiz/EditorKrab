@@ -23,13 +23,12 @@ function recallStep(){let step;try{step=Number(localStorage.getItem(stepKey()));
 const probes=new Map();
 let filesFrame=0;
 function queueFilesRender() {if (!filesFrame) filesFrame=requestAnimationFrame(()=>{filesFrame=0;renderFiles();});}
-const projectUrl = new URL(location.href);
-let lastProject;
-try { lastProject = localStorage.getItem('editorkrab-last-project'); } catch (_) { /* Preferences are optional. */ }
-const projectId = projectUrl.searchParams.get('project') || lastProject || crypto.randomUUID();
-projectUrl.searchParams.set('project', projectId);
-history.replaceState(null, '', projectUrl);
-try { localStorage.setItem('editorkrab-last-project', projectId); } catch (_) { /* URL retains project identity. */ }
+// index.html loads this module only when the URL names a project; the start screen picks one.
+const projectId = new URL(location.href).searchParams.get('project');
+const json = body => ({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const linked = f => ({path:f.path,size:f.size,modified_ns:f.modified_ns});
+// path -> 'missing' | 'changed' for linked videos that are not where the project last saw them
+const lost = new Map();
 const speech=createTranscription({project:projectId,read:()=>draft,
  state:()=>({editing:editingAllowed,saved:!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved,revision:session?.record?.revision || 0}),
  writeEdit:edit=>{if(!editingAllowed)return;const entries=(draft.transcript_edits || []).filter(v=>v.job_id!==edit.job_id||v.segment_id!==edit.segment_id);if(edit.text!==edit.original_text)entries.push(edit);if(!validTranscriptEdits(entries))return;draft.transcript_edits=entries;save();},
@@ -60,7 +59,7 @@ function error(message) { $('error').textContent = message; $('error').hidden = 
 function editing(enabled) {
   editingAllowed = enabled;
   textEditor.editing(enabled);
-  for (const input of document.querySelectorAll('[data-step],[data-go],#title,#language,#plan,#pick,#folder,#open,.source-remove,#headlineReply,#applyHeadline,#headlinePacket')) input.disabled = !enabled;
+  for (const input of document.querySelectorAll('[data-step],[data-go],#title,#language,#plan,#pick,#folder,#open,.source-remove button,#headlineReply,#applyHeadline,#headlinePacket')) input.disabled = !enabled;
   renderHeadline();speech.refresh();
   $('undo').disabled = !enabled || !session?.record?.undo.length || !!session?.blocked || !!session?.volatile;
   $('redo').disabled = !enabled || !session?.record?.redo.length || !!session?.blocked || !!session?.volatile;
@@ -152,7 +151,8 @@ function renderFiles() {
     const probe=probes.get(file.source_id);
     li.dataset.state=probe?.status || 'pending';
     const info=document.createElement('p');info.className='file-info';
-    if (probe?.status==='succeeded') {
+    if (lost.has(file.path)) {li.dataset.state='failed';info.textContent=lost.get(file.path)==='changed' ? 'ไฟล์ถูกแก้ไขหรือแทนที่' : 'ไฟล์หาย';}
+    else if (probe?.status==='succeeded') {
       const video=probe.result.streams.find(s=>s.codec_type==='video');
       info.textContent=`${probe.result.duration_s.toFixed(1)} วินาที`+(video ? ` · ${video.width} × ${video.height}` : ' · เสียง');
       if(!probe.result.streams.some(s=>s.codec_type==='audio'))info.textContent+=' · ไม่มีเสียง ข้ามถอดเสียง';
@@ -162,10 +162,15 @@ function renderFiles() {
     else info.textContent=file.source_id ? 'กำลังตรวจข้อมูล' : file.upload_id ? 'ลากไฟล์เดิมมาวางเพื่อส่งต่อ' : 'ยังไม่พบวิดีโอต้นฉบับ';
     info.textContent=`${(file.size/1048576).toFixed(1)} MB · ${info.textContent}`;
     li.append(info);
-    const remove=document.createElement('button');remove.className='source-remove';remove.textContent='เอาออก';remove.disabled=!editingAllowed;
-    remove.setAttribute('aria-label',`เอา ${file.name} ออกจากรายการ`);
-    remove.onclick=()=>{if (!editingAllowed) return;draft.files.splice(index,1);save();renderFiles();};
-    li.append(remove);return li;
+    const actions=document.createElement('span');actions.className='source-remove row';
+    if (lost.has(file.path)) {
+      const find=document.createElement('button');find.textContent='หาไฟล์';find.disabled=!editingAllowed;
+      find.setAttribute('aria-label',`หาที่อยู่ใหม่ของ ${file.name}`);find.onclick=()=>relink(file);actions.append(find);
+    }
+    const remove=document.createElement('button');remove.textContent='ลบ';remove.disabled=!editingAllowed;
+    remove.setAttribute('aria-label',`ลบ ${file.name} ออกจากโปรเจกต์`);
+    remove.onclick=()=>removeFile(file);
+    actions.append(remove);li.append(actions);return li;
   }));
   $('empty').hidden=draft.files.length>0;
   document.querySelector('[data-panel="1"]').toggleAttribute('data-has-files',draft.files.length>0);
@@ -230,8 +235,21 @@ $('applyHeadline').onclick=async()=>{
 async function addFiles(files) {
   if (!editingAllowed || !session || session.blocked) return;
   const all=Array.from(files);
-  const supported=all.filter(f=>/\.(mp4|mov|m4v|mkv|avi|webm|mts|m2ts|wav|mp3|m4a|aac|flac|ogg|opus)$/i.test(f.name));
+  let supported=all.filter(f=>/\.(mp4|mov|m4v|mkv|avi|webm|mts|m2ts|wav|mp3|m4a|aac|flac|ogg|opus)$/i.test(f.name));
   if (!supported.length) {error('เลือกไฟล์วิดีโอหรือเสียง');return;}
+  editing(false);$('sourceStatus').textContent='กำลังหาไฟล์ต้นฉบับในเครื่อง';
+  let found=[];
+  try {
+    const response=await fetch(`/api/v1/projects/${encodeURIComponent(projectId)}/sources/locate`,json({files:supported.slice(0,1000).map(f=>({name:f.name,size:f.size,last_modified:f.lastModified}))}));
+    if (response.ok) found=(await response.json()).files;
+  } catch (_) { /* Not found means the copy below keeps the video safe in the project. */ }
+  editing(!session.blocked && !session.volatile);
+  if (!editingAllowed) return;
+  const links=found.filter(source=>source && !draft.files.some(f=>f.path===source.path));
+  if (draft.files.length+links.length>1000) {error('เลือกได้ครั้งละไม่เกิน 1,000 ไฟล์');return;}
+  if (links.length) {draft.files.push(...links);await save();renderFiles();}
+  supported=supported.filter((_,i)=>!found[i]);
+  if (!supported.length) {$('sourceStatus').textContent=`ลิงก์ ${links.length} ไฟล์`;return;}
   const sameUpload=(entry,file)=>entry.upload_id && entry.name===(file.webkitRelativePath || file.name) && entry.size===file.size && entry.last_modified===file.lastModified;
   const additions=supported.filter(file=>!draft.files.some(entry=>sameUpload(entry,file))).length;
   if (draft.files.length+additions>1000) {error('เลือกได้ครั้งละไม่เกิน 1,000 ไฟล์');return;}
@@ -277,6 +295,44 @@ async function addFiles(files) {
   }
 }
 $('cancelUpload').onclick=()=>activeUpload?.abort();
+// Never touches the original video: only copies the app kept inside the project folder go to the Recycle Bin.
+async function removeFile(file) {
+  if (!editingAllowed || !confirm(`ลบ "${file.name}" ออกจากโปรเจกต์?
+ไฟล์ต้นฉบับไม่ถูกลบ`)) return;
+  const index=draft.files.indexOf(file);if (index<0) return;
+  draft.files.splice(index,1);await save();renderFiles();
+  if (file.path) fetch(`/api/v1/projects/${encodeURIComponent(projectId)}/trash-file`,json({path:file.path})).catch(()=>{});
+}
+async function checkLinks() {
+  const files=draft.files.filter(f=>f.path);
+  if (!files.length) {lost.clear();return;}
+  try {
+    const response=await fetch('/api/v1/sources/check',json({files:files.map(linked)}));
+    if (!response.ok) return;
+    const {states}=await response.json();
+    lost.clear();files.forEach((f,i)=>{if (states[i]!=='ok') lost.set(f.path,states[i]);});
+    if (lost.size) error(`หาวิดีโอไม่เจอ ${lost.size} ไฟล์ กด "หาไฟล์" เพื่อชี้ที่อยู่ใหม่`);
+    renderFiles();
+  } catch (_) { /* The check is advisory; export re-checks every file before it starts. */ }
+}
+// Pointing at one moved video also relinks the others that moved into the same folder.
+async function relink(file) {
+  if (!editingAllowed) return;
+  editing(false);error('');
+  try {
+    const others=draft.files.filter(f=>f!==file && lost.has(f.path));
+    const response=await fetch('/api/v1/sources/relink',json({missing:[file,...others].map(linked)}));
+    const found=await response.json();
+    if (!response.ok) throw Error(found.error || 'relink_failed');
+    if (found.cancelled) return;
+    const swap=(path,source)=>{const i=draft.files.findIndex(f=>f.path===path);if (i>=0 && !draft.files.some(f=>f.path===source.path)) {draft.files[i]=source;lost.delete(path);}};
+    swap(file.path,found.picked);for (const other of found.others) swap(other.path,other.source);
+    await save();
+    $('sourceStatus').textContent=`เจอแล้ว ${1+found.others.length} ไฟล์`;
+  } catch (cause) {
+    error(cause.message==='picker_busy' ? 'หน้าต่างเลือกไฟล์เปิดอยู่ กลับไปเลือกหรือกดยกเลิก' : 'ชี้ไฟล์ใหม่ไม่ได้ ลองอีกครั้ง');
+  } finally {editing(!session.blocked && !session.volatile);renderFiles();}
+}
 async function pickNative(kind) {
   if (!editingAllowed) return;
   editing(false);$('sourceStatus').textContent='กำลังเลือกวิดีโอ';error('');
@@ -309,6 +365,7 @@ function downloadDraft() {
   const a = document.createElement('a'); a.href = url; a.download = 'editorkrab-ui-draft.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 $('backup').onclick = downloadDraft;
+$('allProjects').onclick = () => location.assign('/');
 $('theme').onclick = () => {
   const root=document.documentElement;
   const dark=root.dataset.theme ? root.dataset.theme==='dark' : !matchMedia('(prefers-color-scheme: light)').matches;
@@ -341,7 +398,7 @@ async function openCopy(document,sourceProject){
 }
 $('fork').onclick=()=>openCopy(structuredClone(draft),projectId);
 $('open').onclick = () => $('openFile').click();
-for (const id of ['open','backup']) $(id).addEventListener('click', () => { $(id).closest('details').open = false; });
+for (const id of ['open','backup','allProjects']) $(id).addEventListener('click', () => { $(id).closest('details').open = false; });
 $('openFile').onchange = async e => {
   const file = e.target.files[0]; if (!file) return;
   try {
@@ -390,6 +447,6 @@ try {
   }
 } finally {document.body.dataset.loading='false';}
 }
-render(); start();
+render(); start().then(checkLinks);
 // Step 6 builds from the saved draft only, so it waits for autosave like the AI packet does.
 var exporter=createExport({project:projectId,planReady,saved:()=>!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved});

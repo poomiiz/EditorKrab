@@ -85,6 +85,11 @@ impl Store {
         Ok((serde_json::from_str(&request)?, received, source))
     }
 
+    /// The project the upload was first started for; its copy lives in that project's folder.
+    pub fn upload_project(&self, id: &str) -> Result<String, Error> {
+        Ok(self.upload(id)?.0.project)
+    }
+
     pub fn begin_upload(&self, root: &Path, request: &Begin) -> Result<Progress, Error> {
         if request.project.trim().is_empty()
             || request.project.len() > 128
