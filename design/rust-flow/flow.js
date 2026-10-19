@@ -102,7 +102,7 @@ function renderSteps() {
     b.setAttribute('aria-label',`ขั้น ${n} ${b.querySelector('small').textContent}`+(finished ? ' เสร็จแล้ว' : ''));
   }
   // Next is the primary action only once its step's work is done; otherwise say what is missing.
-  const needs={1:[done[1],'ถอดเสียงให้เสร็จก่อน'],2:[done[1],'ถอดเสียงในขั้น 1 ก่อน'],3:[done[3],'วางคำตอบจาก AI ก่อน'],5:[false,'']};
+  const needs={1:[done[1],'ถอดเสียงให้เสร็จก่อน'],2:[done[1],''],3:[done[3],'วางคำตอบจาก AI ก่อน'],5:[false,'']};
   for (const foot of document.querySelectorAll('.stage-foot')) {
     const next=foot.querySelector('.actions [data-go]');if(!next)continue;
     const [ready,hint]=needs[Number(foot.closest('[data-panel]').dataset.panel)] || [true,''];
