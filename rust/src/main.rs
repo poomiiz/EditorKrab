@@ -282,14 +282,7 @@ async fn run_export(
             )
             .await?;
             verify_export(&ffprobe, &partial, story.duration_ms()).await?;
-            let name = editorkrab::export::file_name(
-                &[title.trim(), story.title.as_str()]
-                    .into_iter()
-                    .filter(|t| !t.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" - "),
-                &format!("EditorKrab {}", n + 1),
-            );
+            let name = editorkrab::export::story_name(&title, story, n);
             let target = editorkrab::export::unused_path(&folder, &name);
             // same drive: rename; otherwise copy, then the work folder is cleaned below
             if tokio::fs::rename(&partial, &target).await.is_err() {
@@ -376,6 +369,106 @@ async fn run_ffmpeg(
         return Err(format!("ffmpeg_failed:{last}"));
     }
     Ok(())
+}
+/// Step 6 "แก้ต่อใน CapCut": one CapCut project per story, written where CapCut lists projects.
+async fn capcut_export(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let id = project.clone();
+    let draft = database(runtime.clone(), move |store| {
+        store.read(&id)?.ok_or(Error::NotFound)
+    })
+    .await?;
+    let id = project.clone();
+    let jobs = database(runtime.clone(), move |store| store.list_jobs(&id)).await?;
+    let stories = editorkrab::export::plan(&draft.document, &jobs).map_err(export_error)?;
+    let mut media = std::collections::HashMap::new();
+    let ffprobe = ffprobe_path(&runtime.setup);
+    for source in stories.iter().flat_map(|s| &s.sources) {
+        if !source.is_file() {
+            return Err(export_error(format!("source_missing:{}", source.display())));
+        }
+        if !media.contains_key(source) {
+            let info = probe_media(&ffprobe, source).await.map_err(export_error)?;
+            media.insert(source.clone(), info);
+        }
+    }
+    let root = editorkrab::capcut::drafts_root().ok_or_else(|| export_error("capcut_not_found"))?;
+    let document = draft.document;
+    let made = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        let fonts = editorkrab::capcut::installed_fonts(&editorkrab::capcut::font_folders());
+        let lookup = |family: &str| fonts.get(&family.to_lowercase()).cloned();
+        let now_us = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_micros() as u64);
+        let title = document["title"].as_str().unwrap_or("").to_owned();
+        let (mut folders, mut missing) = (Vec::new(), Vec::<String>::new());
+        let mut skipped = Vec::new();
+        for (n, story) in stories.iter().enumerate() {
+            let folder = editorkrab::capcut::unused_folder(
+                &root,
+                &editorkrab::export::story_name(&title, story, n),
+            );
+            let info: Vec<_> = story.sources.iter().map(|s| media[s].clone()).collect();
+            let made = editorkrab::capcut::build(
+                story, &document, &info, &lookup, &root, &folder, now_us,
+            )?;
+            editorkrab::capcut::write(&folder, &made)?;
+            for font in made.missing_fonts {
+                if !missing.contains(&font) {
+                    missing.push(font);
+                }
+            }
+            skipped = editorkrab::export::speech_lines(story, &document).1;
+            folders.push(folder.display().to_string());
+        }
+        Ok(json!({"folders": folders, "missing_fonts": missing, "skipped": skipped}))
+    })
+    .await
+    .map_err(|e| export_error(format!("capcut_failed:{e}")))?
+    .map_err(export_error)?;
+    Ok(Json(made))
+}
+/// Length, picture size and whether there is sound, for a CapCut footage material.
+async fn probe_media(
+    ffprobe: &std::path::Path,
+    file: &std::path::Path,
+) -> Result<editorkrab::capcut::Media, String> {
+    let mut command = tokio::process::Command::new(ffprobe);
+    command
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:stream=codec_type,width,height",
+            "-of",
+            "json",
+        ])
+        .arg(file);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    let out = command
+        .output()
+        .await
+        .map_err(|e| format!("ffprobe_start:{e}"))?;
+    let info: Value = serde_json::from_slice(&out.stdout).map_err(|_| "source_unreadable")?;
+    let streams = info["streams"].as_array().cloned().unwrap_or_default();
+    let video = streams
+        .iter()
+        .find(|s| s["codec_type"] == "video")
+        .ok_or("source_unreadable")?;
+    let duration_ms = info["format"]["duration"]
+        .as_str()
+        .and_then(|d| d.parse::<f64>().ok())
+        .filter(|d| d.is_finite() && *d > 0.0)
+        .ok_or("source_unreadable")?;
+    Ok(editorkrab::capcut::Media {
+        duration_ms: (duration_ms * 1000.0).round() as u64,
+        width: video["width"].as_u64().ok_or("source_unreadable")?,
+        height: video["height"].as_u64().ok_or("source_unreadable")?,
+        has_audio: streams.iter().any(|s| s["codec_type"] == "audio"),
+    })
 }
 /// A clip is published only when ffprobe reads one video and one audio stream of the planned length.
 async fn verify_export(
@@ -1462,6 +1555,7 @@ async fn serve(
             "/api/v1/projects/{project}/export/reveal",
             post(reveal_export),
         )
+        .route("/api/v1/projects/{project}/capcut", post(capcut_export))
         .route(
             "/api/v1/projects/{project}/transcription",
             post(start_transcription),

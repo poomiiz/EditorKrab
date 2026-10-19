@@ -71,11 +71,17 @@ mod tests {
     fn accented_latin_words_stay_whole() {
         let words = super::split(" Ali Velazquez của Mexico về thứ 15, café naïve.").unwrap();
         for word in ["của", "về", "thứ", "15", "café", "naïve"] {
-            assert!(words.iter().any(|w| w == word), "{word} missing in {words:?}");
+            assert!(
+                words.iter().any(|w| w == word),
+                "{word} missing in {words:?}"
+            );
         }
         assert!(words.iter().any(|w| w == ","), "{words:?}");
         let mixed = super::split("ไปที่ café กับ thứ").unwrap();
-        assert!(mixed.iter().any(|w| w == "ไปที่") || mixed.iter().any(|w| w == "ไป"), "{mixed:?}");
+        assert!(
+            mixed.iter().any(|w| w == "ไปที่") || mixed.iter().any(|w| w == "ไป"),
+            "{mixed:?}"
+        );
         assert!(mixed.iter().any(|w| w == "café"), "{mixed:?}");
     }
 
