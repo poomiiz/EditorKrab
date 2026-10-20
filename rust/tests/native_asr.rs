@@ -34,6 +34,7 @@ async fn actual_native_chunk_cancel_timeout_and_source_guard() {
         timeout: Duration::from_secs(120),
         threads: 2,
         gpu: None,
+        ct2: None,
     };
     let (cancel, receiver) = watch::channel(false);
     let running = native_asr::run(&config, &source, &context, receiver.clone());

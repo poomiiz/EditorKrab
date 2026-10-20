@@ -1,0 +1,13 @@
+[package]
+name = "ek-asr-ct2"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Built apart from the app (needs the CUDA toolkit and cuDNN); see README.md.
+[workspace]
+
+[dependencies]
+ct2rs = { version = "=0.10.1", default-features = false, features = ["whisper", "cuda", "cudnn", "cuda-small-binary", "ruy"] }
+hound = "3"
+serde_json = "1"
