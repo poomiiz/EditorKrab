@@ -429,6 +429,16 @@ textarea{font-size:.75rem}
 #fileList li{grid-template-columns:24px 40px minmax(0,1fr) auto}#fileList li .file-pick{grid-row:1/3;width:18px;height:18px;margin:0;accent-color:var(--acc)}
 #fileList li .file-info{grid-column:3}#fileList li .source-remove{grid-column:4}
 @media(min-width:761px) and (min-height:561px){#fileList li{grid-template-columns:24px 32px minmax(0,1fr) auto}}
+.ai-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-md);width:100%;max-width:1100px;margin:0 auto}
+.ai-bar .packet-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm)}
+.plan-dialog{width:min(720px,92vw);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);color:var(--txt);padding:var(--space-xl)}
+.plan-dialog::backdrop{background:rgb(0 0 0 / .55)}.plan-dialog form{display:grid;gap:var(--space-md)}.plan-dialog textarea{min-height:45vh;width:100%}
+.plan-dialog-actions{justify-content:flex-end;gap:var(--space-sm)}
+.role-row{display:flex;align-items:center;gap:var(--space-sm);min-height:44px;border:1px solid var(--line);border-radius:var(--radius-sm);padding:0 0 0 var(--space-md)}
+.role-row:has(input:checked){border-color:var(--acc-soft)}
+.role-row input{width:18px;height:18px;margin:0;accent-color:var(--acc);cursor:pointer}
+.role-pick{flex:1;justify-content:flex-start;text-align:left;border:0;background:none;min-height:42px}
+.role-row[data-selected=true]{border-color:var(--acc);background:var(--acc-soft)}
 </style>
 </head>
 <body data-loading="true">
@@ -486,10 +496,10 @@ textarea{font-size:.75rem}
 <div class="stage-body">
 <section id="storyCards" class="story-groups" aria-label="เรื่องที่แบ่งได้" hidden></section>
 <section id="timeline" class="timeline" aria-labelledby="timelineTitle"><div class="row"><h2 id="timelineTitle">ข้อความจากวิดีโอ</h2><p id="timelineStatus" class="caption" role="status"></p></div><progress id="timelineProgress" aria-label="ช่วงเสียงที่ถอดสำเร็จ" hidden></progress><div id="timelineTrack" class="timeline-track"></div><p class="caption">ชี้ที่กล่องเพื่อเลือก กดเพื่อฟังท่อนนั้น เลื่อนซ้ายขวาดูทั้งคลิป</p></section>
-<ol class="ai-steps"><li class="current"><div><h2 id="transcriptPacketTitle">ถอดเสียงในขั้น 1 ก่อน</h2><p id="transcriptPacketHint" class="caption">เมื่อถอดครบ จะรวมคำพูดกับคำสั่งให้ AI ในไฟล์เดียว</p><p id="transcriptPacketError" class="field-warning" role="alert" hidden></p></div><div class="packet-actions"><button id="transcriptPacket" class="primary" disabled>ดาวน์โหลดไฟล์</button><button id="transcriptCopy" disabled hidden>คัดลอกให้ AI</button><button id="transcriptGoPrepare" class="primary" data-go="1" hidden>ไปขั้น 1</button></div></li><li><div><h2>แนบไฟล์ หรือวางข้อความที่คัดลอกในแชท AI</h2><p class="caption">เช่น ChatGPT, Gemini หรือ Claude</p></div></li><li><div><h2>คัดลอกคำตอบทั้งหมด</h2><p class="caption">แล้วไปวางในขั้นถัดไป</p></div></li></ol>
-<section class="plan-answer" aria-labelledby="planTitle"><div class="row"><h2 id="planTitle">วางคำตอบจาก AI</h2><p id="planStatus" class="badge plan-status" role="status"></p></div>
+<div class="ai-bar"><div><h2 id="transcriptPacketTitle" class="sr-only">ถอดเสียงในขั้น 1 ก่อน</h2><p id="transcriptPacketHint" class="caption">เมื่อถอดครบ จะรวมคำพูดกับคำสั่งให้ AI ในไฟล์เดียว</p><p id="transcriptPacketError" class="field-warning" role="alert" hidden></p></div><div class="packet-actions"><button id="transcriptPacket" class="primary" disabled>ดาวน์โหลดไฟล์</button><button id="transcriptCopy" disabled hidden>คัดลอกให้ AI</button><button id="transcriptGoPrepare" class="primary" data-go="1" hidden>ไปขั้น 1</button><button id="planOpen" type="button">วางข้อมูลจาก AI</button><p id="planStatus" class="badge plan-status" role="status"></p></div></div>
+<dialog id="planDialog" class="plan-dialog" aria-labelledby="planTitle"><form method="dialog"><h2 id="planTitle">วางข้อมูลจาก AI</h2><p class="caption">คัดลอกคำตอบทั้งหมดจากแชท AI แล้ววางในช่องนี้</p>
 <label class="field plan-field"><span class="sr-only">คำตอบจาก AI</span><textarea id="plan" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label>
-</section>
+<div class="row plan-dialog-actions"><button value="close">ปิด</button><button value="close" class="primary">ใช้คำตอบนี้</button></div></form></dialog>
 </div>
 <div class="stage-foot"><button class="back" data-go="1">ย้อนกลับ</button><div class="actions"><button data-go="3">ถัดไป</button></div></div>
 </section>
@@ -512,7 +522,7 @@ textarea{font-size:.75rem}
 <div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
 <div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><span class="badge">9:16</span></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
 <aside class="text-inspector" aria-label="ปรับข้อความ">
-<fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><label><input type="checkbox" data-role-option="speech">คำพูด</label><label><input type="checkbox" data-role-option="emphasis">คำสำคัญ</label><label><input type="checkbox" data-role-option="english">คำแปลอังกฤษ</label></fieldset>
+<fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำสำคัญ</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">คำแปลอังกฤษ</button></div></fieldset>
 <div id="headlineActions" class="row" hidden><button id="addHeadline" class="primary">เพิ่มข้อความ</button><button id="removeHeadline">ลบข้อความนี้</button></div>
 <p id="textSelectionHint" class="selection-hint">ติ๊กอย่างน้อย 1 อย่าง</p>
 <div id="textControls" class="text-controls" hidden><h2 id="textRoleTitle">ข้อความพูด</h2>

@@ -215,6 +215,14 @@ for (const b of document.querySelectorAll('[data-step]')) b.onclick = () => { up
 // chat apps wrap a JSON answer in ``` fences or add a line around it; keep only the JSON object when that is what was pasted
 const unwrapAnswer=text=>{const open=text.indexOf('{'),close=text.lastIndexOf('}');if(open<0||close<open)return text;const inner=text.slice(open,close+1);try{JSON.parse(inner);return inner;}catch(_){return text;}};
 for (const id of ['title', 'language', 'plan']) $(id).addEventListener('input', () => { draft[id] = id==='plan' ? unwrapAnswer($(id).value) : $(id).value; save(); if (id === 'plan') {validate();renderHeadline();renderSteps();stories.renderCards();} });
+// a subtitle kind's name selects it for styling (and turns it on); its checkbox only shows or hides it
+for(const button of document.querySelectorAll('[data-role-pick]'))button.onclick=()=>{
+ const role=button.dataset.rolePick;
+ if(editingAllowed&&!(draft.text_roles || []).includes(role)){draft.text_roles=[...(draft.text_roles || []),role];save();renderSteps();}
+ textEditor.select(role);
+};
+$('planOpen').onclick=()=>{$('planDialog').showModal();$('plan').focus();};
+$('planDialog').addEventListener('close',()=>{stories.renderCards();renderSteps();});
 for(const input of document.querySelectorAll('[data-role-option]'))input.onchange=()=>{
  if(!editingAllowed)return;draft.text_roles=[...document.querySelectorAll('[data-role-option]:checked')].map(n=>n.dataset.roleOption);save();textEditor.render();renderSteps();
 };
