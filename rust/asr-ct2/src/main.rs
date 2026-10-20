@@ -607,6 +607,13 @@ fn line_starts(words: &[Word], language: &str) -> Vec<usize> {
     const SHORTEST: f32 = 1.0;
     const LONGEST: f32 = 3.5;
     let mut ok = word_starts(words, language);
+    if language == "th" {
+        // A dictionary boundary is a word, not a phrase: lines broke at "จุด|นี้" and inside loanwords
+        // ("มอนิเตอริ|ง"). Thai writing puts a space between phrases, so a Thai line starts only after one.
+        for (start, w) in ok.iter_mut().zip(words) {
+            *start &= w.2.starts_with(char::is_whitespace);
+        }
+    }
     ok[0] = false;
     let last_end = words[words.len() - 1].1;
     let mut cuts = Vec::new();
@@ -828,6 +835,22 @@ mod tests {
             w(1.2, 1.5, "\u{0e48}"),
         ];
         assert_eq!(word_starts(&words, "th"), vec![true, false, true, false]);
+    }
+    #[test]
+    fn thai_lines_break_only_between_phrases() {
+        // "จุดนี้" are two dictionary words with a pause between them; the line still waits for the space
+        let words = vec![
+            w(0.0, 1.0, "พลังงานไฟฟ้าสูงขึ้นจุด"),
+            w(1.5, 2.6, "นี้เราก็พัฒนา"),
+            w(3.0, 4.2, " ร่วมกับลูกค้า"),
+        ];
+        assert_eq!(line_starts(&words, "th"), vec![0, 2, 3]);
+        let words = vec![
+            w(0.0, 1.0, "hello"),
+            w(1.5, 2.6, " world"),
+            w(3.0, 4.2, " again"),
+        ];
+        assert_eq!(line_starts(&words, "en"), vec![0, 1, 2, 3]);
     }
     #[test]
     fn lines_break_at_pauses_and_stay_in_order_inside_the_audio() {
