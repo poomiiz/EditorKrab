@@ -1,8 +1,12 @@
 # ek-asr-ct2: GPU transcription sidecar
 
 A small program the app keeps running while it transcribes on an NVIDIA GPU. It loads Whisper large-v3 once
-through CTranslate2 (the engine v0.29.1 used through faster-whisper) and answers one request per chunk, decoding
-15-second windows eight at a time. The app starts it when a video is imported, stops it after 15 idle minutes,
+through CTranslate2 (the engine v0.29.1 used through faster-whisper) and answers one request per chunk. Decoding
+copies v0.29.1's settings (`app/video_edit.py:413-534` at `020c899`): 15-second windows running 1 s past their
+end, even windows then odd ones, eight per batch, beam 5, no timestamp tokens, faster-whisper's log-mel features
+and suppressed tokens, word times from the cross-attention alignment, seams cut between whole words (ICU4X's
+dictionary segmenter in place of pythainlp), loops dropped and lines grouped by pauses. The app sends it 4-minute
+pieces, so every batch is full. The app starts it when a video is imported, stops it after 15 idle minutes,
 and falls back to whisper.cpp (GPU, then CPU) whenever it is missing or fails.
 
 ## What the app looks for
@@ -41,7 +45,7 @@ then reads one JSON request per line on stdin and answers one line each, until s
 
 ```
 in:  {"wav":"chunk.wav","language":"auto","decode":"th","out":"chunk.json"}
-out: {"ok":true,"transcribe_ms":8123,"words":412}
+out: {"ok":true,"transcribe_ms":8123,"words":412,"features_ms":40,"decode_ms":7600,"align_ms":480}
 ```
 
 `language` is what the job asked for (the app detects the language with whisper.cpp first when it is `auto`);

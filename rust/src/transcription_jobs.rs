@@ -18,16 +18,27 @@ pub struct StartRequest {
     pub settings: Settings,
 }
 
+/// whisper.cpp reads 5-minute pieces.
+pub const CHUNK_MS: u64 = 300_000;
+/// The CTranslate2 sidecar cuts 15 s windows and decodes the even ones, then the odd ones, 8 at a time. A
+/// 4-minute piece is 16 windows, two full batches; a 5-minute one leaves its batches part-empty (11 min clip:
+/// 51 s instead of the 41 s the whole file takes).
+pub const CT2_CHUNK_MS: u64 = 240_000;
+
 pub fn ranges(duration_ms: u64) -> Result<Vec<(u64, u64)>, Error> {
-    if duration_ms == 0 {
+    ranges_every(duration_ms, CHUNK_MS)
+}
+
+pub fn ranges_every(duration_ms: u64, every: u64) -> Result<Vec<(u64, u64)>, Error> {
+    if duration_ms == 0 || every == 0 {
         return Err(Error::InvalidInput);
     }
     if duration_ms > 30_000_000 {
         return Err(Error::TranscriptionLimit);
     }
     Ok((0..duration_ms)
-        .step_by(300_000)
-        .map(|start| (start, (start + 300_000).min(duration_ms)))
+        .step_by(every as usize)
+        .map(|start| (start, (start + every).min(duration_ms)))
         .collect())
 }
 
@@ -136,13 +147,14 @@ impl Store {
         project: &str,
         request: &StartRequest,
     ) -> Result<Vec<Job>, Error> {
-        self.start_transcription_checked(project, request, None)
+        self.start_transcription_checked(project, request, None, CHUNK_MS)
     }
     pub fn start_transcription_checked(
         &mut self,
         project: &str,
         request: &StartRequest,
         actual_source: Option<&crate::native_asr::Artifact>,
+        chunk_ms: u64,
     ) -> Result<Vec<Job>, Error> {
         if !jobs::identifier(project)
             || !jobs::identifier(&request.request_id)
@@ -191,7 +203,7 @@ impl Store {
             let (path, mut context) = selected(&document, file, request)?;
             let duration =
                 jobs::validate_transcription_source(&tx, project, &document, &path, &context)?;
-            let planned = ranges(duration)?;
+            let planned = ranges_every(duration, chunk_ms)?;
             let existing=tx.prepare("SELECT id,task FROM jobs WHERE project_id=?1 ORDER BY CASE status WHEN 'succeeded' THEN 0 WHEN 'running' THEN 1 WHEN 'queued' THEN 2 ELSE 3 END,rowid")?
                 .query_map([project],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?
                 .into_iter().map(|(id,task)|Ok((id,serde_json::from_str::<Task>(&task)?))).collect::<Result<Vec<_>,Error>>()?;
@@ -301,6 +313,11 @@ mod tests {
         assert_eq!(ranges(30000000).unwrap().len(), 100);
         assert!(matches!(ranges(30000001), Err(Error::TranscriptionLimit)));
         assert!(ranges(0).is_err());
+        // the CT2 sidecar gets 4-minute pieces, inside the 5-minute limit every job context keeps
+        assert_eq!(
+            ranges_every(657_600, CT2_CHUNK_MS).unwrap(),
+            vec![(0, 240_000), (240_000, 480_000), (480_000, 657_600)]
+        );
     }
     #[test]
     fn requests_reuse_chunks_and_preserve_partial_completion() {

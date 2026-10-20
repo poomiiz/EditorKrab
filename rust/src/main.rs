@@ -743,6 +743,11 @@ async fn start_transcription(
     })
     .await?;
     let expected = body.settings.clone();
+    let chunk_ms = if configured.0.ct2.is_some() {
+        editorkrab::transcription_jobs::CT2_CHUNK_MS
+    } else {
+        editorkrab::transcription_jobs::CHUNK_MS
+    };
     let source = tokio::task::spawn_blocking(move || {
         if AsrSettings::read(&configured.0)? != expected {
             return Err("transcription_settings_changed".to_string());
@@ -753,7 +758,7 @@ async fn start_transcription(
     .map_err(|_| failure(Error::Unavailable))?
     .map_err(|error| (StatusCode::CONFLICT, Json(json!({"error":error}))))?;
     database(runtime, move |store| {
-        store.start_transcription_checked(&project, &body, Some(&source))
+        store.start_transcription_checked(&project, &body, Some(&source), chunk_ms)
     })
     .await
     .map(Json)

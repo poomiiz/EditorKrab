@@ -80,6 +80,26 @@ impl Artifact {
             return Err("transcription_dependency_not_file".into());
         }
         let stamp = sources::stamp(&metadata).map_err(|_| "transcription_dependency_unreadable")?;
+        // Every chunk reads the source, the model and the tools twice; a 3 GB model and an 8 GB
+        // camera file cost seconds each time. A file whose size and nanosecond stamp are unchanged
+        // since this process hashed it keeps that hash.
+        static HASHED: std::sync::OnceLock<
+            std::sync::Mutex<std::collections::HashMap<PathBuf, (u64, String, String)>>,
+        > = std::sync::OnceLock::new();
+        let hashed = HASHED.get_or_init(Default::default);
+        if let Some((_, _, sha256)) = hashed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&path)
+            .filter(|(size, at, _)| *size == metadata.len() && *at == stamp)
+        {
+            return Ok(Self {
+                path: path.clone(),
+                size: metadata.len(),
+                modified_ns: stamp,
+                sha256: sha256.clone(),
+            });
+        }
         let mut file =
             std::fs::File::open(&path).map_err(|_| "transcription_dependency_unreadable")?;
         let mut hash = Sha256::new();
@@ -104,11 +124,16 @@ impl Artifact {
         {
             return Err("transcription_dependency_changed".into());
         }
+        let sha256 = format!("{:x}", hash.finalize());
+        hashed.lock().unwrap_or_else(|e| e.into_inner()).insert(
+            path.clone(),
+            (metadata.len(), stamp.clone(), sha256.clone()),
+        );
         Ok(Self {
             path,
             size: metadata.len(),
             modified_ns: stamp,
-            sha256: format!("{:x}", hash.finalize()),
+            sha256,
         })
     }
     fn verify(&self, cancel: &watch::Receiver<bool>) -> Result<(), String> {
@@ -533,10 +558,29 @@ async fn run_ct2(
     dir: &Path,
     cancel: &watch::Receiver<bool>,
 ) -> Result<Vec<u8>, String> {
-    let decode = if context.language == "auto" {
-        detect_language(config, detector, model, audio, cancel).await?
-    } else {
+    // one detection per video run: later chunks of the same run reuse the first chunk's answer
+    static DETECTED: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<(String, String), String>>,
+    > = std::sync::OnceLock::new();
+    let run = (context.source.id.clone(), context.run_id.clone());
+    let known = DETECTED
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&run)
+        .cloned();
+    let decode = if context.language != "auto" {
         context.language.clone()
+    } else if let Some(language) = known {
+        language
+    } else {
+        let language = detect_language(config, detector, model, audio, cancel).await?;
+        DETECTED
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(run, language.clone());
+        language
     };
     let out = dir.join("ct2.json");
     sidecar

@@ -118,6 +118,7 @@ impl Ct2 {
                 ready["error"].as_str().unwrap_or("")
             ));
         }
+        eprintln!("transcription_ct2_loaded: {} ms", ready["load_ms"]);
         Ok(Running {
             child,
             stdin,
@@ -175,6 +176,7 @@ impl Ct2 {
         };
         match result {
             Ok(reply) if reply["ok"] == true => {
+                eprintln!("transcription_ct2_decoded: {} ms", reply["transcribe_ms"]);
                 r.used = Instant::now();
                 Ok(())
             }
