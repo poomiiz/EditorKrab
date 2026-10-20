@@ -167,14 +167,22 @@ function validate() {
   $('planStatus').hidden=!draft.plan.trim();
   $('planStatus').textContent=planReady() ? 'อ่านคำตอบได้' : 'คำตอบยังไม่ครบ ลองคัดลอกใหม่ทั้งหมด';
 }
+// files picked with their checkboxes on step 1, by source (or upload) id; only this page uses it
+const picked=new Set();
+const fileKey=file=>file.source_id || file.upload_id || file.path || file.name;
+$('selectAll').onchange=()=>{picked.clear();if($('selectAll').checked)for(const f of draft.files)picked.add(fileKey(f));renderFiles();};
+$('removeSelected').onclick=()=>{if(!editingAllowed||!picked.size)return;draft.files=draft.files.filter(f=>!picked.has(fileKey(f)));picked.clear();save();render();};
 function renderFiles() {
   let duration=0,ready=0;
+  for(const key of [...picked])if(!draft.files.some(f=>fileKey(f)===key))picked.delete(key);
   $('fileList').replaceChildren(...draft.files.map((file,index)=>{
     const li=document.createElement('li');
     const icon=document.createElement('span');icon.className='file-icon';icon.setAttribute('aria-hidden','true');
     icon.textContent=file.name.includes('.') ? file.name.split('.').pop().toUpperCase().slice(0,4) : 'FILE';
     const name=document.createElement('span');name.className='file-name';name.textContent=file.name;name.title=file.name;
-    li.append(icon,name);
+    const pick=document.createElement('input');pick.type='checkbox';pick.className='file-pick';pick.checked=picked.has(fileKey(file));pick.disabled=!editingAllowed;
+    pick.setAttribute('aria-label',`เลือก ${file.name}`);pick.onchange=()=>{if(pick.checked)picked.add(fileKey(file));else picked.delete(fileKey(file));renderFiles();};
+    li.append(pick,icon,name);
     const probe=probes.get(file.source_id);
     li.dataset.state=probe?.status || 'pending';
     const info=document.createElement('p');info.className='file-info';
@@ -193,6 +201,9 @@ function renderFiles() {
     remove.onclick=()=>{if (!editingAllowed) return;draft.files.splice(index,1);save();renderFiles();};
     li.append(remove);return li;
   }));
+  $('selectAllLabel').hidden=!draft.files.length;$('selectAll').disabled=!editingAllowed;
+  $('selectAll').checked=draft.files.length>0&&picked.size===draft.files.length;$('selectAll').indeterminate=picked.size>0&&picked.size<draft.files.length;
+  $('removeSelected').hidden=!picked.size;$('removeSelected').disabled=!editingAllowed;$('removeSelected').textContent=`ลบที่เลือก (${picked.size})`;
   $('empty').hidden=draft.files.length>0;
   document.querySelector('[data-panel="1"]').toggleAttribute('data-has-files',draft.files.length>0);
   $('fileCount').textContent=`${draft.files.length} ไฟล์`;
@@ -201,7 +212,9 @@ function renderFiles() {
   renderSteps();speech.refresh();
 }
 for (const b of document.querySelectorAll('[data-step]')) b.onclick = () => { upgradeFlow();draft.step = Number(b.dataset.step); rememberStep(); render(); };
-for (const id of ['title', 'language', 'plan']) $(id).addEventListener('input', () => { draft[id] = $(id).value; save(); if (id === 'plan') {validate();renderHeadline();renderSteps();} });
+// chat apps wrap a JSON answer in ``` fences or add a line around it; keep only the JSON object when that is what was pasted
+const unwrapAnswer=text=>{const open=text.indexOf('{'),close=text.lastIndexOf('}');if(open<0||close<open)return text;const inner=text.slice(open,close+1);try{JSON.parse(inner);return inner;}catch(_){return text;}};
+for (const id of ['title', 'language', 'plan']) $(id).addEventListener('input', () => { draft[id] = id==='plan' ? unwrapAnswer($(id).value) : $(id).value; save(); if (id === 'plan') {validate();renderHeadline();renderSteps();stories.renderCards();} });
 for(const input of document.querySelectorAll('[data-role-option]'))input.onchange=()=>{
  if(!editingAllowed)return;draft.text_roles=[...document.querySelectorAll('[data-role-option]:checked')].map(n=>n.dataset.roleOption);save();textEditor.render();renderSteps();
 };
@@ -404,7 +417,8 @@ try {
   if (session.created) {
     try { localStorage.setItem(key + '-migrated', projectId); } catch (_) { /* Raw legacy data remains untouched. */ }
   }
-} catch (_) {
+} catch (failure) {
+  console.error('draft_open_failed',failure);
   try {
     const original = localStorage.getItem(key);
     if (original) localStorage.setItem(key + '-recovery-' + Date.now(), original);
