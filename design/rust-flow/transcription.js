@@ -7,7 +7,7 @@ export function validTranscriptEdits(value){
  if(value===undefined)return true;
  return Array.isArray(value)&&value.length<=10000&&new Set(value.map(v=>JSON.stringify([v?.job_id,v?.segment_id]))).size===value.length&&value.every(v=>v&&Object.keys(v).length===5&&['job_id','segment_id'].every(k=>typeof v[k]==='string'&&v[k].length>0&&v[k].length<=256&&!/[\u0000-\u001f\u007f-\u009f]/.test(v[k]))&&/^[a-fA-F0-9]{64}$/.test(v.source_sha256)&&['text','original_text'].every(k=>typeof v[k]==='string'&&v[k].length<=2000));
 }
-export function createTranscription({project,read,state,writeEdit,changed}){
+export function createTranscription({project,read,state,writeEdit,changed,started=()=>{}}){
  const jobs=new Map();let settings=null,configuration='loading',download=null,downloadError='',downloadTimer=0,busy=false,stopStarting=false,page=0,chosen='',rowsKey='',audio,stopAt=0;
  let settingsGeneration=0,notice='',packetNotice='',playing=null;const suggestions=new Map(),fixAsked=new Set();
  const failed=new Set(['failed','cancelled']);
@@ -19,8 +19,11 @@ export function createTranscription({project,read,state,writeEdit,changed}){
  function active(){return [...jobs.values()].filter(j=>j.task.kind==='transcribe'&&['queued','running'].includes(j.status));}
  function probe(file){return [...jobs.values()].find(j=>j.task.kind==='probe'&&j.task.path===file.path&&stamp(j.task.source)===stamp({id:file.source_id,size:file.size,modified_ns:file.modified_ns})&&j.status==='succeeded');}
  function eligible(){return read().files.filter(f=>f.source_id&&probe(f)?.result?.streams?.some(s=>s.codec_type==='audio'));}
+ // whisper.cpp jobs are 5-minute pieces, CT2 sidecar jobs 4-minute ones (transcription_jobs.rs); follow whichever the jobs use
  function ranges(file){const duration=Math.ceil((probe(file)?.result?.duration_s || 0)*1000);if(!duration || duration>30000000)return [];
-  return Array.from({length:Math.ceil(duration/300000)},(_,n)=>[n*300000,Math.min(duration,(n+1)*300000)]);
+  const grid=step=>Array.from({length:Math.ceil(duration/step)},(_,n)=>[n*step,Math.min(duration,(n+1)*step)]);
+  const fits=step=>matching(file).filter(j=>grid(step).some(([a,b])=>j.task.context.start_ms===a&&j.task.context.end_ms===b)).length;
+  return grid(fits(240000)>fits(300000)?240000:300000);
  }
  function matching(file){return [...jobs.values()].filter(j=>j.task.kind==='transcribe'&&j.task.path===file.path&&stamp(j.task.context.source)===stamp({id:file.source_id,size:file.size,modified_ns:file.modified_ns})&&j.task.context.language===read().language&&configKey(j.task.settings)===configKey(settings));}
  function chunks(file){return ranges(file).map(([start,end])=>matching(file).filter(j=>j.task.context.start_ms===start&&j.task.context.end_ms===end).sort((a,b)=>(a.status==='succeeded'?-1:0)-(b.status==='succeeded'?-1:0)||b.created_at-a.created_at||a.id.localeCompare(b.id))[0]);}
@@ -122,6 +125,7 @@ export function createTranscription({project,read,state,writeEdit,changed}){
     if(!Array.isArray(returned))throw Error('รูปแบบงานไม่ถูกต้อง');for(const job of returned)jobs.set(job.id,job);refresh();
     if(stopStarting)for(const job of returned.filter(j=>['queued','running'].includes(j.status)))await request(`/api/v1/jobs/${encodeURIComponent(job.id)}/cancel`,{});
    }
+   if(!stopStarting)started();
   }catch(error){notice=error.name==='TimeoutError'?'ยังไม่ได้รับคำตอบ งานอาจเริ่มแล้ว ตรวจสถานะก่อนลองใหม่':error.message;}
   finally{busy=false;refresh();}
  };
@@ -187,7 +191,7 @@ export function createTranscription({project,read,state,writeEdit,changed}){
    const content={language:read().language,settings:{engine_sha256:settings.engine.sha256,model_sha256:settings.model.sha256,ffmpeg_sha256:settings.ffmpeg.sha256,threads:settings.threads},sources};
    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(content))),hash=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
    if(!state().saved||state().revision!==saved.revision||JSON.stringify(snapshotDraft)!==JSON.stringify(read())||!complete())throw Error('งานเปลี่ยนแล้ว ดาวน์โหลดใหม่อีกครั้ง');
-   const packet={schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,content,instructions:'แบ่งเรื่องและเรียงช่วงพูดโดยอ้าง segment_ids ที่ให้เท่านั้น ห้ามสร้างเวลาใหม่ รักษาตอนจบให้ครบ ไม่ถือว่าคนละไฟล์คือกล้องซิงก์กัน เวลาระดับคำและคนพูดยังไม่ยืนยัน ส่ง JSON ตาม response_schema',response_schema:{schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,stories:[{id:'story-1',title:'ชื่อเรื่อง',segment_ids:[]}]}};
+   const packet={schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,content,instructions:'แบ่งเรื่องและเรียงช่วงพูดโดยอ้าง segment_ids ที่ให้เท่านั้น ห้ามสร้างเวลาใหม่ รักษาตอนจบให้ครบ แต่ละเรื่องใช้ช่วงพูดจากไฟล์เดียวเท่านั้น ไม่ถือว่าคนละไฟล์คือกล้องซิงก์กัน ใส่ summary สรุปเนื้อหาเรื่องละ 1-2 ประโยค เวลาระดับคำและคนพูดยังไม่ยืนยัน ส่ง JSON ตาม response_schema',response_schema:{schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,stories:[{id:'story-1',title:'ชื่อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[]}]}};
    await deliver(packet);
   }catch(error){packetNotice=error.message;}finally{busy=false;refresh();}
  }
@@ -199,7 +203,7 @@ export function createTranscription({project,read,state,writeEdit,changed}){
  });
  queueMicrotask(loadSettings);queueMicrotask(()=>gpuCall('/api/v1/transcription/gpu'));
  // Every subtitle line as it will show (hand edit if any), timed on its own source file.
- function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name})));}
+ function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name})));}
  function find(id){for(const file of eligible())for(const row of segments(file))if(row.job.id+'|'+row.segment.id===id)return {file,...row};throw Error('line_not_found');}
  // For checking lines from the subtitle step: hear one line, or replace its text (kept as a hand edit and learned).
  function listen(id){const {file,segment}=find(id);return play(file,segment);}

@@ -4,6 +4,7 @@ import {uploadFile} from './uploads.js';
 import {createTranscription,validTranscriptEdits} from './transcription.js';
 import {createTextQc} from './text-qc.js';
 import {createExport} from './export.js';
+import {createStories} from './stories.js';
 import {createStyleEditor,validTextStyles,validHeadlineItems,defaults} from './text-style.js';
 const $ = id => document.getElementById(id);
 const key = 'editorkrab-rust-flow-prototype-v1';
@@ -33,7 +34,9 @@ try { localStorage.setItem('editorkrab-last-project', projectId); } catch (_) { 
 const speech=createTranscription({project:projectId,read:()=>draft,
  state:()=>({editing:editingAllowed,saved:!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved,revision:session?.record?.revision || 0}),
  writeEdit:edit=>{if(!editingAllowed)return;const entries=(draft.transcript_edits || []).filter(v=>v.job_id!==edit.job_id||v.segment_id!==edit.segment_id);if(edit.text!==edit.original_text)entries.push(edit);if(!validTranscriptEdits(entries))return;draft.transcript_edits=entries;save();},
- changed:()=>queueMicrotask(renderSteps)});
+ changed:()=>queueMicrotask(()=>{renderSteps();renderTimeline();stories.renderCards();if(activeStep(draft)===3)stories.renderEditor();}),
+ // pressing transcribe moves on to step 2, where the transcript fills in while the person prepares the AI step
+ started:()=>{if(activeStep(draft)===1)document.querySelector('[data-step="2"]').click();}});
 
 window.addEventListener('beforeunload', event => { if (unsaved || activeUpload) { event.preventDefault(); event.returnValue = ''; } });
 function valid(d) {
@@ -102,7 +105,7 @@ function renderSteps() {
     b.setAttribute('aria-label',`ขั้น ${n} ${b.querySelector('small').textContent}`+(finished ? ' เสร็จแล้ว' : ''));
   }
   // Next is the primary action only once its step's work is done; otherwise say what is missing.
-  const needs={1:[done[1],''],2:[done[1],''],3:[done[3],'วางคำตอบจาก AI ก่อน'],5:[false,'']};
+  const needs={1:[done[1],''],2:[done[2],'วางคำตอบจาก AI ก่อน'],3:[done[3],'ตรวจให้ครบทุกเรื่อง'],5:[false,'']};
   for (const foot of document.querySelectorAll('.stage-foot')) {
     const next=foot.querySelector('.actions [data-go]');if(!next)continue;
     const [ready,hint]=needs[Number(foot.closest('[data-panel]').dataset.panel)] || [true,''];
@@ -122,6 +125,29 @@ const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('t
   if(finding.kind!=='headline'){speech.edit(finding.id,text);return;}
   const id=finding.id.slice('headline:'.length);draft.headline_items=headlineItems().map(h=>h.id===id?{...h,text}:h);save();textEditor.render();renderHeadline();
  }});
+const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,
+ write:change=>{if(!editingAllowed)return;change(draft);save();render();},
+ go:step=>document.querySelector(`[data-step="${step}"]`).click()});
+const shortClock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
+// Step 2's timeline: one box per transcript line, in time order; a box plays its own stretch of the video.
+function renderTimeline(){
+  const track=$('timelineTrack'),progress=$('transcribeProgress'),shown=$('timelineProgress');
+  $('timelineStatus').textContent=$('transcribeHint').textContent;
+  shown.hidden=progress.hidden;if(progress.hasAttribute('value')){shown.max=progress.max;shown.value=progress.value;}else shown.removeAttribute('value');
+  const lines=speech.texts(),complete=speech.complete(),key=JSON.stringify([lines.map(l=>[l.id,l.text]),complete]);
+  if(track.dataset.key===key)return;track.dataset.key=key;
+  const boxes=[];let source='';
+  for(const line of lines){
+    if(line.source!==source&&new Set(lines.map(l=>l.source)).size>1){source=line.source;const head=document.createElement('span');head.className='timeline-file caption';head.textContent=source;boxes.push(head);}
+    const box=document.createElement('button');box.type='button';box.className='timeline-seg';box.title='กดเพื่อฟังท่อนนี้';
+    const at=document.createElement('span');at.className='timeline-time caption';at.textContent=shortClock(line.start_ms);
+    const text=document.createElement('span');text.textContent=line.text;box.append(at,text);
+    box.onclick=()=>{for(const other of track.querySelectorAll('.playing'))other.classList.remove('playing');box.classList.add('playing');try{speech.listen(line.id);}catch(_){box.classList.remove('playing');}};
+    boxes.push(box);
+  }
+  if(!complete){const wait=document.createElement('div');wait.className='timeline-seg timeline-wait';wait.textContent=lines.length?'กำลังถอดเสียงส่วนที่เหลือ…':'ยังไม่มีข้อความ ถอดเสียงในขั้น 1';boxes.push(wait);}
+  track.replaceChildren(...boxes);
+}
 function render() {
   renderSteps();
   for (const p of document.querySelectorAll('[data-panel]')) p.hidden = Number(p.dataset.panel) !== activeStep(draft);
@@ -131,12 +157,12 @@ function render() {
   textEditor.render();
   for (const id of ['title', 'language', 'plan']) $(id).value = draft[id];
   $('headlineReply').value=draft.headline_reply || '';
-  renderHeadline();speech.refresh(true);
+  renderHeadline();speech.refresh(true);renderTimeline();stories.renderCards();stories.warm();if(activeStep(draft)===3)stories.renderEditor();
   validate();
 }
 for(const button of document.querySelectorAll('[data-go]'))button.onclick=()=>{document.querySelector(`[data-step="${button.dataset.go}"]`).click();$('workspace').focus();$('workspace').scrollIntoView({block:'start'});};
 function planReady(){try{return !!draft.plan.trim() && !!JSON.parse(draft.plan);}catch(_){return false;}}
-function stepsDone(){return {1:speech.complete(),3:planReady(),4:!!draft.text_roles?.length,5:headlineItems().length>0};}
+function stepsDone(){return {1:speech.complete(),2:planReady(),3:stories.allReviewed(),4:!!draft.text_roles?.length,5:headlineItems().length>0};}
 function validate() {
   $('planStatus').hidden=!draft.plan.trim();
   $('planStatus').textContent=planReady() ? 'อ่านคำตอบได้' : 'คำตอบยังไม่ครบ ลองคัดลอกใหม่ทั้งหมด';
@@ -374,7 +400,7 @@ try {
   jobWatcher=watchJobs(projectId,()=>session.record.revision,$('jobProgress'),job=>{
     speech.changed(job);
     if (job.task.kind==='probe' && job.task.source?.id) {probes.set(job.task.source.id,job);queueFilesRender();}
-  },()=>{probes.clear();speech.reset();queueFilesRender();});
+  },()=>{probes.clear();speech.reset();queueFilesRender();},()=>draft.files);
   if (session.created) {
     try { localStorage.setItem(key + '-migrated', projectId); } catch (_) { /* Raw legacy data remains untouched. */ }
   }
