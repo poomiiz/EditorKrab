@@ -27,10 +27,11 @@ const FRAMES: usize = 3000;
 const WINDOW: f32 = 15.0;
 const OVERLAP: f32 = 1.0;
 const BATCH: usize = 8;
-/// v0.29.1 decoded without timestamp tokens (faster-whisper's batched default). Without them the model often
-/// stops after a window's first sentence: 20 Oct 2026, 5 Thai FLEURS clips, CER 18.2% with stretches of up to
-/// 18 s missing; with them 11.0% and nothing missing, but an 11-minute clip takes 49 s instead of 41 s.
-const TIMESTAMP_TOKENS: bool = false;
+/// The one setting that differs from v0.29.1, which decoded without timestamp tokens (faster-whisper's batched
+/// default): without them the model often stops after a window's first sentence. 20 Oct 2026, 5 Thai FLEURS
+/// clips: CER 18.2% with stretches of up to 18 s missing; with them 11.0% and nothing missing, while an
+/// 11-minute clip takes 49 s instead of 41 s.
+const TIMESTAMP_TOKENS: bool = true;
 /// faster-whisper's split_to_word_tokens: these languages get one word per decodable token piece.
 const UNSPACED: [&str; 6] = ["zh", "ja", "th", "lo", "my", "yue"];
 /// v0.29.1 NO_SPACES: any piece may start a word.
