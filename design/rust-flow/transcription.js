@@ -94,7 +94,7 @@ export function createTranscription({project,read,state,writeEdit,changed}){
   $('cancelTranscription').hidden=!running.length;$('cancelTranscription').disabled=!editable;
   $('retryTranscription').hidden=!retry.length;$('retryTranscription').disabled=!editable||!ready||busy||!!running.length;
   $('reloadAsr').hidden=configuration==='ready'||configuration==='loading';$('reloadAsr').disabled=busy;
-  paintDownload();
+  paintDownload();paintGpu();
   $('transcribeError').textContent=notice;$('transcribeError').hidden=!notice;
   $('transcriptPacketError').textContent=packetNotice;$('transcriptPacketError').hidden=!packetNotice;
   const phases={verifying:'กำลังตรวจไฟล์',extracting:'กำลังเตรียมเสียง',transcribing:'กำลังถอดเสียง',cache:'กำลังเปิดข้อความที่ถอดไว้'};
@@ -153,6 +153,25 @@ export function createTranscription({project,read,state,writeEdit,changed}){
  async function downloadCall(path){downloadError='';try{const response=await fetch(path,{method:'POST',signal:AbortSignal.timeout(30000)});const body=await response.json();if(!response.ok){downloadError=downloadText(body);refresh();return;}download=body;}catch(_){downloadError='เริ่มดาวน์โหลดไม่ได้ กดลองอีกครั้ง';}pollDownload();}
  $('asrDownloadStart').onclick=()=>downloadCall('/api/v1/transcription/download');
  $('asrDownloadCancel').onclick=()=>downloadCall('/api/v1/transcription/download/cancel');
+ // NVIDIA machines: offer the GPU build; once installed it runs first and any failure reruns on CPU.
+ let gpu=null,gpuError='',gpuTimer=0;
+ function paintGpu(){
+  const show=!!gpu&&(gpu.nvidia||gpu.installed);$('asrGpu').hidden=!show;if(!show)return;
+  const d=gpu.download,running=d.state==='running',resumable=!gpu.installed&&d.received>0&&d.received<d.total;
+  $('asrGpuNote').textContent=gpu.installed?(gpu.active?'ถอดเสียงด้วยการ์ดจอ ถ้าการ์ดจอมีปัญหาจะสลับไปใช้ CPU เอง':'ถอดเสียงด้วย CPU'):'เครื่องนี้มีการ์ดจอ NVIDIA โหลดตัวเร่งแล้วถอดเสียงเร็วขึ้นหลายเท่า';
+  $('asrGpuStart').hidden=gpu.installed||running;$('asrGpuStart').textContent=(resumable?'ดาวน์โหลดต่อ':'ดาวน์โหลดตัวเร่งการ์ดจอ')+` (${gb(d.total)})`;$('asrGpuCancel').hidden=!running;$('asrGpuButtons').hidden=gpu.installed&&!running;
+  $('asrGpuProgress').hidden=!running&&!resumable;$('asrGpuProgress').value=d.total?d.received/d.total:0;
+  $('asrGpuForceLabel').hidden=!gpu.installed;$('asrGpuForce').checked=gpu.force_cpu;
+  const message=gpuError||(d.state==='failed'?downloadText(d.error):'');$('asrGpuError').textContent=message;$('asrGpuError').hidden=!message;
+ }
+ async function gpuCall(path,init={}){
+  clearTimeout(gpuTimer);gpuError='';
+  try{const response=await fetch(path,{cache:'no-store',signal:AbortSignal.timeout(30000),...init});const body=await response.json();if(!response.ok)gpuError=downloadText(body);else gpu=body;}catch(_){gpuError='อ่านสถานะการ์ดจอไม่ได้';}
+  refresh();if(gpu?.download?.state==='running')gpuTimer=setTimeout(()=>gpuCall('/api/v1/transcription/gpu'),700);
+ }
+ $('asrGpuStart').onclick=()=>gpuCall('/api/v1/transcription/gpu/download',{method:'POST'});
+ $('asrGpuCancel').onclick=()=>gpuCall('/api/v1/transcription/gpu/download/cancel',{method:'POST'});
+ $('asrGpuForce').onchange=()=>gpuCall('/api/v1/transcription/gpu',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({force_cpu:$('asrGpuForce').checked})});
  $('transcriptFile').onchange=()=>{chosen=$('transcriptFile').value;page=0;rowsKey='';clearAudio();refresh(true);};
  $('transcriptPrevious').onclick=()=>{page=Math.max(0,page-1);paintRows(true);};$('transcriptNext').onclick=()=>{page++;paintRows(true);};
  $('transcriptRows').onfocusout=event=>{if(!$('transcriptRows').contains(event.relatedTarget))queueMicrotask(()=>paintRows());};
@@ -178,7 +197,7 @@ export function createTranscription({project,read,state,writeEdit,changed}){
   catch(_){throw Error('คัดลอกไม่ได้ ใช้ปุ่มดาวน์โหลดไฟล์แทน');}
   $('transcriptCopy').textContent='คัดลอกแล้ว';setTimeout(()=>{$('transcriptCopy').textContent='คัดลอกให้ AI';},2000);
  });
- queueMicrotask(loadSettings);
+ queueMicrotask(loadSettings);queueMicrotask(()=>gpuCall('/api/v1/transcription/gpu'));
  // Every subtitle line as it will show (hand edit if any), timed on its own source file.
  function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name})));}
  function find(id){for(const file of eligible())for(const row of segments(file))if(row.job.id+'|'+row.segment.id===id)return {file,...row};throw Error('line_not_found');}
