@@ -34,7 +34,10 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   const stories=plan.stories.map((s,index)=>{
    const kept=(Array.isArray(s?.segment_ids)?s.segment_ids:[]).map(id=>bySegment.get(id)).filter(Boolean);
    const counts=new Map();for(const l of kept)counts.set(l.source_id,(counts.get(l.source_id) || 0)+1);
-   return {index,id:String(s?.id || `story-${index+1}`),title:String(s?.title || `เรื่อง ${index+1}`).trim(),summary:String(s?.summary || '').trim(),
+   // chat AIs rename fields (Gemini answered story_id and no title); take the usual synonyms, else the summary's opening
+   const summary=String(s?.summary || s?.description || '').trim();
+   const title=String(s?.title || s?.name || s?.topic || s?.headline || '').trim() || (summary.split(/[ ,.]/).filter(Boolean).slice(0,6).join(' ').slice(0,48) || `เรื่อง ${index+1}`);
+   return {index,id:String(s?.id || s?.story_id || `story-${index+1}`),title,summary,
     kept,source_id:[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0] || ''};
   });
   return {all,stories};
