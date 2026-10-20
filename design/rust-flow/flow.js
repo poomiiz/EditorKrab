@@ -14,7 +14,8 @@ let activeUpload;
 const textEditor=createStyleEditor(()=>draft.text_styles,value=>{draft.text_styles=value;save();},()=>({stage:activeStep(draft),roles:draft.text_roles || [],items:headlineItems()}),items=>{draft.headline_items=items;save();renderHeadline();renderSteps();});
 function headlineItems(){return draft.headline_items ?? (draft.text_styles?.headline ? [{id:'headline-main',...draft.text_styles.headline}] : []);}
 function headlinePreset(){return defaults().headline;}
-function activeStep(d){return d.flow_version===2?d.step:d.step===5?6:d.step;}
+// step 3 (paste the answer) now lives on step 2's page
+function activeStep(d){const step=d.flow_version===2?d.step:d.step===5?6:d.step;return step===3?2:step;}
 function upgradeFlow(){if(draft.flow_version!==2){draft.step=activeStep(draft);draft.flow_version=2;}}
 // Moving between steps is view state: it is remembered per project but never becomes an undoable edit.
 const stepKey=()=>'editorkrab-step-'+projectId;
@@ -33,7 +34,9 @@ try { localStorage.setItem('editorkrab-last-project', projectId); } catch (_) { 
 const speech=createTranscription({project:projectId,read:()=>draft,
  state:()=>({editing:editingAllowed,saved:!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved,revision:session?.record?.revision || 0}),
  writeEdit:edit=>{if(!editingAllowed)return;const entries=(draft.transcript_edits || []).filter(v=>v.job_id!==edit.job_id||v.segment_id!==edit.segment_id);if(edit.text!==edit.original_text)entries.push(edit);if(!validTranscriptEdits(entries))return;draft.transcript_edits=entries;save();},
- changed:()=>queueMicrotask(renderSteps)});
+ changed:()=>queueMicrotask(()=>{renderSteps();renderTimeline();}),
+ // pressing transcribe moves on to step 2, where the transcript fills in while the person prepares the AI step
+ started:()=>{if(activeStep(draft)===1)document.querySelector('[data-step="2"]').click();}});
 
 window.addEventListener('beforeunload', event => { if (unsaved || activeUpload) { event.preventDefault(); event.returnValue = ''; } });
 function valid(d) {
@@ -98,11 +101,12 @@ function renderSteps() {
     if (n === activeStep(draft)) b.setAttribute('aria-current', 'step');
     else b.removeAttribute('aria-current');
     b.toggleAttribute('data-done',finished);
-    b.querySelector('.step-number').textContent=finished ? '✓' : '0'+n;
-    b.setAttribute('aria-label',`ขั้น ${n} ${b.querySelector('small').textContent}`+(finished ? ' เสร็จแล้ว' : ''));
+    const shown=n>3?n-1:n;
+    b.querySelector('.step-number').textContent=finished ? '✓' : '0'+shown;
+    b.setAttribute('aria-label',`ขั้น ${shown} ${b.querySelector('small').textContent}`+(finished ? ' เสร็จแล้ว' : ''));
   }
   // Next is the primary action only once its step's work is done; otherwise say what is missing.
-  const needs={1:[done[1],''],2:[done[1],''],3:[done[3],'วางคำตอบจาก AI ก่อน'],5:[false,'']};
+  const needs={1:[done[1],''],2:[done[3],'วางคำตอบจาก AI ก่อน'],5:[false,'']};
   for (const foot of document.querySelectorAll('.stage-foot')) {
     const next=foot.querySelector('.actions [data-go]');if(!next)continue;
     const [ready,hint]=needs[Number(foot.closest('[data-panel]').dataset.panel)] || [true,''];
@@ -122,6 +126,26 @@ const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('t
   if(finding.kind!=='headline'){speech.edit(finding.id,text);return;}
   const id=finding.id.slice('headline:'.length);draft.headline_items=headlineItems().map(h=>h.id===id?{...h,text}:h);save();textEditor.render();renderHeadline();
  }});
+const shortClock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
+// Step 2's timeline: one box per transcript line, in time order; a box plays its own stretch of the video.
+function renderTimeline(){
+  const track=$('timelineTrack'),progress=$('transcribeProgress'),shown=$('timelineProgress');
+  $('timelineStatus').textContent=$('transcribeHint').textContent;
+  shown.hidden=progress.hidden;if(progress.hasAttribute('value')){shown.max=progress.max;shown.value=progress.value;}else shown.removeAttribute('value');
+  const lines=speech.texts(),complete=speech.complete(),key=JSON.stringify([lines.map(l=>[l.id,l.text]),complete]);
+  if(track.dataset.key===key)return;track.dataset.key=key;
+  const boxes=[];let source='';
+  for(const line of lines){
+    if(line.source!==source&&new Set(lines.map(l=>l.source)).size>1){source=line.source;const head=document.createElement('span');head.className='timeline-file caption';head.textContent=source;boxes.push(head);}
+    const box=document.createElement('button');box.type='button';box.className='timeline-seg';box.title='กดเพื่อฟังท่อนนี้';
+    const at=document.createElement('span');at.className='timeline-time caption';at.textContent=shortClock(line.start_ms);
+    const text=document.createElement('span');text.textContent=line.text;box.append(at,text);
+    box.onclick=()=>{for(const other of track.querySelectorAll('.playing'))other.classList.remove('playing');box.classList.add('playing');try{speech.listen(line.id);}catch(_){box.classList.remove('playing');}};
+    boxes.push(box);
+  }
+  if(!complete){const wait=document.createElement('div');wait.className='timeline-seg timeline-wait';wait.textContent=lines.length?'กำลังถอดเสียงส่วนที่เหลือ…':'ยังไม่มีข้อความ ถอดเสียงในขั้น 1';boxes.push(wait);}
+  track.replaceChildren(...boxes);
+}
 function render() {
   renderSteps();
   for (const p of document.querySelectorAll('[data-panel]')) p.hidden = Number(p.dataset.panel) !== activeStep(draft);
@@ -131,7 +155,7 @@ function render() {
   textEditor.render();
   for (const id of ['title', 'language', 'plan']) $(id).value = draft[id];
   $('headlineReply').value=draft.headline_reply || '';
-  renderHeadline();speech.refresh(true);
+  renderHeadline();speech.refresh(true);renderTimeline();
   validate();
 }
 for(const button of document.querySelectorAll('[data-go]'))button.onclick=()=>{document.querySelector(`[data-step="${button.dataset.go}"]`).click();$('workspace').focus();$('workspace').scrollIntoView({block:'start'});};

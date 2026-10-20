@@ -7,7 +7,7 @@ export function validTranscriptEdits(value){
  if(value===undefined)return true;
  return Array.isArray(value)&&value.length<=10000&&new Set(value.map(v=>JSON.stringify([v?.job_id,v?.segment_id]))).size===value.length&&value.every(v=>v&&Object.keys(v).length===5&&['job_id','segment_id'].every(k=>typeof v[k]==='string'&&v[k].length>0&&v[k].length<=256&&!/[\u0000-\u001f\u007f-\u009f]/.test(v[k]))&&/^[a-fA-F0-9]{64}$/.test(v.source_sha256)&&['text','original_text'].every(k=>typeof v[k]==='string'&&v[k].length<=2000));
 }
-export function createTranscription({project,read,state,writeEdit,changed}){
+export function createTranscription({project,read,state,writeEdit,changed,started=()=>{}}){
  const jobs=new Map();let settings=null,configuration='loading',download=null,downloadError='',downloadTimer=0,busy=false,stopStarting=false,page=0,chosen='',rowsKey='',audio,stopAt=0;
  let settingsGeneration=0,notice='',packetNotice='',playing=null;const suggestions=new Map(),fixAsked=new Set();
  const failed=new Set(['failed','cancelled']);
@@ -125,6 +125,7 @@ export function createTranscription({project,read,state,writeEdit,changed}){
     if(!Array.isArray(returned))throw Error('รูปแบบงานไม่ถูกต้อง');for(const job of returned)jobs.set(job.id,job);refresh();
     if(stopStarting)for(const job of returned.filter(j=>['queued','running'].includes(j.status)))await request(`/api/v1/jobs/${encodeURIComponent(job.id)}/cancel`,{});
    }
+   if(!stopStarting)started();
   }catch(error){notice=error.name==='TimeoutError'?'ยังไม่ได้รับคำตอบ งานอาจเริ่มแล้ว ตรวจสถานะก่อนลองใหม่':error.message;}
   finally{busy=false;refresh();}
  };
