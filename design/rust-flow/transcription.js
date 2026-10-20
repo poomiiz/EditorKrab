@@ -191,7 +191,7 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
    const content={language:read().language,settings:{engine_sha256:settings.engine.sha256,model_sha256:settings.model.sha256,ffmpeg_sha256:settings.ffmpeg.sha256,threads:settings.threads},sources};
    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(content))),hash=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
    if(!state().saved||state().revision!==saved.revision||JSON.stringify(snapshotDraft)!==JSON.stringify(read())||!complete())throw Error('งานเปลี่ยนแล้ว ดาวน์โหลดใหม่อีกครั้ง');
-   const packet={schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,content,instructions:'แบ่งเรื่องและเรียงช่วงพูดโดยอ้าง segment_ids ที่ให้เท่านั้น ห้ามสร้างเวลาใหม่ รักษาตอนจบให้ครบ ไม่ถือว่าคนละไฟล์คือกล้องซิงก์กัน เวลาระดับคำและคนพูดยังไม่ยืนยัน ส่ง JSON ตาม response_schema',response_schema:{schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,stories:[{id:'story-1',title:'ชื่อเรื่อง',segment_ids:[]}]}};
+   const packet={schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,content,instructions:'แบ่งเรื่องและเรียงช่วงพูดโดยอ้าง segment_ids ที่ให้เท่านั้น ห้ามสร้างเวลาใหม่ รักษาตอนจบให้ครบ แต่ละเรื่องใช้ช่วงพูดจากไฟล์เดียวเท่านั้น ไม่ถือว่าคนละไฟล์คือกล้องซิงก์กัน ใส่ summary สรุปเนื้อหาเรื่องละ 1-2 ประโยค เวลาระดับคำและคนพูดยังไม่ยืนยัน ส่ง JSON ตาม response_schema',response_schema:{schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,stories:[{id:'story-1',title:'ชื่อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[]}]}};
    await deliver(packet);
   }catch(error){packetNotice=error.message;}finally{busy=false;refresh();}
  }
@@ -203,7 +203,7 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  });
  queueMicrotask(loadSettings);queueMicrotask(()=>gpuCall('/api/v1/transcription/gpu'));
  // Every subtitle line as it will show (hand edit if any), timed on its own source file.
- function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name})));}
+ function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name})));}
  function find(id){for(const file of eligible())for(const row of segments(file))if(row.job.id+'|'+row.segment.id===id)return {file,...row};throw Error('line_not_found');}
  // For checking lines from the subtitle step: hear one line, or replace its text (kept as a hand edit and learned).
  function listen(id){const {file,segment}=find(id);return play(file,segment);}

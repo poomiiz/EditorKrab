@@ -360,7 +360,7 @@ async fn transcript(runtime: Runtime, args: Value) -> Outcome {
         "language": draft.document["language"],
         "sources": sources,
         "instructions": "Group segments into stories that each make sense alone. Use only these segment_ids, keep each story's ending complete, \
-    never invent times, and do not treat different files as synced cameras. Then call set_clips."
+    take each story's segments from one file only, never invent times, and do not treat different files as synced cameras. Then call set_clips."
     }))
 }
 

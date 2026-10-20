@@ -150,12 +150,12 @@ fn read_error(error: io::Error) -> AudioError {
     }
 }
 
-pub async fn serve(
+/// The draft's acknowledged source for `source_id`, opened and checked against its recorded size and stamp.
+async fn acknowledged(
     store: Arc<Mutex<Store>>,
     project: String,
     source_id: String,
-    headers: HeaderMap,
-) -> Result<Response, AudioError> {
+) -> Result<(PathBuf, tokio::fs::File, u64, String), AudioError> {
     if !crate::jobs::identifier(&project) || !crate::jobs::identifier(&source_id) {
         return Err(AudioError::InvalidInput);
     }
@@ -186,8 +186,7 @@ pub async fn serve(
     })
     .await
     .map_err(|_| AudioError::Unavailable)??;
-    let mime = content_type(&path)?;
-    let mut file = tokio::fs::File::open(path).await.map_err(read_error)?;
+    let file = tokio::fs::File::open(&path).await.map_err(read_error)?;
     // Check the opened handle, rather than metadata from a separate path lookup.
     let metadata = file.metadata().await.map_err(read_error)?;
     if !metadata.is_file()
@@ -196,7 +195,129 @@ pub async fn serve(
     {
         return Err(AudioError::Changed);
     }
-    let range = byte_range(&headers, size)?;
+    Ok((path, file, size, modified_ns))
+}
+
+pub async fn serve(
+    store: Arc<Mutex<Store>>,
+    project: String,
+    source_id: String,
+    headers: HeaderMap,
+) -> Result<Response, AudioError> {
+    let (path, file, size, _) = acknowledged(store, project, source_id).await?;
+    stream(file, size, content_type(&path)?, &headers).await
+}
+
+/// A 360p H.264 copy of the source, made once per source version with ffmpeg and kept in `cache`.
+/// Phone footage is often 4K HEVC HDR, which many browsers cannot play; this copy plays everywhere.
+pub async fn serve_preview(
+    store: Arc<Mutex<Store>>,
+    project: String,
+    source_id: String,
+    headers: HeaderMap,
+    ffmpeg: PathBuf,
+    cache: PathBuf,
+) -> Result<Response, AudioError> {
+    let (path, _, size, stamp) = acknowledged(store, project, source_id.clone()).await?;
+    let target = cache.join(format!("{source_id}-{size}-{stamp}.mp4"));
+    // one encode at a time: a second request for the same video waits for the first instead of encoding twice
+    static ENCODING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    if !target.is_file() {
+        let _one = ENCODING.lock().await;
+        if !target.is_file() {
+            tokio::fs::create_dir_all(&cache)
+                .await
+                .map_err(|_| AudioError::Unavailable)?;
+            let partial = target.with_extension("part.mp4");
+            // NVIDIA decode + scale + encode is about 3x faster on 4K HEVC (60 s of a phone clip: 11 s vs 30 s);
+            // without an NVIDIA GPU, or if that fails, the CPU makes the same 360p copy
+            let gpu: &[&str] = &["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-i"];
+            let gpu_out: &[&str] = &[
+                "-vf",
+                "scale_cuda=-2:360:format=yuv420p,hwdownload,format=yuv420p",
+                "-c:v",
+                "h264_nvenc",
+                "-preset",
+                "p1",
+                "-cq",
+                "32",
+            ];
+            let cpu_out: &[&str] = &[
+                "-vf",
+                "scale=-2:360,format=yuv420p",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "30",
+            ];
+            let mut ok = false;
+            for (input, output) in [(gpu, gpu_out), (&["-i"][..], cpu_out)] {
+                let mut command = tokio::process::Command::new(&ffmpeg);
+                command
+                    .args(["-hide_banner", "-nostdin", "-v", "error", "-y"])
+                    .args(input)
+                    .arg(&path)
+                    .args(output)
+                    .args([
+                        "-c:a",
+                        "aac",
+                        "-b:a",
+                        "64k",
+                        "-ac",
+                        "1",
+                        "-movflags",
+                        "+faststart",
+                    ])
+                    .arg(&partial)
+                    .kill_on_drop(true);
+                #[cfg(windows)]
+                command.creation_flags(0x0800_0000);
+                ok = command.status().await.map(|s| s.success()).unwrap_or(false);
+                if ok {
+                    break;
+                }
+            }
+            if !ok || tokio::fs::rename(&partial, &target).await.is_err() {
+                let _ = tokio::fs::remove_file(&partial).await;
+                return Err(AudioError::Read);
+            }
+            forget_old_previews(&cache, &target).await;
+        }
+    }
+    let file = tokio::fs::File::open(&target).await.map_err(read_error)?;
+    let size = file.metadata().await.map_err(read_error)?.len();
+    stream(file, size, "video/mp4", &headers).await
+}
+
+/// Previews nobody opened for 14 days are deleted when a new one is made; they are only copies.
+async fn forget_old_previews(cache: &std::path::Path, keep: &std::path::Path) {
+    let Ok(mut entries) = tokio::fs::read_dir(cache).await else {
+        return;
+    };
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(14 * 24 * 3600);
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        let stale = entry
+            .metadata()
+            .await
+            .ok()
+            .and_then(|m| m.accessed().or_else(|_| m.modified()).ok())
+            .is_some_and(|t| t < old);
+        if stale && path != keep && path.extension().is_some_and(|e| e == "mp4") {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+    }
+}
+
+async fn stream(
+    mut file: tokio::fs::File,
+    size: u64,
+    mime: &'static str,
+    headers: &HeaderMap,
+) -> Result<Response, AudioError> {
+    let range = byte_range(headers, size)?;
     let (start, length, status) = range.as_ref().map_or((0, size, StatusCode::OK), |r| {
         (r.start, r.end - r.start + 1, StatusCode::PARTIAL_CONTENT)
     });

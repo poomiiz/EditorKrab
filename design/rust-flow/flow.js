@@ -4,6 +4,7 @@ import {uploadFile} from './uploads.js';
 import {createTranscription,validTranscriptEdits} from './transcription.js';
 import {createTextQc} from './text-qc.js';
 import {createExport} from './export.js';
+import {createStories} from './stories.js';
 import {createStyleEditor,validTextStyles,validHeadlineItems,defaults} from './text-style.js';
 const $ = id => document.getElementById(id);
 const key = 'editorkrab-rust-flow-prototype-v1';
@@ -14,8 +15,7 @@ let activeUpload;
 const textEditor=createStyleEditor(()=>draft.text_styles,value=>{draft.text_styles=value;save();},()=>({stage:activeStep(draft),roles:draft.text_roles || [],items:headlineItems()}),items=>{draft.headline_items=items;save();renderHeadline();renderSteps();});
 function headlineItems(){return draft.headline_items ?? (draft.text_styles?.headline ? [{id:'headline-main',...draft.text_styles.headline}] : []);}
 function headlinePreset(){return defaults().headline;}
-// step 3 (paste the answer) now lives on step 2's page
-function activeStep(d){const step=d.flow_version===2?d.step:d.step===5?6:d.step;return step===3?2:step;}
+function activeStep(d){return d.flow_version===2?d.step:d.step===5?6:d.step;}
 function upgradeFlow(){if(draft.flow_version!==2){draft.step=activeStep(draft);draft.flow_version=2;}}
 // Moving between steps is view state: it is remembered per project but never becomes an undoable edit.
 const stepKey=()=>'editorkrab-step-'+projectId;
@@ -34,7 +34,7 @@ try { localStorage.setItem('editorkrab-last-project', projectId); } catch (_) { 
 const speech=createTranscription({project:projectId,read:()=>draft,
  state:()=>({editing:editingAllowed,saved:!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved,revision:session?.record?.revision || 0}),
  writeEdit:edit=>{if(!editingAllowed)return;const entries=(draft.transcript_edits || []).filter(v=>v.job_id!==edit.job_id||v.segment_id!==edit.segment_id);if(edit.text!==edit.original_text)entries.push(edit);if(!validTranscriptEdits(entries))return;draft.transcript_edits=entries;save();},
- changed:()=>queueMicrotask(()=>{renderSteps();renderTimeline();}),
+ changed:()=>queueMicrotask(()=>{renderSteps();renderTimeline();stories.renderCards();if(activeStep(draft)===3)stories.renderEditor();}),
  // pressing transcribe moves on to step 2, where the transcript fills in while the person prepares the AI step
  started:()=>{if(activeStep(draft)===1)document.querySelector('[data-step="2"]').click();}});
 
@@ -101,12 +101,11 @@ function renderSteps() {
     if (n === activeStep(draft)) b.setAttribute('aria-current', 'step');
     else b.removeAttribute('aria-current');
     b.toggleAttribute('data-done',finished);
-    const shown=n>3?n-1:n;
-    b.querySelector('.step-number').textContent=finished ? '✓' : '0'+shown;
-    b.setAttribute('aria-label',`ขั้น ${shown} ${b.querySelector('small').textContent}`+(finished ? ' เสร็จแล้ว' : ''));
+    b.querySelector('.step-number').textContent=finished ? '✓' : '0'+n;
+    b.setAttribute('aria-label',`ขั้น ${n} ${b.querySelector('small').textContent}`+(finished ? ' เสร็จแล้ว' : ''));
   }
   // Next is the primary action only once its step's work is done; otherwise say what is missing.
-  const needs={1:[done[1],''],2:[done[3],'วางคำตอบจาก AI ก่อน'],5:[false,'']};
+  const needs={1:[done[1],''],2:[done[2],'วางคำตอบจาก AI ก่อน'],3:[done[3],'ตรวจให้ครบทุกเรื่อง'],5:[false,'']};
   for (const foot of document.querySelectorAll('.stage-foot')) {
     const next=foot.querySelector('.actions [data-go]');if(!next)continue;
     const [ready,hint]=needs[Number(foot.closest('[data-panel]').dataset.panel)] || [true,''];
@@ -126,6 +125,9 @@ const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('t
   if(finding.kind!=='headline'){speech.edit(finding.id,text);return;}
   const id=finding.id.slice('headline:'.length);draft.headline_items=headlineItems().map(h=>h.id===id?{...h,text}:h);save();textEditor.render();renderHeadline();
  }});
+const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,
+ write:change=>{if(!editingAllowed)return;change(draft);save();render();},
+ go:step=>document.querySelector(`[data-step="${step}"]`).click()});
 const shortClock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
 // Step 2's timeline: one box per transcript line, in time order; a box plays its own stretch of the video.
 function renderTimeline(){
@@ -155,12 +157,12 @@ function render() {
   textEditor.render();
   for (const id of ['title', 'language', 'plan']) $(id).value = draft[id];
   $('headlineReply').value=draft.headline_reply || '';
-  renderHeadline();speech.refresh(true);renderTimeline();
+  renderHeadline();speech.refresh(true);renderTimeline();stories.renderCards();stories.warm();if(activeStep(draft)===3)stories.renderEditor();
   validate();
 }
 for(const button of document.querySelectorAll('[data-go]'))button.onclick=()=>{document.querySelector(`[data-step="${button.dataset.go}"]`).click();$('workspace').focus();$('workspace').scrollIntoView({block:'start'});};
 function planReady(){try{return !!draft.plan.trim() && !!JSON.parse(draft.plan);}catch(_){return false;}}
-function stepsDone(){return {1:speech.complete(),3:planReady(),4:!!draft.text_roles?.length,5:headlineItems().length>0};}
+function stepsDone(){return {1:speech.complete(),2:planReady(),3:stories.allReviewed(),4:!!draft.text_roles?.length,5:headlineItems().length>0};}
 function validate() {
   $('planStatus').hidden=!draft.plan.trim();
   $('planStatus').textContent=planReady() ? 'อ่านคำตอบได้' : 'คำตอบยังไม่ครบ ลองคัดลอกใหม่ทั้งหมด';

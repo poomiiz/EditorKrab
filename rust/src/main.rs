@@ -915,6 +915,27 @@ async fn source_audio(
 ) -> Result<axum::response::Response, editorkrab::transcript_audio::AudioError> {
     editorkrab::transcript_audio::serve(runtime.store.clone(), project, source_id, headers).await
 }
+async fn source_preview(
+    State(runtime): State<Runtime>,
+    Path((project, source_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Result<axum::response::Response, editorkrab::transcript_audio::AudioError> {
+    let ffmpeg = runtime
+        .asr()
+        .map(|v| v.0.ffmpeg.clone())
+        .or_else(|| find_asr_tools(&runtime.setup.data).ffmpeg)
+        .ok_or(editorkrab::transcript_audio::AudioError::Unavailable)?;
+    let cache = PathBuf::from(format!("{}.previews", runtime.setup.state_path.display()));
+    editorkrab::transcript_audio::serve_preview(
+        runtime.store.clone(),
+        project,
+        source_id,
+        headers,
+        ffmpeg,
+        cache,
+    )
+    .await
+}
 async fn list_jobs(
     State(runtime): State<Runtime>,
     Path(project): Path<String>,
@@ -1773,6 +1794,15 @@ async fn serve(
             }),
         )
         .route(
+            "/stories.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/stories.js"),
+                )
+            }),
+        )
+        .route(
             "/transcription.js",
             get(|| async {
                 (
@@ -1824,6 +1854,10 @@ async fn serve(
         .route(
             "/api/v1/projects/{project}/sources/{source_id}/audio",
             get(source_audio),
+        )
+        .route(
+            "/api/v1/projects/{project}/sources/{source_id}/preview",
+            get(source_preview),
         )
         .route(
             "/api/v1/projects/{project}/sources/{source_id}/pauses",
