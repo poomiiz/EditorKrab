@@ -219,6 +219,14 @@ for (const id of ['title', 'language', 'plan']) $(id).addEventListener('input', 
   // a pasted answer the check could repair is stored repaired, so step 3 and export read the same stories
   if (id === 'plan') { const check=planCheck(); if (check.fixed) $(id).value = draft.plan = JSON.stringify(check.plan, null, 2); }
   save(); if (id === 'plan') {validate();renderHeadline();renderSteps();stories.renderCards();} });
+// a subtitle kind's name selects it for styling (and turns it on); its checkbox only shows or hides it
+for(const button of document.querySelectorAll('[data-role-pick]'))button.onclick=()=>{
+ const role=button.dataset.rolePick;
+ if(editingAllowed&&!(draft.text_roles || []).includes(role)){draft.text_roles=[...(draft.text_roles || []),role];save();renderSteps();}
+ textEditor.select(role);
+};
+$('planOpen').onclick=()=>{$('planDialog').showModal();$('plan').focus();};
+$('planDialog').addEventListener('close',()=>{stories.renderCards();renderSteps();});
 for(const input of document.querySelectorAll('[data-role-option]'))input.onchange=()=>{
  if(!editingAllowed)return;draft.text_roles=[...document.querySelectorAll('[data-role-option]:checked')].map(n=>n.dataset.roleOption);save();textEditor.render();renderSteps();
 };

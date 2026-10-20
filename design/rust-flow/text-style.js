@@ -143,6 +143,7 @@ export function createStyleEditor(read,write,layout,writeItems){
   $('sampleLabel').textContent=headline?'ข้อความบนหัวคลิป':'ข้อความตัวอย่าง';
   for(const key of fieldNames){controls[key].value=key==='font'?(current?fontName(current.font):''):(current?.[key] ?? (key==='color'?fallback.speech.color:''));controls[key].disabled=!enabled || !current;}
   for(const input of document.querySelectorAll('[data-role-option]')){input.checked=layout().roles.includes(input.dataset.roleOption);input.disabled=!enabled;}
+  for(const row of document.querySelectorAll('[data-role-row]'))row.dataset.selected=String(row.dataset.roleRow===selected);
   $('text-color-hex').removeAttribute('aria-invalid');
   $('text-color-hex').value=current?.color ?? '';$('text-color-hex').disabled=!enabled || !current;
   $('localFonts').disabled=!enabled || !current || fontLoading;checkFont(current?.font);
@@ -218,5 +219,5 @@ export function createStyleEditor(read,write,layout,writeItems){
  $('removeHeadline').onclick=()=>{if(enabled && selected?.startsWith('hl:')){endDrag();writeItems(layout().items.filter(v=>'hl:'+v.id!==selected));render();}};
  const observer=new ResizeObserver(paint);observer.observe(frame);
  document.fonts.ready.then(paint);
-  return {render,live:(key,text)=>{if(text)live.set(key,text);else live.delete(key);paint();},selectHeadline:id=>select('hl:'+id),editing:value=>{if(!value)endDrag();enabled=value;render();}};
+  return {render,select,live:(key,text)=>{if(text)live.set(key,text);else live.delete(key);paint();},selectHeadline:id=>select('hl:'+id),editing:value=>{if(!value)endDrag();enabled=value;render();}};
 }
