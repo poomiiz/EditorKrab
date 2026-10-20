@@ -16,6 +16,23 @@ pub const RUNTIME_URL: &str =
     "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-x64.zip";
 pub const RUNTIME_SIZE: u64 = 8_194_445;
 pub const RUNTIME_SHA256: &str = "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a";
+/// CUDA 12.4 build of the same release, offered only when an NVIDIA card is found; it carries its
+/// own CUDA runtime DLLs, so the user needs only the NVIDIA driver.
+pub const GPU_RUNTIME_URL: &str = "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-cublas-12.4.0-bin-x64.zip";
+pub const GPU_RUNTIME_SIZE: u64 = 670_611_449;
+pub const GPU_RUNTIME_SHA256: &str =
+    "443110ddaad70d4290ab2e77179e31cf712035bbc4fad56bb4519a90c917b39c";
+
+/// The GPU build of whisper-cli, unpacked beside the CPU one.
+pub fn gpu_plan(data: &Path) -> Item {
+    Item {
+        url: GPU_RUNTIME_URL.into(),
+        size: GPU_RUNTIME_SIZE,
+        sha256: GPU_RUNTIME_SHA256.into(),
+        dest: data.join("whisper-cuda"),
+        unzip: true,
+    }
+}
 
 /// One file to fetch. A zip is unpacked into `dest` (a folder); anything else is renamed to `dest`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]

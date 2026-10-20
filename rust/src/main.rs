@@ -38,6 +38,7 @@ struct Runtime {
     asr: Arc<std::sync::RwLock<Option<Asr>>>,
     setup: Arc<AsrSetup>,
     download: Arc<Mutex<Download>>,
+    gpu_download: Arc<Mutex<Download>>,
     exports: Arc<Mutex<std::collections::HashMap<String, Export>>>,
 }
 impl Runtime {
@@ -1126,6 +1127,7 @@ struct Found {
     engine: Option<PathBuf>,
     model: Option<PathBuf>,
     ffmpeg: Option<PathBuf>,
+    gpu: Option<PathBuf>,
 }
 fn tool_roots(data: &std::path::Path) -> Vec<PathBuf> {
     std::env::current_exe()
@@ -1161,13 +1163,46 @@ fn find_asr_tools(data: &std::path::Path) -> Found {
         engine: first("whisper", "whisper-cli"),
         model,
         ffmpeg: first("ffmpeg", "ffmpeg"),
+        gpu: gpu_engine(data).filter(|_| !force_cpu(data)),
     }
+}
+/// The CUDA build of whisper-cli, whether or not it is in use; EDITORKRAB_WHISPER_GPU overrides the search.
+fn gpu_engine(data: &std::path::Path) -> Option<PathBuf> {
+    match std::env::var("EDITORKRAB_WHISPER_GPU") {
+        Ok(path) => Some(path.into()),
+        Err(_) => find_tool(&tool_roots(data), "whisper-cuda", "whisper-cli"),
+    }
+}
+/// The user's "CPU only" switch, kept as a marker file so it survives a restart.
+fn force_cpu(data: &std::path::Path) -> bool {
+    data.join("force-cpu").exists()
+}
+/// An NVIDIA card with a working driver; only then is the GPU build offered (Windows builds only).
+fn nvidia() -> bool {
+    static FOUND: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *FOUND.get_or_init(|| {
+        if !cfg!(windows) {
+            return false;
+        }
+        let smi =
+            PathBuf::from(std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into()))
+                .join("System32")
+                .join("nvidia-smi.exe");
+        let mut command = std::process::Command::new(smi);
+        command.arg("-L");
+        #[cfg(windows)]
+        std::os::windows::process::CommandExt::creation_flags(&mut command, 0x0800_0000);
+        command.output().is_ok_and(|o| {
+            o.status.success() && String::from_utf8_lossy(&o.stdout).contains("GPU ")
+        })
+    })
 }
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 async fn configure_asr(
     whisper: PathBuf,
     model: PathBuf,
     ffmpeg: PathBuf,
+    gpu: Option<PathBuf>,
     state_path: &std::path::Path,
 ) -> Result<Asr, BoxError> {
     let config = AsrConfig {
@@ -1177,6 +1212,7 @@ async fn configure_asr(
         workspace: PathBuf::from(format!("{}.asr-work", state_path.display())),
         timeout: Duration::from_secs(3600),
         threads: asr_threads(),
+        gpu,
     };
     let capture = config.clone();
     let settings = tokio::task::spawn_blocking(move || AsrSettings::read(&capture)).await??;
@@ -1297,7 +1333,12 @@ async fn start_download(State(runtime): State<Runtime>) -> Result<Json<Download>
             ..Download::default()
         };
     }
-    tokio::spawn(run_download(runtime.clone(), items, signal));
+    tokio::spawn(run_download(
+        runtime.clone(),
+        items,
+        signal,
+        runtime.download.clone(),
+    ));
     Ok(download_status(State(runtime)).await)
 }
 async fn cancel_download(State(runtime): State<Runtime>) -> Json<Download> {
@@ -1315,9 +1356,10 @@ async fn run_download(
     runtime: Runtime,
     items: Vec<editorkrab::asr_download::Item>,
     signal: watch::Receiver<bool>,
+    download: Arc<Mutex<Download>>,
 ) {
     let ticker = {
-        let (runtime, items) = (runtime.clone(), items.clone());
+        let (download, items) = (download.clone(), items.clone());
         tokio::spawn(async move {
             let mut last = (std::time::Instant::now(), received(&items));
             loop {
@@ -1325,7 +1367,7 @@ async fn run_download(
                 let now = (std::time::Instant::now(), received(&items));
                 let rate = now.1.saturating_sub(last.1) as f64
                     / now.0.duration_since(last.0).as_secs_f64().max(0.001);
-                let mut status = runtime.download.lock().unwrap_or_else(|e| e.into_inner());
+                let mut status = download.lock().unwrap_or_else(|e| e.into_inner());
                 status.received = now.1;
                 status.bytes_per_second = rate as u64;
                 last = now;
@@ -1346,23 +1388,12 @@ async fn run_download(
             break;
         }
     }
-    if outcome.is_ok() {
-        let found = find_asr_tools(&runtime.setup.data);
-        outcome = match (found.engine, found.model, found.ffmpeg) {
-            (Some(engine), Some(model), Some(ffmpeg)) => {
-                match configure_asr(engine, model, ffmpeg, &runtime.setup.state_path).await {
-                    Ok(asr) => {
-                        *runtime.asr.write().unwrap_or_else(|e| e.into_inner()) = Some(asr);
-                        Ok(())
-                    }
-                    Err(e) => Err(format!("invalid_tools:{e}")),
-                }
-            }
-            _ => Err("invalid_tools".into()),
-        };
+    // a GPU build fetched before the model waits for the main download to switch it on
+    if outcome.is_ok() && (runtime.asr().is_some() || Arc::ptr_eq(&download, &runtime.download)) {
+        outcome = reload_asr(&runtime).await;
     }
     ticker.abort();
-    let mut status = runtime.download.lock().unwrap_or_else(|e| e.into_inner());
+    let mut status = download.lock().unwrap_or_else(|e| e.into_inner());
     status.received = received(&items);
     status.bytes_per_second = 0;
     status.cancel = None;
@@ -1374,6 +1405,138 @@ async fn run_download(
             status.error = Some(e);
         }
     }
+}
+
+/// Swaps the live tools without a restart. Already configured: only the GPU build changes, so the
+/// CPU identity (and every queued job's settings) stays valid without rehashing the model.
+async fn reload_asr(runtime: &Runtime) -> Result<(), String> {
+    let data = &runtime.setup.data;
+    let asr = match runtime.asr() {
+        Some(current) => {
+            let (mut config, settings) = (current.0.clone(), current.1.clone());
+            config.gpu = gpu_engine(data).filter(|_| !force_cpu(data));
+            Arc::new((config, settings))
+        }
+        None => {
+            let found = find_asr_tools(data);
+            let (Some(engine), Some(model), Some(ffmpeg)) =
+                (found.engine, found.model, found.ffmpeg)
+            else {
+                return Err("invalid_tools".into());
+            };
+            configure_asr(engine, model, ffmpeg, found.gpu, &runtime.setup.state_path)
+                .await
+                .map_err(|e| format!("invalid_tools:{e}"))?
+        }
+    };
+    *runtime.asr.write().unwrap_or_else(|e| e.into_inner()) = Some(asr);
+    Ok(())
+}
+
+/// GPU speed-up: offered on an NVIDIA machine, used when installed unless "CPU only" is on.
+async fn gpu_status(State(runtime): State<Runtime>) -> Json<Value> {
+    let data = runtime.setup.data.clone();
+    let item = editorkrab::asr_download::gpu_plan(&data);
+    let (nvidia, installed, forced, have) = tokio::task::spawn_blocking(move || {
+        let installed = gpu_engine(&data).is_some();
+        let have = if installed {
+            item.size
+        } else {
+            received(&[item])
+        };
+        (nvidia(), installed, force_cpu(&data), have)
+    })
+    .await
+    .unwrap_or_default();
+    let mut download = runtime
+        .gpu_download
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    if download.state.is_empty() {
+        download.state = if installed { "done" } else { "idle" };
+    }
+    download.total = editorkrab::asr_download::GPU_RUNTIME_SIZE;
+    if download.state != "running" {
+        download.received = have;
+    }
+    let active = runtime.asr().is_some_and(|a| a.0.gpu.is_some());
+    Json(
+        json!({"nvidia":nvidia,"installed":installed,"force_cpu":forced,"active":active,"download":download}),
+    )
+}
+async fn start_gpu_download(State(runtime): State<Runtime>) -> Result<Json<Value>, ApiError> {
+    let data = runtime.setup.data.clone();
+    let items = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        if !nvidia() {
+            return Err("gpu_missing".into());
+        }
+        let items = vec![editorkrab::asr_download::gpu_plan(&data)];
+        let free = editorkrab::asr_download::free_space(&data)?;
+        let drive = editorkrab::asr_download::drive(&data);
+        editorkrab::asr_download::check_space(free, &items, &drive)?;
+        Ok(items)
+    })
+    .await
+    .map_err(|e| download_error(e.to_string()))?
+    .map_err(download_error)?;
+    let (cancel, signal) = watch::channel(false);
+    {
+        let mut status = runtime
+            .gpu_download
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if status.state != "running" {
+            *status = Download {
+                state: "running",
+                total: editorkrab::asr_download::GPU_RUNTIME_SIZE,
+                received: received(&items),
+                cancel: Some(cancel),
+                ..Download::default()
+            };
+            tokio::spawn(run_download(
+                runtime.clone(),
+                items,
+                signal,
+                runtime.gpu_download.clone(),
+            ));
+        }
+    }
+    Ok(gpu_status(State(runtime)).await)
+}
+async fn cancel_gpu_download(State(runtime): State<Runtime>) -> Json<Value> {
+    if let Some(cancel) = &runtime
+        .gpu_download
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .cancel
+    {
+        let _ = cancel.send(true);
+    }
+    gpu_status(State(runtime)).await
+}
+#[derive(Deserialize)]
+struct GpuChoice {
+    force_cpu: bool,
+}
+async fn set_gpu(
+    State(runtime): State<Runtime>,
+    Json(choice): Json<GpuChoice>,
+) -> Result<Json<Value>, ApiError> {
+    let marker = runtime.setup.data.join("force-cpu");
+    let written = if choice.force_cpu {
+        std::fs::create_dir_all(&runtime.setup.data).and_then(|_| std::fs::write(&marker, b""))
+    } else {
+        std::fs::remove_file(&marker).or_else(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => Ok(()),
+            _ => Err(e),
+        })
+    };
+    written.map_err(|e| download_error(format!("gpu_setting:{e}")))?;
+    if runtime.asr().is_some() {
+        reload_asr(&runtime).await.map_err(download_error)?;
+    }
+    Ok(gpu_status(State(runtime)).await)
 }
 
 async fn serve(
@@ -1415,11 +1578,13 @@ async fn serve(
                 engine: Some(engine),
                 model: Some(model),
                 ffmpeg: Some(ffmpeg),
-            } => Some(configure_asr(engine, model, ffmpeg, &state_path).await?),
+                gpu,
+            } => Some(configure_asr(engine, model, ffmpeg, gpu, &state_path).await?),
             _ => None,
         },
         (Ok(engine), Ok(model), Ok(ffmpeg)) => {
-            Some(configure_asr(engine.into(), model.into(), ffmpeg.into(), &state_path).await?)
+            let gpu = gpu_engine(&data).filter(|_| !force_cpu(&data));
+            Some(configure_asr(engine.into(), model.into(), ffmpeg.into(), gpu, &state_path).await?)
         }
         _ => return Err(
             "configure EDITORKRAB_WHISPER, EDITORKRAB_WHISPER_MODEL and EDITORKRAB_FFMPEG together"
@@ -1441,6 +1606,7 @@ async fn serve(
             model,
         }),
         download: Arc::new(Mutex::new(Download::default())),
+        gpu_download: Arc::new(Mutex::new(Download::default())),
         exports: Arc::default(),
         picker,
         picker_busy: Arc::new(AtomicBool::new(false)),
@@ -1542,6 +1708,15 @@ async fn serve(
         .route(
             "/api/v1/transcription/download/cancel",
             post(cancel_download),
+        )
+        .route("/api/v1/transcription/gpu", get(gpu_status).put(set_gpu))
+        .route(
+            "/api/v1/transcription/gpu/download",
+            post(start_gpu_download),
+        )
+        .route(
+            "/api/v1/transcription/gpu/download/cancel",
+            post(cancel_gpu_download),
         )
         .route(
             "/api/v1/projects/{project}/export",

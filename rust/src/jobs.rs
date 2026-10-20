@@ -509,7 +509,11 @@ impl Store {
                         let source: crate::native_asr::Artifact =
                             serde_json::from_value(value["source"].clone())
                                 .map_err(|_| Error::TranscriptionCacheCorrupt)?;
-                        if crate::native_asr::cache_key(&source, &context, &settings)
+                        let gpu: Option<crate::native_asr::Artifact> = serde_json::from_value(
+                            value.get("gpu_engine").cloned().unwrap_or_default(),
+                        )
+                        .map_err(|_| Error::TranscriptionCacheCorrupt)?;
+                        if crate::native_asr::cache_key(&source, &context, &settings, gpu.as_ref())
                             .map_err(|_| Error::TranscriptionCacheCorrupt)?
                             != cache.key
                         {

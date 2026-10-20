@@ -21,6 +21,8 @@ pub struct Config {
     pub workspace: PathBuf,
     pub timeout: Duration,
     pub threads: u16,
+    /// CUDA build of whisper-cli; tried first, and any failure of it reruns the chunk on `whisper`.
+    pub gpu: Option<PathBuf>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -40,6 +42,12 @@ pub struct ResultChunk {
     pub model: Artifact,
     pub elapsed_ms: u128,
     pub cache_hit: bool,
+    /// "gpu" or "cpu": which build produced the transcript.
+    pub device: &'static str,
+    /// The GPU build that produced the transcript; part of the cache key when present.
+    pub gpu_engine: Option<Artifact>,
+    /// Why the GPU build failed when this chunk fell back to the CPU build.
+    pub gpu_error: Option<String>,
     #[serde(skip)]
     pub cache_candidate: Option<crate::chunk_cache::Candidate>,
 }
@@ -130,7 +138,7 @@ async fn command(
     mut command: Command,
     mut cancel: watch::Receiver<bool>,
     timeout: Duration,
-) -> Result<(), String> {
+) -> Result<Vec<u8>, String> {
     if *cancel.borrow() {
         return Err("cancelled".into());
     }
@@ -145,13 +153,17 @@ async fn command(
         .spawn()
         .map_err(|_| "transcription_process_start_failed")?;
     let mut errors = child.stderr.take().ok_or("transcription_stderr_missing")?;
-    // Drain the entire pipe while retaining no unbounded native log in memory.
+    // Drain the entire pipe, keeping only the head of the native log (where the device is named).
     let mut drain = tokio::spawn(async move {
         let mut buffer = [0u8; 8192];
+        let mut head = Vec::new();
         loop {
-            if errors.read(&mut buffer).await? == 0 {
-                return Ok::<_, std::io::Error>(());
+            let size = errors.read(&mut buffer).await?;
+            if size == 0 {
+                return Ok::<_, std::io::Error>(head);
             }
+            let keep = size.min(LOG_HEAD.saturating_sub(head.len()));
+            head.extend_from_slice(&buffer[..keep]);
         }
     });
     let result = tokio::select! {
@@ -174,10 +186,11 @@ async fn command(
         return Err("transcription_process_failed".into());
     }
     match drained {
-        Ok(Ok(Ok(()))) => Ok(()),
+        Ok(Ok(Ok(head))) => Ok(head),
         _ => Err("transcription_log_read_failed".into()),
     }
 }
+const LOG_HEAD: usize = 64 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -281,12 +294,16 @@ pub async fn run_cached(
     let path = source_path.to_path_buf();
     let cfg = config.clone();
     let signal = cancel.clone();
-    let (source, engine, model, ffmpeg) = tokio::task::spawn_blocking(move || {
+    let (source, engine, model, ffmpeg, gpu) = tokio::task::spawn_blocking(move || {
         Ok::<_, String>((
             Artifact::read_cancellable(&path, Some(&signal))?,
             Artifact::read_cancellable(&cfg.whisper, Some(&signal))?,
             Artifact::read_cancellable(&cfg.model, Some(&signal))?,
             Artifact::read_cancellable(&cfg.ffmpeg, Some(&signal))?,
+            // an unreadable GPU build only means this chunk runs on the CPU build
+            cfg.gpu
+                .as_ref()
+                .and_then(|p| Artifact::read_cancellable(p, Some(&signal)).ok()),
         ))
     })
     .await
@@ -304,16 +321,14 @@ pub async fn run_cached(
     }) {
         return Err("transcription_settings_changed".into());
     }
-    let key = cache_key(
-        &source,
-        context,
-        &Settings {
-            engine: engine.clone(),
-            model: model.clone(),
-            ffmpeg: ffmpeg.clone(),
-            threads: config.threads,
-        },
-    )?;
+    let settings = Settings {
+        engine: engine.clone(),
+        model: model.clone(),
+        ffmpeg: ffmpeg.clone(),
+        threads: config.threads,
+    };
+    let cpu_key = cache_key(&source, context, &settings, None)?;
+    let key = cache_key(&source, context, &settings, gpu.as_ref())?;
     if let Some((store, job_id)) = cache {
         let lookup_key = key.clone();
         let source_sha256 = source.sha256.clone();
@@ -348,6 +363,9 @@ pub async fn run_cached(
                 model,
                 elapsed_ms: started.elapsed().as_millis(),
                 cache_hit: true,
+                device: if gpu.is_some() { "gpu" } else { "cpu" },
+                gpu_engine: gpu,
+                gpu_error: None,
                 cache_candidate: None,
             });
         }
@@ -383,37 +401,42 @@ pub async fn run_cached(
         let _ = p.send("extracting");
     }
     command(extract, cancel.clone(), config.timeout).await?;
-    let mut infer = Command::new(&engine.path);
-    infer
-        .arg("-m")
-        .arg(&model.path)
-        .arg("-f")
-        .arg(&audio)
-        .arg("-l")
-        .arg(&context.language)
-        .args(DECODE_ARGS)
-        .args(["-ojf", "-ng", "-t"])
-        .arg(config.threads.to_string())
-        .arg("-of")
-        .arg(&prefix);
     if let Some(p) = &progress {
         let _ = p.send("transcribing");
     }
-    command(infer, cancel.clone(), config.timeout).await?;
-    if *cancel.borrow() {
-        return Err("cancelled".into());
+    let mut gpu_error = None;
+    let mut output = None;
+    if let Some(gpu) = &gpu {
+        let prefix = scratch.0.join("gpu");
+        match infer(config, gpu, true, &model, &audio, context, &prefix, &cancel).await {
+            Ok((bytes, on_gpu)) => {
+                // the transcript is valid either way; only the label changes
+                if !on_gpu {
+                    gpu_error = Some("gpu_not_used".to_string());
+                }
+                output = Some((bytes, if on_gpu { "gpu" } else { "cpu" }));
+            }
+            Err(e) if e == "cancelled" => return Err(e),
+            Err(e) => {
+                eprintln!("transcription_gpu_failed: {e}; rerunning on CPU");
+                gpu_error = Some(e);
+            }
+        }
     }
+    let (bytes, device, gpu_engine, key) = match output {
+        Some((bytes, device)) => (bytes, device, gpu, key),
+        None => (
+            infer(
+                config, &engine, false, &model, &audio, context, &prefix, &cancel,
+            )
+            .await?
+            .0,
+            "cpu",
+            None,
+            cpu_key,
+        ),
+    };
     verify_all(&source, &engine, &model, &ffmpeg, cancel.clone()).await?;
-    let output = prefix.with_extension("json");
-    let mut file = tokio::fs::File::open(&output)
-        .await
-        .map_err(|_| "transcription_output_missing")?;
-    let mut bytes = Vec::new();
-    (&mut file)
-        .take(transcription::MAX_JSON + 1)
-        .read_to_end(&mut bytes)
-        .await
-        .map_err(|_| "transcription_output_unreadable")?;
     let transcript = transcription::parse(&bytes, context)?;
     if *cancel.borrow() {
         return Err("cancelled".into());
@@ -427,8 +450,63 @@ pub async fn run_cached(
         model,
         elapsed_ms: started.elapsed().as_millis(),
         cache_hit: false,
+        device,
+        gpu_engine,
+        gpu_error,
         cache_candidate: Some(crate::chunk_cache::Candidate::new(key, bytes)),
     })
+}
+
+/// One whisper-cli pass over the extracted audio; returns the raw full-JSON output.
+/// The CPU build gets `-ng`; the GPU build runs with its default device.
+#[allow(clippy::too_many_arguments)]
+async fn infer(
+    config: &Config,
+    engine: &Artifact,
+    gpu: bool,
+    model: &Artifact,
+    audio: &Path,
+    context: &Context,
+    prefix: &Path,
+    cancel: &watch::Receiver<bool>,
+) -> Result<(Vec<u8>, bool), String> {
+    let mut infer = Command::new(&engine.path);
+    infer
+        .arg("-m")
+        .arg(&model.path)
+        .arg("-f")
+        .arg(audio)
+        .arg("-l")
+        .arg(&context.language)
+        .args(DECODE_ARGS)
+        .arg("-ojf")
+        .args(if gpu { None } else { Some("-ng") })
+        .arg("-t")
+        .arg(config.threads.to_string())
+        .arg("-of")
+        .arg(prefix);
+    let log = command(infer, cancel.clone(), config.timeout).await?;
+    // without a usable card or driver the GPU build quietly runs on its own CPU backend
+    let on_gpu = gpu
+        && log
+            .windows(31)
+            .any(|w| w == b"whisper_backend_init_gpu: using");
+    if *cancel.borrow() {
+        return Err("cancelled".into());
+    }
+    if gpu {
+        engine.verify(cancel)?;
+    }
+    let mut file = tokio::fs::File::open(prefix.with_extension("json"))
+        .await
+        .map_err(|_| "transcription_output_missing")?;
+    let mut bytes = Vec::new();
+    (&mut file)
+        .take(transcription::MAX_JSON + 1)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|_| "transcription_output_unreadable")?;
+    Ok((bytes, on_gpu))
 }
 
 /// Decoding options passed to whisper-cli; part of the cache key, so changing them re-transcribes.
@@ -441,8 +519,14 @@ pub fn cache_key(
     source: &Artifact,
     context: &Context,
     settings: &Settings,
+    gpu: Option<&Artifact>,
 ) -> Result<String, String> {
-    let bytes=serde_json::to_vec(&serde_json::json!({"source":source,"identity":context.source,"start_ms":context.start_ms,"end_ms":context.end_ms,"language":context.language,"settings":settings,"decode":DECODE_ARGS,"output_format":"whisper.cpp-full-json-v1.9.2"})).map_err(|_|"transcription_cache_key_invalid")?;
+    let mut identity = serde_json::json!({"source":source,"identity":context.source,"start_ms":context.start_ms,"end_ms":context.end_ms,"language":context.language,"settings":settings,"decode":DECODE_ARGS,"output_format":"whisper.cpp-full-json-v1.9.2"});
+    // GPU output differs slightly from CPU output, so it is cached apart; CPU keys stay as before
+    if let Some(gpu) = gpu {
+        identity["gpu"] = serde_json::json!(gpu);
+    }
+    let bytes = serde_json::to_vec(&identity).map_err(|_| "transcription_cache_key_invalid")?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 async fn verify_all(
@@ -502,28 +586,32 @@ mod tests {
             end_ms: 1000,
             language: "auto".into(),
         };
-        let key = cache_key(&source, &context, &settings).unwrap();
+        let key = cache_key(&source, &context, &settings, None).unwrap();
         context.run_id = "second".into();
-        assert_eq!(cache_key(&source, &context, &settings).unwrap(), key);
+        assert_eq!(cache_key(&source, &context, &settings, None).unwrap(), key);
         context.language = "th".into();
-        assert_ne!(cache_key(&source, &context, &settings).unwrap(), key);
+        assert_ne!(cache_key(&source, &context, &settings, None).unwrap(), key);
         context.language = "auto".into();
         context.end_ms = 999;
-        assert_ne!(cache_key(&source, &context, &settings).unwrap(), key);
+        assert_ne!(cache_key(&source, &context, &settings, None).unwrap(), key);
         context.end_ms = 1000;
         context.source.id = "other".into();
-        assert_ne!(cache_key(&source, &context, &settings).unwrap(), key);
+        assert_ne!(cache_key(&source, &context, &settings, None).unwrap(), key);
         context.source.id = "source".into();
         let mut changed = settings.clone();
         changed.threads = 2;
-        assert_ne!(cache_key(&source, &context, &changed).unwrap(), key);
+        assert_ne!(cache_key(&source, &context, &changed, None).unwrap(), key);
         changed = settings.clone();
         changed.model.sha256 = "b".repeat(64);
-        assert_ne!(cache_key(&source, &context, &changed).unwrap(), key);
+        assert_ne!(cache_key(&source, &context, &changed, None).unwrap(), key);
         let mut changed_source = source.clone();
         changed_source.sha256 = "b".repeat(64);
         assert_ne!(
-            cache_key(&changed_source, &context, &settings).unwrap(),
+            cache_key(&changed_source, &context, &settings, None).unwrap(),
+            key
+        );
+        assert_ne!(
+            cache_key(&source, &context, &settings, Some(&source)).unwrap(),
             key
         );
         // transcripts cached before decode options joined the key (which could hold a
