@@ -376,6 +376,10 @@ async fn set_clips(runtime: Runtime, args: Value) -> Outcome {
         .collect();
     let (draft, jobs) = load(&runtime, &project).await?;
     let mut document = draft.document;
+    // the agent skips step 4, so speech subtitles are on unless the person already chose otherwise there
+    if document.get("text_roles").is_none() {
+        document["text_roles"] = json!(["speech"]);
+    }
     // stored exactly as a reply pasted at step 3, so the page shows and edits it the same way
     document["plan"] = json!(
         serde_json::to_string_pretty(
