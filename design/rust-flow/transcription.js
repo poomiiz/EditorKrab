@@ -106,7 +106,7 @@ export function createTranscription({project,read,state,writeEdit,changed}){
   const optionsKey=JSON.stringify(files.map(f=>[f.source_id,f.name]));if($('transcriptFile').dataset.options!==optionsKey){$('transcriptFile').replaceChildren(...files.map(f=>{const option=document.createElement('option');option.value=f.source_id;option.textContent=f.name;return option;}));$('transcriptFile').dataset.options=optionsKey;}
   $('transcriptFile').value=chosen;$('transcriptFile').disabled=!editable;
   $('transcriptResult').hidden=!files.some(f=>segments(f).length>0);paintRows(force);
-  $('transcriptPacket').disabled=!editable||!ready||!complete()||busy;$('transcriptPacket').hidden=!complete();$('transcriptGoPrepare').hidden=complete();
+  $('transcriptPacket').disabled=!editable||!ready||!complete()||busy;$('transcriptPacket').hidden=!complete();$('transcriptCopy').disabled=$('transcriptPacket').disabled;$('transcriptCopy').hidden=!complete();$('transcriptGoPrepare').hidden=complete();
   $('transcriptPacketTitle').textContent=complete()?'พร้อมส่งให้ AI':'ถอดเสียงในขั้น 1 ก่อน';
   $('transcriptPacketHint').textContent=complete()?'ไฟล์เล็ก มีแค่ข้อความ ไม่มีวิดีโอ':'ถอดเสียงเสร็จแล้วจึงดาวน์โหลดได้';
   changed();
@@ -175,7 +175,8 @@ export function createTranscription({project,read,state,writeEdit,changed}){
  $('transcriptFile').onchange=()=>{chosen=$('transcriptFile').value;page=0;rowsKey='';clearAudio();refresh(true);};
  $('transcriptPrevious').onclick=()=>{page=Math.max(0,page-1);paintRows(true);};$('transcriptNext').onclick=()=>{page++;paintRows(true);};
  $('transcriptRows').onfocusout=event=>{if(!$('transcriptRows').contains(event.relatedTarget))queueMicrotask(()=>paintRows());};
- $('transcriptPacket').onclick=async()=>{
+ // one packet for both hand-offs: a file to attach, or text to paste straight into a chat
+ async function sendPacket(deliver){
   if($('transcriptPacket').disabled)return;
   busy=true;packetNotice='';refresh();
   try{
@@ -187,9 +188,15 @@ export function createTranscription({project,read,state,writeEdit,changed}){
    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(content))),hash=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
    if(!state().saved||state().revision!==saved.revision||JSON.stringify(snapshotDraft)!==JSON.stringify(read())||!complete())throw Error('งานเปลี่ยนแล้ว ดาวน์โหลดใหม่อีกครั้ง');
    const packet={schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,content,instructions:'แบ่งเรื่องและเรียงช่วงพูดโดยอ้าง segment_ids ที่ให้เท่านั้น ห้ามสร้างเวลาใหม่ รักษาตอนจบให้ครบ ไม่ถือว่าคนละไฟล์คือกล้องซิงก์กัน เวลาระดับคำและคนพูดยังไม่ยืนยัน ส่ง JSON ตาม response_schema',response_schema:{schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,stories:[{id:'story-1',title:'ชื่อเรื่อง',segment_ids:[]}]}};
-   const url=URL.createObjectURL(new Blob([JSON.stringify(packet,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='editorkrab-transcript-ai.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+   await deliver(packet);
   }catch(error){packetNotice=error.message;}finally{busy=false;refresh();}
- };
+ }
+ $('transcriptPacket').onclick=()=>sendPacket(packet=>{const url=URL.createObjectURL(new Blob([JSON.stringify(packet,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='editorkrab-transcript-ai.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+ $('transcriptCopy').onclick=()=>sendPacket(async packet=>{
+  try{await navigator.clipboard.writeText(packet.instructions+'\nตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,2));}
+  catch(_){throw Error('คัดลอกไม่ได้ ใช้ปุ่มดาวน์โหลดไฟล์แทน');}
+  $('transcriptCopy').textContent='คัดลอกแล้ว';setTimeout(()=>{$('transcriptCopy').textContent='คัดลอกให้ AI';},2000);
+ });
  queueMicrotask(loadSettings);queueMicrotask(()=>gpuCall('/api/v1/transcription/gpu'));
  // Every subtitle line as it will show (hand edit if any), timed on its own source file.
  function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name})));}

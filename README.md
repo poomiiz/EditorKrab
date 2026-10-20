@@ -7,7 +7,7 @@
 
 EditorKrab is a desktop app that turns talking-head footage into short clips with subtitles. It runs on your own computer: videos, transcripts and projects stay on your machine.
 
-This is an early access project for Windows 10/11. All six steps work, but it has only been tested on generated test speech so far. Keyword highlights, English translation, music and sound effects are not in the new app yet.
+This is an early access project for **Windows 10/11 only**. Mac and Linux are not supported: the desktop app has not been tested on them. All six steps work. Keyword highlights, English translation, music and sound effects are not in the new app yet. See [Known limits](#known-limits) before you rely on it.
 
 [คู่มือภาษาไทย](docs/README.th.md) · [Report a bug](CONTRIBUTING.md) · [Security](SECURITY.md)
 
@@ -16,13 +16,26 @@ This is an early access project for Windows 10/11. All six steps work, but it ha
 The app has one window and six steps, with one main button per step.
 
 1. **Add video:** pick a file or a whole folder. Press **Transcribe** to turn speech into text, then listen and fix any wrong words. Thai, English and other languages are detected automatically.
-2. **Send to AI:** download one file and attach it in any AI chat (ChatGPT, Gemini or Claude). The AI picks the parts to keep.
+2. **Send to AI:** download one file and attach it in any AI chat (ChatGPT, Gemini or Claude), or press **คัดลอกให้ AI** and paste the same content straight into the chat. The AI picks the parts to keep.
 3. **Paste the answer:** paste the AI's whole reply back into the app.
 4. **Subtitles:** choose what appears on screen. Drag to move a subtitle and drag a corner to resize it.
 5. **Title:** add title text and place it on the clip.
 6. **Get the clip:** press **Create clip**. The app makes one vertical 9:16 MP4 per story the AI picked, with the subtitles and title burned in, and saves them in `Videos\EditorKrab`. It never overwrites an existing file. Each file is checked for size, sound and length before it is saved.
 
 The work saves itself as you go. **Undo**, **Redo**, **Open** and **Download backup** are in the top bar.
+
+## Use from an AI agent (MCP)
+
+While the app is open, an agent such as Claude Code, Claude Desktop or Codex can run the same steps through the [Model Context Protocol](https://modelcontextprotocol.io). The tools are `import_videos`, `transcribe`, `get_project`, `get_transcript`, `set_clips` and `export_clips`. Each answer includes an `open_in_app` link, so you can open the project the agent is working on and adjust it by hand.
+
+- **HTTP:** point the agent at `http://127.0.0.1:8871/mcp`.
+- **stdio:** for agents that only start a command, run the app's exe with `--mcp`. It relays to the open app, and says so when the app is not running. For example, in Claude Code:
+
+```powershell
+claude mcp add editorkrab -- "$env:LOCALAPPDATA\Programs\EditorKrab\EditorKrab.exe" --mcp
+```
+
+The agent reads the transcript text and file names to choose clips, so that text goes to whichever AI service the agent uses.
 
 ## Install
 
@@ -49,6 +62,29 @@ These numbers come from our own test runs. They are not guarantees.
 | Transcribe the Thai clip, 8 CPU threads (release build) | 128.4 s (was 543.1 s with 2 threads) | [flow-run3, run 4](docs/test-logs/rust-20261018/flow-run3.md) |
 
 The test speech was generated from the scripts in that folder; it is not customer footage. The times were measured on one 20-thread desktop CPU, with whisper running on the CPU only. The app uses up to 8 threads because more threads gave little extra speed. Time saved compared with manual editing has not been measured.
+
+## Known limits
+
+- **Windows only.** There is no Mac or Linux build.
+- **CPU only.** Transcription runs on the CPU, even on a computer with an NVIDIA graphics card. A 75-second Thai clip took 221 s on our test CPU.
+- **One model.** The app uses Whisper large-v3 and nothing else.
+- **Language choice.** The menu offers only Automatic, Thai and English. Other languages rely on automatic detection, which got Urdu (detected as Hindi) and Maltese (detected as Arabic) wrong in our test.
+- **Ten languages fail to transcribe:** Hindi, Bengali, Tamil, Telugu, Kannada, Marathi, Gujarati, Punjabi, Swahili and Armenian. Whisper repeats one sentence with zero-length timings, and the app rejects the chunk. A retry with different settings was tried and removed because it made Thai worse, so transcription stays a single pass.
+- **Poor accuracy** in Malayalam, Nepali, Azerbaijani and Hebrew (more than 50% wrong in our test).
+
+### 60-language test
+
+We ran the real app through all six steps on [Google FLEURS](https://huggingface.co/datasets/google/fleurs) read speech (CC BY 4.0), about 75 seconds per language. Thai, Chinese, Japanese and Korean are scored by character error rate, the rest by word error rate.
+
+| Result | Languages |
+|---|---|
+| All six steps and export passed | 50 of 60 |
+| Error rate 15% or lower | 24 (best: Chinese 1.2%, German 3.7%, Polish 3.9%, Finnish 5.5%, Slovak 5.8%) |
+| Error rate 15–40% | 17 |
+| Error rate above 40% | 8 |
+| Transcription failed | 10 (listed above) |
+
+About 75 seconds of audio per language is a small sample, so do not compare languages that are a few points apart. These runs used a test build with GPU transcription to save time; the released app is CPU only. On the three languages run both ways, the CPU gave the same error rate for English and Japanese, and 10.6% versus 6.8% for Thai.
 
 ## Build from source
 

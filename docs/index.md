@@ -1,18 +1,20 @@
 # Documentation
 
-Start with the [README](../README.md) for installation and your first clip, or the [Thai guide](README.th.md) for the same steps in Thai.
+Start with the [README](../README.md) for the Windows desktop app, or the [Thai guide](README.th.md) for the same steps in Thai.
+
+Most pages below describe the **older Python workflow** (`app/`, `scripts/`, `skills/`), not the desktop app. They are kept for existing users.
 
 ## Set up and update
 
 | Guide | What it covers |
 |---|---|
-| [Mac setup](macos.md) | Experimental setup, CPU transcription and real-device checks |
+| [Mac setup](macos.md) | Older Python workflow only; the desktop app is Windows only |
 | [Mac and Update checks](test-logs/macos-support.md) | Results and the CapCut checks still needed |
 | [Team setup](team-setup.md) (Thai) | Account configuration, ownership, MP4 review and external synchronization |
 | [Setup settings](../config.example.json) | The settings copied into your private config.json |
 | [Machine check](../scripts/doctor.py) | Python packages, ffmpeg, Node.js and optional speech-model checks |
 
-Use Update in the app to receive published release tags. It does not deliver every main-branch merge. Check [Releases](https://github.com/poomiiz/EditorKrab/releases) for version 0.29.1 availability.
+Check [Releases](https://github.com/poomiiz/EditorKrab/releases) for the current desktop app download.
 
 ## Make and review a clip
 

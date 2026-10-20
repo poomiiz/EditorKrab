@@ -61,7 +61,7 @@ pub struct Event {
     pub job: Job,
 }
 
-pub(crate) fn identifier(value: &str) -> bool {
+pub fn identifier(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && value
