@@ -19,8 +19,11 @@ export function createTranscription({project,read,state,writeEdit,changed}){
  function active(){return [...jobs.values()].filter(j=>j.task.kind==='transcribe'&&['queued','running'].includes(j.status));}
  function probe(file){return [...jobs.values()].find(j=>j.task.kind==='probe'&&j.task.path===file.path&&stamp(j.task.source)===stamp({id:file.source_id,size:file.size,modified_ns:file.modified_ns})&&j.status==='succeeded');}
  function eligible(){return read().files.filter(f=>f.source_id&&probe(f)?.result?.streams?.some(s=>s.codec_type==='audio'));}
+ // whisper.cpp jobs are 5-minute pieces, CT2 sidecar jobs 4-minute ones (transcription_jobs.rs); follow whichever the jobs use
  function ranges(file){const duration=Math.ceil((probe(file)?.result?.duration_s || 0)*1000);if(!duration || duration>30000000)return [];
-  return Array.from({length:Math.ceil(duration/300000)},(_,n)=>[n*300000,Math.min(duration,(n+1)*300000)]);
+  const grid=step=>Array.from({length:Math.ceil(duration/step)},(_,n)=>[n*step,Math.min(duration,(n+1)*step)]);
+  const fits=step=>matching(file).filter(j=>grid(step).some(([a,b])=>j.task.context.start_ms===a&&j.task.context.end_ms===b)).length;
+  return grid(fits(240000)>fits(300000)?240000:300000);
  }
  function matching(file){return [...jobs.values()].filter(j=>j.task.kind==='transcribe'&&j.task.path===file.path&&stamp(j.task.context.source)===stamp({id:file.source_id,size:file.size,modified_ns:file.modified_ns})&&j.task.context.language===read().language&&configKey(j.task.settings)===configKey(settings));}
  function chunks(file){return ranges(file).map(([start,end])=>matching(file).filter(j=>j.task.context.start_ms===start&&j.task.context.end_ms===end).sort((a,b)=>(a.status==='succeeded'?-1:0)-(b.status==='succeeded'?-1:0)||b.created_at-a.created_at||a.id.localeCompare(b.id))[0]);}

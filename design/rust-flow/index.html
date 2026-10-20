@@ -313,7 +313,8 @@ main{padding:0;gap:0}
 .text-inspector{background:var(--panel);padding:var(--space-xl);gap:var(--space-xl)}
 .headline-optional{padding:0 var(--space-2xl);background:var(--panel)}
 .task-empty h2{font-size:1.0625rem}
-@media(max-width:760px),(max-height:560px){
+/* the video list and its side panel stay side by side down to phone width; a short window scrolls instead */
+@media(max-width:600px){
 .stage-body.split{grid-template-columns:1fr;padding-right:var(--space-md);overflow:visible}
 .split-main,.split-side{max-height:none;overflow:visible}
 .split-side{border-left:0;border-top:1px solid var(--line);margin-inline:calc(-1 * var(--space-md))}
