@@ -26,6 +26,12 @@ const HOP: usize = 160;
 const FRAMES: usize = 3000;
 const WINDOW: f32 = 15.0;
 const OVERLAP: f32 = 1.0;
+/// Each window also hears the 5 s before its start. The model drops the words a window begins in the middle of
+/// (20 Oct 2026, English FLEURS 3.6 min: 7 stretches of 5-14 s lost); starting 5 s early lets the window hear
+/// that sentence from its start, and the seam rule below keeps only what the window before did not. Leads of
+/// 0/2/3/5/8 s averaged 14.4/14.0/12.3/12.8/9.6% error over 7 languages and 11.0/10.7/12.5/10.3/13.9% over 5 Thai
+/// clips; 5 s is the best for Thai and fixes English (35.5% -> 13.0%).
+const LEAD: f32 = 5.0;
 const BATCH: usize = 8;
 /// The one setting that differs from v0.29.1, which decoded without timestamp tokens (faster-whisper's batched
 /// default): without them the model often stops after a window's first sentence. 20 Oct 2026, 5 Thai FLEURS
@@ -491,7 +497,10 @@ fn transcribe(
             let clock = Instant::now();
             let clips: Vec<(f32, f32)> = group
                 .iter()
-                .map(|&t| (t, (t + WINDOW + OVERLAP).min(total) - t))
+                .map(|&t| {
+                    let from = (t - LEAD).max(0.0);
+                    (from, (t + WINDOW + OVERLAP).min(total) - from)
+                })
                 .collect();
             let mut mel = vec![0f32; group.len() * model.n_mels * FRAMES];
             std::thread::scope(|s| {
@@ -547,7 +556,7 @@ fn transcribe(
                 .whisper
                 .align(&encoded, &start_seq, &tokens, &frames, 7)
                 .map_err(|e| format!("align: {e}"))?;
-            for (i, &(t, d)) in clips.iter().enumerate() {
+            for (i, (&(from, d), &t)) in clips.iter().zip(group).enumerate() {
                 let words = if tokens[i].is_empty() {
                     Vec::new()
                 } else {
@@ -556,7 +565,7 @@ fn transcribe(
                         &tokens[i],
                         &aligned[i],
                         language,
-                        t,
+                        from,
                         d,
                         &mut last_speech,
                     )
@@ -567,14 +576,9 @@ fn transcribe(
         }
     }
     // v0.29.1 _batched: windows in time order; start after the last whole word kept, stop at the whole word on the seam
-    windows.sort_by(|a, b| {
-        a.1.first()
-            .map_or(a.0, |w| w.0)
-            .partial_cmp(&b.1.first().map_or(b.0, |w| w.0))
-            .unwrap()
-    });
+    windows.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
     let mut out: Vec<Word> = Vec::new();
-    for (_, words) in windows {
+    for (t, words) in windows {
         let piece: Vec<Word> = words
             .into_iter()
             .filter(|w| !w.2.trim().is_empty())
@@ -583,7 +587,7 @@ fn transcribe(
             continue;
         }
         let whole = word_starts(&piece, language);
-        let hi = (piece[0].0 / WINDOW).floor() * WINDOW + WINDOW + OVERLAP / 2.0;
+        let hi = t + WINDOW + OVERLAP / 2.0;
         let after = |w: &Word| out.last().is_none_or(|l: &Word| w.0 >= l.1 - 0.1);
         let begin = (0..piece.len())
             .find(|&i| whole[i] && after(&piece[i]))
