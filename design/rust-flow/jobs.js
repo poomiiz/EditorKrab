@@ -1,5 +1,5 @@
 // A snapshot and cursor are read together; live replay starts after that snapshot.
-export function watchJobs(project, revision, container, changed=()=>{}, replaced=()=>{}) {
+export function watchJobs(project, revision, container, changed=()=>{}, replaced=()=>{}, files=null) {
   let source, retryTimer, closed=false, generation=0;
   let frame=0;
   const jobs=new Map();
@@ -13,12 +13,15 @@ export function watchJobs(project, revision, container, changed=()=>{}, replaced
     transcription_cache_corrupt:'ข้อความที่ถอดไว้เสีย ถอดเสียงใหม่',transcription_dependency_changed:'ไฟล์เปลี่ยนแล้ว เริ่มใหม่',transcription_settings_changed:'ตัวถอดเสียงเปลี่ยนแล้ว ถอดเสียงใหม่',transcription_not_configured:'ยังไม่ได้ติดตั้งตัวถอดเสียง',transcription_process_failed:'ถอดเสียงไม่ได้ ลองใหม่อีกครั้ง',transcription_process_timeout:'ถอดเสียงนานเกินกำหนด ลองใหม่',transcription_dependency_missing:'ยังไม่ได้ติดตั้งตัวถอดเสียง',invalid_segment_clock_or_text:'ถอดเสียงผิดพลาด ลองใหม่',ffprobe_timeout:'อ่านวิดีโอนานเกินไป ลองใหม่',media_duration_missing:'อ่านระยะเวลาไม่ได้',source_changed:'วิดีโอถูกแก้ไขแล้ว เลือกใหม่'};
   function render() {if (!frame) frame=requestAnimationFrame(()=>{frame=0;if (!closed) renderNow();});}
   function renderNow() {
-    const all=[...jobs.values()];
+    // only videos in the draft now, nothing cancelled: a removed video's jobs are history, not work
+    const names=files && new Map(files().filter(f=>f?.source_id).map(f=>[f.source_id,f.name]));
+    const sourceOf=job=>job.task.source?.id ?? job.task.context?.source?.id;
+    const all=[...jobs.values()].filter(j=>(!names || names.has(sourceOf(j))) && j.status!=='cancelled');
     counts.textContent=all.length ? ['probe','transcribe'].map(kind=>{const group=all.filter(j=>j.task.kind===kind);return group.length ? `${kind==='probe'?'อ่านวิดีโอสำเร็จ':'ถอดเสียงสำเร็จ'} ${group.filter(j=>j.status==='succeeded').length}/${group.length}${kind==='transcribe'?' ช่วง':''}` : '';}).filter(Boolean).join(' · ') : 'ยังไม่มีงาน';
     list.replaceChildren(...all.map(job=>{
       const item=document.createElement('li');
       const name=document.createElement('span');
-      name.textContent=(job.task.kind==='transcribe'?'ถอดเสียง · ':'อ่านวิดีโอ · ')+(job.task.path.split(/[\\/]/).pop() || 'วิดีโอ');
+      name.textContent=(job.task.kind==='transcribe'?'ถอดเสียง · ':'อ่านวิดีโอ · ')+(names?.get(sourceOf(job)) || job.task.path.split(/[\\/]/).pop() || 'วิดีโอ');
       const badge=document.createElement('span');badge.className='badge';
       badge.textContent=job.cancel_requested && job.status==='running' ? 'กำลังยกเลิก' : labels[job.status] || 'ต้องตรวจสอบ';
       item.append(name,' ',badge);

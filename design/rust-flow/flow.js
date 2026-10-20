@@ -374,7 +374,7 @@ try {
   jobWatcher=watchJobs(projectId,()=>session.record.revision,$('jobProgress'),job=>{
     speech.changed(job);
     if (job.task.kind==='probe' && job.task.source?.id) {probes.set(job.task.source.id,job);queueFilesRender();}
-  },()=>{probes.clear();speech.reset();queueFilesRender();});
+  },()=>{probes.clear();speech.reset();queueFilesRender();},()=>draft.files);
   if (session.created) {
     try { localStorage.setItem(key + '-migrated', projectId); } catch (_) { /* Raw legacy data remains untouched. */ }
   }
