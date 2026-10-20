@@ -284,7 +284,7 @@ async fn run_export(
                 progress,
             )
             .await?;
-            verify_export(&ffprobe, &partial, story.duration_ms()).await?;
+            verify_export(&ffprobe, &partial, story.duration_ms(), story.pieces.len()).await?;
             let name = editorkrab::export::story_name(&title, story, n);
             let target = editorkrab::export::unused_path(&folder, &name);
             // same drive: rename; otherwise copy, then the work folder is cleaned below
@@ -474,10 +474,13 @@ async fn probe_media(
     })
 }
 /// A clip is published only when ffprobe reads one video and one audio stream of the planned length.
+/// Each piece ends on a source frame and concat pads its audio to match, so every piece may run up to one frame
+/// long (42 ms at 24 fps): 81 subtitle lines of a 59.94 fps clip came out 0.65 s longer than planned.
 async fn verify_export(
     ffprobe: &std::path::Path,
     file: &std::path::Path,
     expected_ms: u64,
+    pieces: usize,
 ) -> Result<(), String> {
     let mut command = tokio::process::Command::new(ffprobe);
     command
@@ -509,7 +512,7 @@ async fn verify_export(
         .and_then(|d| d.parse::<f64>().ok())
         .map(|d| (d * 1000.0) as u64)
         .unwrap_or(0);
-    if !size_ok || !has_audio || duration_ms.abs_diff(expected_ms) > 500 {
+    if !size_ok || !has_audio || duration_ms.abs_diff(expected_ms) > 500 + 42 * pieces as u64 {
         return Err(format!(
             "export_check_failed:video={size_ok},audio={has_audio},duration_ms={duration_ms},expected_ms={expected_ms}"
         ));

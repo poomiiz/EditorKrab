@@ -423,6 +423,30 @@ fn word_starts(words: &[Word], language: &str) -> Vec<bool> {
         .collect()
 }
 
+/// Thai word starts that both ICU4X segmenters agree on, for splitting a line that has no space to break at. The
+/// dictionary segmenter loses its way after an unknown loanword ("มอ|นิเต|อริ่|งใ|ห้ก"), the LSTM one less so;
+/// where they agree the cut is between whole words.
+fn agreed_starts(words: &[Word]) -> Vec<bool> {
+    let text: String = words.iter().map(|w| w.2.as_str()).collect();
+    let dictionary: std::collections::HashSet<usize> =
+        icu_segmenter::WordSegmenter::new_dictionary()
+            .segment_str(&text)
+            .collect();
+    let lstm: std::collections::HashSet<usize> = icu_segmenter::WordSegmenter::new_lstm()
+        .segment_str(&text)
+        .collect();
+    let mut at = 0;
+    word_starts(words, "th")
+        .into_iter()
+        .zip(words)
+        .map(|(start, w)| {
+            let agreed = start && dictionary.contains(&at) && lstm.contains(&at);
+            at += w.2.len();
+            agreed
+        })
+        .collect()
+}
+
 /// v0.29.1 _drop_loops: a run of the same 4-40 letters said more than twice in a row keeps its first two.
 fn drop_loops(words: Vec<Word>) -> Vec<Word> {
     const MOST: usize = 2;
@@ -607,6 +631,13 @@ fn line_starts(words: &[Word], language: &str) -> Vec<usize> {
     const SHORTEST: f32 = 1.0;
     const LONGEST: f32 = 3.5;
     let mut ok = word_starts(words, language);
+    if language == "th" {
+        // A dictionary boundary is a word, not a phrase: lines broke at "จุด|นี้" and inside loanwords
+        // ("มอนิเตอริ|ง"). Thai writing puts a space between phrases, so a Thai line starts only after one.
+        for (start, w) in ok.iter_mut().zip(words) {
+            *start &= w.2.starts_with(char::is_whitespace);
+        }
+    }
     ok[0] = false;
     let last_end = words[words.len() - 1].1;
     let mut cuts = Vec::new();
@@ -658,6 +689,18 @@ fn line_starts(words: &[Word], language: &str) -> Vec<usize> {
     for pair in edges.windows(2) {
         starts.extend(split(words, &ok, pair[0], pair[1]));
         starts.push(pair[1]);
+    }
+    if language == "th" {
+        // a phrase with no space in it can run 13 s; past 7 s it is split where both segmenters see a word break
+        let agreed = agreed_starts(words);
+        let mut out = vec![0];
+        for pair in starts.windows(2) {
+            if pair[1] > pair[0] && words[pair[1] - 1].1 - words[pair[0]].0 > 7.0 {
+                out.extend(split(words, &agreed, pair[0], pair[1]));
+            }
+            out.push(pair[1]);
+        }
+        starts = out;
     }
     starts.dedup();
     starts
@@ -828,6 +871,59 @@ mod tests {
             w(1.2, 1.5, "\u{0e48}"),
         ];
         assert_eq!(word_starts(&words, "th"), vec![true, false, true, false]);
+    }
+    #[test]
+    fn thai_lines_break_only_between_phrases() {
+        // "จุดนี้" are two dictionary words with a pause between them; the line still waits for the space
+        let words = vec![
+            w(0.0, 1.0, "พลังงานไฟฟ้าสูงขึ้นจุด"),
+            w(1.5, 2.6, "นี้เราก็พัฒนา"),
+            w(3.0, 4.2, " ร่วมกับลูกค้า"),
+        ];
+        assert_eq!(line_starts(&words, "th"), vec![0, 2, 3]);
+        let words = vec![
+            w(0.0, 1.0, "hello"),
+            w(1.5, 2.6, " world"),
+            w(3.0, 4.2, " again"),
+        ];
+        assert_eq!(line_starts(&words, "en"), vec![0, 1, 2, 3]);
+    }
+    #[test]
+    fn long_thai_lines_split_at_agreed_word_breaks() {
+        // 10 s with no space: split, but never inside "มอนิเตอริ่ง"
+        let parts = [
+            "พลังงาน",
+            "ไฟฟ้า",
+            "สูง",
+            "ขึ้น",
+            "จุด",
+            "นี้",
+            "เรา",
+            "ก็",
+            "คอย",
+            "ดู",
+            "มอ",
+            "นิ",
+            "เต",
+            "อ",
+            "ริ่ง",
+            "ให้",
+            "กับ",
+            "ลูกค้า",
+        ];
+        let words: Vec<Word> = parts
+            .iter()
+            .enumerate()
+            .map(|(i, t)| w(i as f32 * 0.55, i as f32 * 0.55 + 0.55, t))
+            .collect();
+        let starts = line_starts(&words, "th");
+        assert!(starts.len() > 2, "{starts:?}");
+        for s in &starts[1..starts.len() - 1] {
+            assert!(
+                !(11..=14).contains(s),
+                "cut inside a loanword at {s}: {starts:?}"
+            );
+        }
     }
     #[test]
     fn lines_break_at_pauses_and_stay_in_order_inside_the_audio() {
