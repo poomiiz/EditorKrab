@@ -521,6 +521,7 @@ async fn begin_upload(
     State(runtime): State<Runtime>,
     Json(body): Json<editorkrab::uploads::Begin>,
 ) -> Result<Json<editorkrab::uploads::Progress>, ApiError> {
+    preload_asr(&runtime);
     let assets = runtime.assets.clone();
     database(runtime, move |store| store.begin_upload(&assets, &body))
         .await
@@ -580,6 +581,7 @@ async fn pick_sources(
         return Err((StatusCode::CONFLICT, Json(json!({"error":"picker_busy"}))));
     }
     let lease = PickerLease(runtime.picker_busy.clone());
+    preload_asr(&runtime);
     let (answer, receive) = tokio::sync::oneshot::channel();
     runtime
         .picker
@@ -741,6 +743,11 @@ async fn start_transcription(
     })
     .await?;
     let expected = body.settings.clone();
+    let chunk_ms = if configured.0.ct2.is_some() {
+        editorkrab::transcription_jobs::CT2_CHUNK_MS
+    } else {
+        editorkrab::transcription_jobs::CHUNK_MS
+    };
     let source = tokio::task::spawn_blocking(move || {
         if AsrSettings::read(&configured.0)? != expected {
             return Err("transcription_settings_changed".to_string());
@@ -751,7 +758,7 @@ async fn start_transcription(
     .map_err(|_| failure(Error::Unavailable))?
     .map_err(|error| (StatusCode::CONFLICT, Json(json!({"error":error}))))?;
     database(runtime, move |store| {
-        store.start_transcription_checked(&project, &body, Some(&source))
+        store.start_transcription_checked(&project, &body, Some(&source), chunk_ms)
     })
     .await
     .map(Json)
@@ -1175,6 +1182,56 @@ fn gpu_engine(data: &std::path::Path) -> Option<PathBuf> {
         Err(_) => find_tool(&tool_roots(data), "whisper-cuda", "whisper-cli"),
     }
 }
+/// The CTranslate2 GPU sidecar (`asr-ct2/ek-asr-ct2`) and its model folder (`models/ct2-large-v3`);
+/// EDITORKRAB_CT2 and EDITORKRAB_CT2_MODEL override the search. Off under "CPU only". One handle per
+/// process, so swapping the tools keeps a model that is already loaded.
+fn ct2_sidecar(data: &std::path::Path) -> Option<Arc<editorkrab::ct2::Ct2>> {
+    static ONE: std::sync::OnceLock<Mutex<Option<Arc<editorkrab::ct2::Ct2>>>> =
+        std::sync::OnceLock::new();
+    let wanted = (!force_cpu(data)).then(|| {
+        let roots = tool_roots(data);
+        let exe = match std::env::var("EDITORKRAB_CT2") {
+            Ok(path) => Some(PathBuf::from(path)),
+            Err(_) => find_tool(&roots, "asr-ct2", "ek-asr-ct2"),
+        }?;
+        let model = match std::env::var("EDITORKRAB_CT2_MODEL") {
+            Ok(path) => Some(PathBuf::from(path)),
+            Err(_) => roots
+                .iter()
+                .map(|r| r.join("models").join("ct2-large-v3"))
+                .find(|p| p.join("model.bin").is_file()),
+        }?;
+        Some((exe, model))
+    });
+    let mut slot = ONE
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    match wanted.flatten() {
+        None => {
+            *slot = None;
+            None
+        }
+        Some((exe, model)) => {
+            if let Some(current) = slot.as_ref().filter(|c| c.exe == exe && c.model == model) {
+                return Some(current.clone());
+            }
+            let fresh = editorkrab::ct2::Ct2::new(exe, model);
+            *slot = Some(fresh.clone());
+            Some(fresh)
+        }
+    }
+}
+/// Starts loading the GPU model as soon as a video comes in, so the first chunk does not wait for it.
+fn preload_asr(runtime: &Runtime) {
+    if let Some(ct2) = runtime.asr().and_then(|a| a.0.ct2.clone()) {
+        tokio::spawn(async move {
+            if let Err(e) = ct2.preload().await {
+                eprintln!("transcription_ct2_preload_failed: {e}");
+            }
+        });
+    }
+}
 /// The user's "CPU only" switch, kept as a marker file so it survives a restart.
 fn force_cpu(data: &std::path::Path) -> bool {
     data.join("force-cpu").exists()
@@ -1205,6 +1262,7 @@ async fn configure_asr(
     model: PathBuf,
     ffmpeg: PathBuf,
     gpu: Option<PathBuf>,
+    ct2: Option<Arc<editorkrab::ct2::Ct2>>,
     state_path: &std::path::Path,
 ) -> Result<Asr, BoxError> {
     let config = AsrConfig {
@@ -1215,6 +1273,7 @@ async fn configure_asr(
         timeout: Duration::from_secs(3600),
         threads: asr_threads(),
         gpu,
+        ct2,
     };
     let capture = config.clone();
     let settings = tokio::task::spawn_blocking(move || AsrSettings::read(&capture)).await??;
@@ -1417,6 +1476,7 @@ async fn reload_asr(runtime: &Runtime) -> Result<(), String> {
         Some(current) => {
             let (mut config, settings) = (current.0.clone(), current.1.clone());
             config.gpu = gpu_engine(data).filter(|_| !force_cpu(data));
+            config.ct2 = ct2_sidecar(data);
             Arc::new((config, settings))
         }
         None => {
@@ -1426,9 +1486,16 @@ async fn reload_asr(runtime: &Runtime) -> Result<(), String> {
             else {
                 return Err("invalid_tools".into());
             };
-            configure_asr(engine, model, ffmpeg, found.gpu, &runtime.setup.state_path)
-                .await
-                .map_err(|e| format!("invalid_tools:{e}"))?
+            configure_asr(
+                engine,
+                model,
+                ffmpeg,
+                found.gpu,
+                ct2_sidecar(data),
+                &runtime.setup.state_path,
+            )
+            .await
+            .map_err(|e| format!("invalid_tools:{e}"))?
         }
     };
     *runtime.asr.write().unwrap_or_else(|e| e.into_inner()) = Some(asr);
@@ -1462,9 +1529,11 @@ async fn gpu_status(State(runtime): State<Runtime>) -> Json<Value> {
     if download.state != "running" {
         download.received = have;
     }
-    let active = runtime.asr().is_some_and(|a| a.0.gpu.is_some());
+    let asr = runtime.asr();
+    let ct2 = asr.as_ref().is_some_and(|a| a.0.ct2.is_some());
+    let active = ct2 || asr.is_some_and(|a| a.0.gpu.is_some());
     Json(
-        json!({"nvidia":nvidia,"installed":installed,"force_cpu":forced,"active":active,"download":download}),
+        json!({"nvidia":nvidia,"installed":installed,"force_cpu":forced,"active":active,"ct2":ct2,"download":download}),
     )
 }
 async fn start_gpu_download(State(runtime): State<Runtime>) -> Result<Json<Value>, ApiError> {
@@ -1581,12 +1650,24 @@ async fn serve(
                 model: Some(model),
                 ffmpeg: Some(ffmpeg),
                 gpu,
-            } => Some(configure_asr(engine, model, ffmpeg, gpu, &state_path).await?),
+            } => Some(
+                configure_asr(engine, model, ffmpeg, gpu, ct2_sidecar(&data), &state_path).await?,
+            ),
             _ => None,
         },
         (Ok(engine), Ok(model), Ok(ffmpeg)) => {
             let gpu = gpu_engine(&data).filter(|_| !force_cpu(&data));
-            Some(configure_asr(engine.into(), model.into(), ffmpeg.into(), gpu, &state_path).await?)
+            Some(
+                configure_asr(
+                    engine.into(),
+                    model.into(),
+                    ffmpeg.into(),
+                    gpu,
+                    ct2_sidecar(&data),
+                    &state_path,
+                )
+                .await?,
+            )
         }
         _ => return Err(
             "configure EDITORKRAB_WHISPER, EDITORKRAB_WHISPER_MODEL and EDITORKRAB_FFMPEG together"

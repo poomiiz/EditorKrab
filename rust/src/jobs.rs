@@ -513,8 +513,17 @@ impl Store {
                             value.get("gpu_engine").cloned().unwrap_or_default(),
                         )
                         .map_err(|_| Error::TranscriptionCacheCorrupt)?;
-                        if crate::native_asr::cache_key(&source, &context, &settings, gpu.as_ref())
-                            .map_err(|_| Error::TranscriptionCacheCorrupt)?
+                        let ct2: Option<crate::native_asr::Ct2Identity> =
+                            serde_json::from_value(value.get("ct2").cloned().unwrap_or_default())
+                                .map_err(|_| Error::TranscriptionCacheCorrupt)?;
+                        if crate::native_asr::cache_key(
+                            &source,
+                            &context,
+                            &settings,
+                            gpu.as_ref(),
+                            ct2.as_ref(),
+                        )
+                        .map_err(|_| Error::TranscriptionCacheCorrupt)?
                             != cache.key
                         {
                             return Err(Error::TranscriptionCacheCorrupt);

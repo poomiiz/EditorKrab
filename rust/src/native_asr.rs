@@ -23,6 +23,15 @@ pub struct Config {
     pub threads: u16,
     /// CUDA build of whisper-cli; tried first, and any failure of it reruns the chunk on `whisper`.
     pub gpu: Option<PathBuf>,
+    /// CTranslate2 GPU sidecar; tried before `gpu`, and any failure of it falls through to whisper.cpp.
+    pub ct2: Option<std::sync::Arc<crate::ct2::Ct2>>,
+}
+/// What produced a CTranslate2 transcript; part of the cache key when present.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Ct2Identity {
+    pub engine: Artifact,
+    pub model: Artifact,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -48,6 +57,8 @@ pub struct ResultChunk {
     pub gpu_engine: Option<Artifact>,
     /// Why the GPU build failed when this chunk fell back to the CPU build.
     pub gpu_error: Option<String>,
+    /// The CTranslate2 sidecar and model that produced the transcript; part of the cache key when present.
+    pub ct2: Option<Ct2Identity>,
     #[serde(skip)]
     pub cache_candidate: Option<crate::chunk_cache::Candidate>,
 }
@@ -69,6 +80,26 @@ impl Artifact {
             return Err("transcription_dependency_not_file".into());
         }
         let stamp = sources::stamp(&metadata).map_err(|_| "transcription_dependency_unreadable")?;
+        // Every chunk reads the source, the model and the tools twice; a 3 GB model and an 8 GB
+        // camera file cost seconds each time. A file whose size and nanosecond stamp are unchanged
+        // since this process hashed it keeps that hash.
+        static HASHED: std::sync::OnceLock<
+            std::sync::Mutex<std::collections::HashMap<PathBuf, (u64, String, String)>>,
+        > = std::sync::OnceLock::new();
+        let hashed = HASHED.get_or_init(Default::default);
+        if let Some((_, _, sha256)) = hashed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&path)
+            .filter(|(size, at, _)| *size == metadata.len() && *at == stamp)
+        {
+            return Ok(Self {
+                path: path.clone(),
+                size: metadata.len(),
+                modified_ns: stamp,
+                sha256: sha256.clone(),
+            });
+        }
         let mut file =
             std::fs::File::open(&path).map_err(|_| "transcription_dependency_unreadable")?;
         let mut hash = Sha256::new();
@@ -93,11 +124,16 @@ impl Artifact {
         {
             return Err("transcription_dependency_changed".into());
         }
+        let sha256 = format!("{:x}", hash.finalize());
+        hashed.lock().unwrap_or_else(|e| e.into_inner()).insert(
+            path.clone(),
+            (metadata.len(), stamp.clone(), sha256.clone()),
+        );
         Ok(Self {
             path,
             size: metadata.len(),
             modified_ns: stamp,
-            sha256: format!("{:x}", hash.finalize()),
+            sha256,
         })
     }
     fn verify(&self, cancel: &watch::Receiver<bool>) -> Result<(), String> {
@@ -327,10 +363,29 @@ pub async fn run_cached(
         ffmpeg: ffmpeg.clone(),
         threads: config.threads,
     };
-    let cpu_key = cache_key(&source, context, &settings, None)?;
-    let key = cache_key(&source, context, &settings, gpu.as_ref())?;
+    // the CTranslate2 sidecar is used only while its files can be identified
+    let ct2 = match &config.ct2 {
+        Some(sidecar) => {
+            let sidecar = sidecar.clone();
+            match tokio::task::spawn_blocking(move || sidecar.identity()).await {
+                Ok(Ok(id)) => Some(id),
+                Ok(Err(e)) => {
+                    eprintln!("transcription_ct2_unavailable: {e}");
+                    None
+                }
+                Err(_) => None,
+            }
+        }
+        None => None,
+    };
+    let cpu_key = cache_key(&source, context, &settings, None, None)?;
+    let key = cache_key(&source, context, &settings, gpu.as_ref(), None)?;
+    let ct2_key = ct2
+        .as_ref()
+        .map(|id| cache_key(&source, context, &settings, None, Some(id)))
+        .transpose()?;
     if let Some((store, job_id)) = cache {
-        let lookup_key = key.clone();
+        let lookup_key = ct2_key.clone().unwrap_or_else(|| key.clone());
         let source_sha256 = source.sha256.clone();
         let raw = tokio::task::spawn_blocking(move || {
             store
@@ -363,9 +418,14 @@ pub async fn run_cached(
                 model,
                 elapsed_ms: started.elapsed().as_millis(),
                 cache_hit: true,
-                device: if gpu.is_some() { "gpu" } else { "cpu" },
-                gpu_engine: gpu,
+                device: if gpu.is_some() || ct2.is_some() {
+                    "gpu"
+                } else {
+                    "cpu"
+                },
+                gpu_engine: if ct2.is_some() { None } else { gpu },
                 gpu_error: None,
+                ct2,
                 cache_candidate: None,
             });
         }
@@ -406,7 +466,23 @@ pub async fn run_cached(
     }
     let mut gpu_error = None;
     let mut output = None;
-    if let Some(gpu) = &gpu {
+    if let (Some(sidecar), Some(id), Some(ct2_key)) = (&config.ct2, &ct2, &ct2_key) {
+        // language detection, when asked for, uses whichever whisper-cli build this chunk would use
+        let detector = gpu.as_ref().map_or((&engine, false), |g| (g, true));
+        match run_ct2(
+            config, sidecar, detector, &model, &audio, context, &scratch.0, &cancel,
+        )
+        .await
+        {
+            Ok(bytes) => output = Some((bytes, "gpu", None, Some(id.clone()), ct2_key.clone())),
+            Err(e) if e == "cancelled" => return Err(e),
+            Err(e) => {
+                eprintln!("transcription_ct2_failed: {e}; falling back to whisper.cpp");
+                gpu_error = Some(e);
+            }
+        }
+    }
+    if let (None, Some(gpu)) = (&output, &gpu) {
         let prefix = scratch.0.join("gpu");
         match infer(config, gpu, true, &model, &audio, context, &prefix, &cancel).await {
             Ok((bytes, on_gpu)) => {
@@ -414,7 +490,8 @@ pub async fn run_cached(
                 if !on_gpu {
                     gpu_error = Some("gpu_not_used".to_string());
                 }
-                output = Some((bytes, if on_gpu { "gpu" } else { "cpu" }));
+                let device = if on_gpu { "gpu" } else { "cpu" };
+                output = Some((bytes, device, Some(gpu.clone()), None, key.clone()));
             }
             Err(e) if e == "cancelled" => return Err(e),
             Err(e) => {
@@ -423,8 +500,8 @@ pub async fn run_cached(
             }
         }
     }
-    let (bytes, device, gpu_engine, key) = match output {
-        Some((bytes, device)) => (bytes, device, gpu, key),
+    let (bytes, device, gpu_engine, ct2, key) = match output {
+        Some(output) => output,
         None => (
             infer(
                 config, &engine, false, &model, &audio, context, &prefix, &cancel,
@@ -433,10 +510,20 @@ pub async fn run_cached(
             .0,
             "cpu",
             None,
+            None,
             cpu_key,
         ),
     };
     verify_all(&source, &engine, &model, &ffmpeg, cancel.clone()).await?;
+    if let (Some(id), Some(sidecar)) = (&ct2, &config.ct2) {
+        let sidecar = sidecar.clone();
+        let current = tokio::task::spawn_blocking(move || sidecar.identity())
+            .await
+            .map_err(|_| "transcription_identity_task_failed")??;
+        if &current != id {
+            return Err("transcription_dependency_changed".into());
+        }
+    }
     let transcript = transcription::parse(&bytes, context)?;
     if *cancel.borrow() {
         return Err("cancelled".into());
@@ -453,8 +540,101 @@ pub async fn run_cached(
         device,
         gpu_engine,
         gpu_error,
+        ct2,
         cache_candidate: Some(crate::chunk_cache::Candidate::new(key, bytes)),
     })
+}
+
+/// One pass of the CTranslate2 sidecar over the extracted audio; returns whisper.cpp-shaped JSON
+/// that the app's parser already accepted, so any problem here falls back to whisper.cpp.
+#[allow(clippy::too_many_arguments)]
+async fn run_ct2(
+    config: &Config,
+    sidecar: &crate::ct2::Ct2,
+    detector: (&Artifact, bool),
+    model: &Artifact,
+    audio: &Path,
+    context: &Context,
+    dir: &Path,
+    cancel: &watch::Receiver<bool>,
+) -> Result<Vec<u8>, String> {
+    // one detection per video run: later chunks of the same run reuse the first chunk's answer
+    static DETECTED: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<(String, String), String>>,
+    > = std::sync::OnceLock::new();
+    let run = (context.source.id.clone(), context.run_id.clone());
+    let known = DETECTED
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&run)
+        .cloned();
+    let decode = if context.language != "auto" {
+        context.language.clone()
+    } else if let Some(language) = known {
+        language
+    } else {
+        let language = detect_language(config, detector, model, audio, cancel).await?;
+        DETECTED
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(run, language.clone());
+        language
+    };
+    let out = dir.join("ct2.json");
+    sidecar
+        .transcribe(
+            audio,
+            &context.language,
+            &decode,
+            &out,
+            cancel,
+            config.timeout,
+        )
+        .await?;
+    let mut file = tokio::fs::File::open(&out)
+        .await
+        .map_err(|_| "transcription_output_missing")?;
+    let mut bytes = Vec::new();
+    (&mut file)
+        .take(transcription::MAX_JSON + 1)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|_| "transcription_output_unreadable")?;
+    transcription::parse(&bytes, context)?;
+    Ok(bytes)
+}
+
+/// whisper.cpp's language detector (first 30 s); the sidecar needs a language to decode with.
+async fn detect_language(
+    config: &Config,
+    (engine, gpu): (&Artifact, bool),
+    model: &Artifact,
+    audio: &Path,
+    cancel: &watch::Receiver<bool>,
+) -> Result<String, String> {
+    let mut detect = Command::new(&engine.path);
+    detect
+        .arg("-m")
+        .arg(&model.path)
+        .arg("-f")
+        .arg(audio)
+        .args(["-l", "auto", "-dl"])
+        .args(if gpu { None } else { Some("-ng") })
+        .arg("-t")
+        .arg(config.threads.to_string());
+    let log = command(detect, cancel.clone(), config.timeout).await?;
+    language_from_log(&String::from_utf8_lossy(&log))
+        .ok_or_else(|| "language_detection_failed".into())
+}
+fn language_from_log(log: &str) -> Option<String> {
+    let rest = log.split("auto-detected language: ").nth(1)?;
+    let code: String = rest
+        .chars()
+        .take_while(|c| c.is_ascii_lowercase())
+        .collect();
+    transcription::language(&code).then_some(code)
 }
 
 /// One whisper-cli pass over the extracted audio; returns the raw full-JSON output.
@@ -520,11 +700,15 @@ pub fn cache_key(
     context: &Context,
     settings: &Settings,
     gpu: Option<&Artifact>,
+    ct2: Option<&Ct2Identity>,
 ) -> Result<String, String> {
     let mut identity = serde_json::json!({"source":source,"identity":context.source,"start_ms":context.start_ms,"end_ms":context.end_ms,"language":context.language,"settings":settings,"decode":DECODE_ARGS,"output_format":"whisper.cpp-full-json-v1.9.2"});
     // GPU output differs slightly from CPU output, so it is cached apart; CPU keys stay as before
     if let Some(gpu) = gpu {
         identity["gpu"] = serde_json::json!(gpu);
+    }
+    if let Some(ct2) = ct2 {
+        identity["ct2"] = serde_json::json!(ct2);
     }
     let bytes = serde_json::to_vec(&identity).map_err(|_| "transcription_cache_key_invalid")?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
@@ -586,38 +770,76 @@ mod tests {
             end_ms: 1000,
             language: "auto".into(),
         };
-        let key = cache_key(&source, &context, &settings, None).unwrap();
+        let key = cache_key(&source, &context, &settings, None, None).unwrap();
         context.run_id = "second".into();
-        assert_eq!(cache_key(&source, &context, &settings, None).unwrap(), key);
+        assert_eq!(
+            cache_key(&source, &context, &settings, None, None).unwrap(),
+            key
+        );
         context.language = "th".into();
-        assert_ne!(cache_key(&source, &context, &settings, None).unwrap(), key);
+        assert_ne!(
+            cache_key(&source, &context, &settings, None, None).unwrap(),
+            key
+        );
         context.language = "auto".into();
         context.end_ms = 999;
-        assert_ne!(cache_key(&source, &context, &settings, None).unwrap(), key);
+        assert_ne!(
+            cache_key(&source, &context, &settings, None, None).unwrap(),
+            key
+        );
         context.end_ms = 1000;
         context.source.id = "other".into();
-        assert_ne!(cache_key(&source, &context, &settings, None).unwrap(), key);
+        assert_ne!(
+            cache_key(&source, &context, &settings, None, None).unwrap(),
+            key
+        );
         context.source.id = "source".into();
         let mut changed = settings.clone();
         changed.threads = 2;
-        assert_ne!(cache_key(&source, &context, &changed, None).unwrap(), key);
+        assert_ne!(
+            cache_key(&source, &context, &changed, None, None).unwrap(),
+            key
+        );
         changed = settings.clone();
         changed.model.sha256 = "b".repeat(64);
-        assert_ne!(cache_key(&source, &context, &changed, None).unwrap(), key);
+        assert_ne!(
+            cache_key(&source, &context, &changed, None, None).unwrap(),
+            key
+        );
         let mut changed_source = source.clone();
         changed_source.sha256 = "b".repeat(64);
         assert_ne!(
-            cache_key(&changed_source, &context, &settings, None).unwrap(),
+            cache_key(&changed_source, &context, &settings, None, None).unwrap(),
             key
         );
         assert_ne!(
-            cache_key(&source, &context, &settings, Some(&source)).unwrap(),
+            cache_key(&source, &context, &settings, Some(&source), None).unwrap(),
             key
+        );
+        // CTranslate2 transcripts are cached apart from whisper.cpp ones, and per model file
+        let ct2 = Ct2Identity {
+            engine: source.clone(),
+            model: source.clone(),
+        };
+        let ct2_key = cache_key(&source, &context, &settings, None, Some(&ct2)).unwrap();
+        assert_ne!(ct2_key, key);
+        let mut other_model = ct2.clone();
+        other_model.model.sha256 = "c".repeat(64);
+        assert_ne!(
+            cache_key(&source, &context, &settings, None, Some(&other_model)).unwrap(),
+            ct2_key
         );
         // transcripts cached before decode options joined the key (which could hold a
         // repetition loop) must not be reused
         assert_eq!(DECODE_ARGS, ["-sns"]);
         let before=serde_json::to_vec(&serde_json::json!({"source":source,"identity":context.source,"start_ms":context.start_ms,"end_ms":context.end_ms,"language":context.language,"settings":settings,"output_format":"whisper.cpp-full-json-v1.9.2"})).unwrap();
         assert_ne!(format!("{:x}", Sha256::digest(before)), key);
+    }
+    #[test]
+    fn detected_language_is_read_from_the_whisper_log() {
+        let log = "whisper_init_from_file\nwhisper_full_with_state: auto-detected language: th (p = 0.981234)\n";
+        assert_eq!(language_from_log(log).as_deref(), Some("th"));
+        assert_eq!(language_from_log("no detection here"), None);
+        assert_eq!(language_from_log("auto-detected language: (p = 0.1)"), None);
     }
 }

@@ -106,6 +106,7 @@ async fn store(
 }
 
 async fn import(runtime: Runtime, args: Value, link: impl Fn(&str) -> String) -> Outcome {
+    preload_asr(&runtime);
     let paths: Vec<PathBuf> = args["paths"]
         .as_array()
         .into_iter()
