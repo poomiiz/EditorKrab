@@ -107,6 +107,29 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
     found
 }
 
+/// The segments a plan may name, grouped per source file in time order: `(id, start_ms, end_ms, text)`.
+pub type Line = (String, u64, u64, String);
+pub fn transcript(document: &Value, jobs: &[Job]) -> Vec<(PathBuf, Vec<Line>)> {
+    let mut files: Vec<(PathBuf, Vec<Line>)> = Vec::new();
+    for (id, s) in spoken(document, jobs) {
+        if s.end_ms <= s.start_ms {
+            continue;
+        }
+        let at = match files.iter().position(|(path, _)| *path == s.path) {
+            Some(at) => at,
+            None => {
+                files.push((s.path.clone(), Vec::new()));
+                files.len() - 1
+            }
+        };
+        files[at].1.push((id, s.start_ms, s.end_ms, s.text));
+    }
+    for (_, lines) in &mut files {
+        lines.sort_by(|a, b| (a.1, a.2, &a.0).cmp(&(b.1, b.2, &b.0)));
+    }
+    files
+}
+
 /// The stories to render, in plan order. Any unknown segment is an error, never a silent skip.
 pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
     let raw = document["plan"].as_str().unwrap_or("").trim();
