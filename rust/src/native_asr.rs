@@ -470,21 +470,36 @@ async fn infer(
     prefix: &Path,
     cancel: &watch::Receiver<bool>,
 ) -> Result<(Vec<u8>, bool), String> {
-    let mut infer = Command::new(&engine.path);
-    infer
-        .arg("-m")
-        .arg(&model.path)
-        .arg("-f")
-        .arg(audio)
-        .arg("-l")
-        .arg(&context.language)
-        .args(DECODE_ARGS)
-        .arg("-ojf")
-        .args(if gpu { None } else { Some("-ng") })
-        .arg("-t")
-        .arg(config.threads.to_string())
-        .arg("-of")
-        .arg(prefix);
+    let runner = gpu && engine.path.extension().is_some_and(|e| e == "py");
+    let mut infer;
+    if runner {
+        // v0.29.1 path: faster-whisper with 15 s windows (app/asr_runner.py); it writes whisper.cpp-shaped JSON
+        infer = Command::new(std::env::var("EDITORKRAB_PYTHON").unwrap_or_else(|_| "python".into()));
+        infer
+            .arg(&engine.path)
+            .arg("--wav")
+            .arg(audio)
+            .arg("--language")
+            .arg(&context.language)
+            .arg("--out")
+            .arg(prefix.with_extension("json"));
+    } else {
+        infer = Command::new(&engine.path);
+        infer
+            .arg("-m")
+            .arg(&model.path)
+            .arg("-f")
+            .arg(audio)
+            .arg("-l")
+            .arg(&context.language)
+            .args(DECODE_ARGS)
+            .arg("-ojf")
+            .args(if gpu { None } else { Some("-ng") })
+            .arg("-t")
+            .arg(config.threads.to_string())
+            .arg("-of")
+            .arg(prefix);
+    }
     let log = command(infer, cancel.clone(), config.timeout).await?;
     // without a usable card or driver the GPU build quietly runs on its own CPU backend
     let on_gpu = gpu

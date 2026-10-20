@@ -1168,8 +1168,12 @@ fn find_asr_tools(data: &std::path::Path) -> Found {
         gpu: gpu_engine(data).filter(|_| !force_cpu(data)),
     }
 }
-/// The CUDA build of whisper-cli, whether or not it is in use; EDITORKRAB_WHISPER_GPU overrides the search.
+/// The GPU engine, whether or not it is in use: EDITORKRAB_FASTER_WHISPER (app/asr_runner.py, the v0.29.1
+/// faster-whisper path) wins, then EDITORKRAB_WHISPER_GPU, then the downloaded CUDA build of whisper-cli.
 fn gpu_engine(data: &std::path::Path) -> Option<PathBuf> {
+    if let Some(runner) = std::env::var_os("EDITORKRAB_FASTER_WHISPER").map(PathBuf::from) {
+        return Some(runner);
+    }
     match std::env::var("EDITORKRAB_WHISPER_GPU") {
         Ok(path) => Some(path.into()),
         Err(_) => find_tool(&tool_roots(data), "whisper-cuda", "whisper-cli"),
