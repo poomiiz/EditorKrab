@@ -23,7 +23,7 @@ export function checkPlan(text,lines){
 }
 export function parsePlan(text){return checkPlan(text).plan || null;}
 
-export function createStories({project,read,lines,write,go,editable}){
+export function createStories({project,read,lines,write,go,editable,caption}){
  let queue=[];
  const video=$('editVideo');
  const reviews=()=>read().story_reviews || {};
@@ -76,6 +76,8 @@ export function createStories({project,read,lines,write,go,editable}){
   if(!story){$('editTitle').textContent='ตัดต่อ';return;}
   $('editTitle').textContent=`ตัดต่อ · ${story.index+1}. ${story.title}`;
   const done=!!reviews()[story.id];$('editReviewed').textContent=done?'ตรวจแล้ว ✓':'ตรวจเรื่องนี้แล้ว';$('editReviewed').classList.toggle('primary',!done);$('editReviewed').disabled=!editable();
+  // the preview plays under the subtitle frame, so subtitles are placed and styled on the real picture
+  const frame=$('textFrame');if(frame&&video.parentElement!==frame)frame.prepend(video);
   const src=`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(story.source_id)}/preview`;
   if(video.dataset.src!==src){video.dataset.src=src;$('editVideoNote').textContent='กำลังเตรียมพรีวิว 360p ครั้งแรกอาจรอสักครู่';video.src=src;video.load();}
   const zoom=Number($('editZoom').value),order=lines().filter(l=>l.source_id===story.source_id),keep=new Set(story.kept.map(l=>l.segment_id));
@@ -110,7 +112,7 @@ export function createStories({project,read,lines,write,go,editable}){
   const now=video.currentTime*1000,line=queue[0];
   if(line&&now>=line.end_ms){queue.shift();if(queue.length)video.currentTime=queue[0].start_ms/1000;else video.pause();}
   const story=current(),said=story&&lines().find(l=>l.source_id===story.source_id&&now>=l.start_ms&&now<l.end_ms);
-  $('editCaption').textContent=said?.text || '';$('editCaption').hidden=!said;
+  caption(said?.text || '');
   const head=$('editHead');if(head)head.style.left=(now/1000*Number($('editZoom').value))+'px';
  });
  video.addEventListener('loadeddata',()=>{$('editVideoNote').textContent='';});

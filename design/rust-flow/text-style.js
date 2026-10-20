@@ -30,6 +30,8 @@ export function validHeadlineItems(value){
 export function createStyleEditor(read,write,layout,writeItems){
  const $=id=>document.getElementById(id),frame=$('textFrame');
  let selected='speech',enabled=false,drag=null,preview=null;
+ // on step 3 the speech box shows the line being said in the video under it
+ const live=new Map();
  const fallback=defaults();
  const stored=()=>({...(read() || fallback),...Object.fromEntries(layout().items.map(v=>['hl:'+v.id,v]))});
  const values=()=>preview || stored();
@@ -109,7 +111,7 @@ export function createStyleEditor(read,write,layout,writeItems){
   for(const [key,node] of nodes){
    node.hidden=!visibleRoles().includes(key);if(node.hidden)continue;
    const v=values()[key];node.setAttribute('aria-label',`ปรับ${label(key)}`);
-   node.firstElementChild.textContent=v.text || '…';
+   node.firstElementChild.textContent=live.get(key) || v.text || '…';
    node.style.left=v.x+'%';node.style.top=v.y+'%';node.style.color=v.color;
    node.firstElementChild.style.fontFamily=fontCss(v.font);node.firstElementChild.style.fontSize=(v.size*frame.clientWidth/1080)+'px';
    node.dataset.selected=String(key===selected);node.disabled=!enabled;
@@ -128,7 +130,7 @@ export function createStyleEditor(read,write,layout,writeItems){
   const ids=new Set(layout().items.map(v=>'hl:'+v.id));
   for(const [key,node] of nodes){if(key.startsWith('hl:') && !ids.has(key)){if(drag?.key===key)endDrag();node.remove();nodes.delete(key);}}
   for(const key of ids){if(!nodes.has(key))createNode(key);}
-  const headline=layout().stage===5,host=$(headline?'headlineHost':'captionHost');
+  const headline=layout().stage===5,host=$(headline?'headlineHost':layout().stage===3?'editStyleHost':'captionHost');
   const workspace=$('textStyleWorkspace');if(workspace.parentElement!==host){endDrag();host.append(workspace);}
   const visible=visibleRoles();if(!visible.includes(selected)){endDrag();selected=visible[0] || null;}
   $('textComponents').hidden=headline;$('headlineActions').hidden=!headline;$('addHeadline').disabled=!enabled || layout().items.length>=100;$('removeHeadline').hidden=!selected?.startsWith('hl:');$('removeHeadline').disabled=!enabled;
@@ -216,5 +218,5 @@ export function createStyleEditor(read,write,layout,writeItems){
  $('removeHeadline').onclick=()=>{if(enabled && selected?.startsWith('hl:')){endDrag();writeItems(layout().items.filter(v=>'hl:'+v.id!==selected));render();}};
  const observer=new ResizeObserver(paint);observer.observe(frame);
  document.fonts.ready.then(paint);
- return {render,selectHeadline:id=>select('hl:'+id),editing:value=>{if(!value)endDrag();enabled=value;render();}};
+  return {render,live:(key,text)=>{if(text)live.set(key,text);else live.delete(key);paint();},selectHeadline:id=>select('hl:'+id),editing:value=>{if(!value)endDrag();enabled=value;render();}};
 }
