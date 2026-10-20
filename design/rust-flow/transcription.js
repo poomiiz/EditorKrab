@@ -195,9 +195,11 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
    await deliver(packet);
   }catch(error){packetNotice=error.message;}finally{busy=false;refresh();}
  }
- $('transcriptPacket').onclick=()=>sendPacket(packet=>{const url=URL.createObjectURL(new Blob([JSON.stringify(packet,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='editorkrab-transcript-ai.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+ // the instructions lead the file: an AI handed the bare JSON only described it (Gemini, 20 Oct 2026)
+ const forAi=packet=>packet.instructions+'\nตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,2);
+ $('transcriptPacket').onclick=()=>sendPacket(packet=>{const url=URL.createObjectURL(new Blob([forAi(packet)],{type:'text/plain;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='editorkrab-ส่งให้AI.txt';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
  $('transcriptCopy').onclick=()=>sendPacket(async packet=>{
-  try{await navigator.clipboard.writeText(packet.instructions+'\nตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,2));}
+  try{await navigator.clipboard.writeText(forAi(packet));}
   catch(_){throw Error('คัดลอกไม่ได้ ใช้ปุ่มดาวน์โหลดไฟล์แทน');}
   $('transcriptCopy').textContent='คัดลอกแล้ว';setTimeout(()=>{$('transcriptCopy').textContent='คัดลอกให้ AI';},2000);
  });

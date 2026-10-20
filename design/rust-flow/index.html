@@ -454,6 +454,10 @@ textarea{font-size:.75rem}
 [data-icon=font]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M4 20 10 4h1l6 16'/><path d='M6.5 14h8'/></svg>")}
 .text-frame video.frame-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:-1}
 .editor-style .text-workspace{min-height:min(60vh,620px)}
+.select-all{display:flex;align-items:center;gap:6px;font-size:.8125rem;color:var(--txt-sub);margin-left:auto}
+#fileList li{grid-template-columns:24px 40px minmax(0,1fr) auto}#fileList li .file-pick{grid-row:1/3;width:18px;height:18px;margin:0;accent-color:var(--acc)}
+#fileList li .file-info{grid-column:3}#fileList li .source-remove{grid-column:4}
+@media(min-width:761px) and (min-height:561px){#fileList li{grid-template-columns:24px 32px minmax(0,1fr) auto}}
 </style>
 </head>
 <body data-loading="true">
@@ -482,7 +486,7 @@ textarea{font-size:.75rem}
 <input id="files" type="file" accept="video/*,audio/*" multiple hidden><input id="folders" type="file" webkitdirectory multiple hidden>
 </div>
 <div class="source-feedback"><p id="sourceStatus" role="status" aria-live="polite"></p><button id="cancelUpload" hidden data-icon="stop">หยุด</button></div>
-<div class="library-head"><h2>วิดีโอ</h2><span id="fileCount" class="badge">0 ไฟล์</span><span id="fileTotal"></span></div>
+<div class="library-head"><h2>วิดีโอ</h2><span id="fileCount" class="badge">0 ไฟล์</span><span id="fileTotal"></span><label class="select-all" id="selectAllLabel" hidden><input type="checkbox" id="selectAll">เลือกทั้งหมด</label><button id="removeSelected" type="button" hidden data-icon="trash">ลบที่เลือก</button></div>
 <p id="empty" class="empty">ยังไม่มีวิดีโอ</p><ul id="fileList" aria-label="วิดีโอ"></ul>
 <div id="transcriptResult" hidden>
 <label class="field" for="transcriptFile"><span>เลือกวิดีโอ</span><select id="transcriptFile"></select></label>
@@ -578,7 +582,8 @@ textarea{font-size:.75rem}
 </section>
 </div>
 <div class="support">
-<details class="job-panel"><summary>ความคืบหน้างาน</summary><div id="jobProgress"><p>กำลังอ่านสถานะ</p></div></details>
+<!-- hidden for now (P'Ohm 20 Oct): the watcher still feeds job states to the page -->
+<details class="job-panel" hidden><summary>ความคืบหน้างาน</summary><div id="jobProgress"><p>กำลังอ่านสถานะ</p></div></details>
 <p id="error" class="error" role="alert" hidden></p>
 
 </div>
