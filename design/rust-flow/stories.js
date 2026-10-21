@@ -228,9 +228,6 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   $('editClock').textContent=`ใช้ ${story.kept.length} บรรทัด · ${pieces(story)} ท่อน · ยาว ${clock(length(story.kept))}`;
  }
  let editView=null,refocus=null,cropSource=null,wordLine=null;
- // Thai runs on without spaces; a space only between two non-Thai words
- const thai=c=>c>='\u0E00'&&c<='\u0E7F';
- function joinWords(list,sep){return list.reduce((out,w)=>{w=String(w).trim();if(!w)return out;if(sep!==undefined)return out?out+sep+w:w;return out&&!thai(out.at(-1))&&!thai(w[0])?out+' '+w:out+w;},'');}
  // the words row: the line under the playhead (or the one clicked); each word toggles as emphasis
  function showWords(line){
   const same=(wordLine?.segment_id || null)===(line?.segment_id || null);wordLine=line || null;if(!same)drawWords();
@@ -286,14 +283,26 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  const latin=/[A-Za-z0-9]/;
  function timedText(line){
   const words=(line?.words || []).map(w=>({text:w.text.trim(),start_ms:w.start_ms,end_ms:w.end_ms})).filter(w=>w.text);
-  let text='';const from=[],to=[];
+  let text='';const from=[],to=[],said=[];
   for(const w of words){
-   if(latin.test(text.at(-1) || '')&&latin.test(w.text[0])){text+=' ';from.push(w.start_ms);to.push(w.start_ms);}
+   if(latin.test(text.at(-1) || '')&&latin.test(w.text[0])){text+=' ';from.push(w.start_ms);to.push(w.start_ms);said.push(w.start_ms);}
    const n=w.text.length,span=w.end_ms-w.start_ms;
-   for(let i=0;i<n;i++){from.push(w.start_ms+Math.round(span*i/n));to.push(w.start_ms+Math.round(span*(i+1)/n));}
+   for(let i=0;i<n;i++){from.push(w.start_ms+Math.round(span*i/n));to.push(w.start_ms+Math.round(span*(i+1)/n));said.push(w.start_ms);}
    text+=w.text;
   }
-  return {words,text,from,to};
+  return {words,text,from,to,said};
+ }
+ // the speech line as shown: words said by `now`, without the ones on screen as emphasis (option 1, P'Ohm
+ // 21 Oct: the same word twice reads as a stutter); each pick is cut where it is said closest to its time
+ function speechText(line,now=Infinity){
+  const {text,from,said}=timedText(line);if(!text)return line?.text || '';
+  const keep=[...text].map(()=>true),list=(read().text_roles || []).includes('emphasis')?picks(line):[];
+  for(const p of list){
+   const want=p.text.replace(/\s+/g,'');let best=-1,gap=Infinity;
+   for(let i=text.indexOf(want);i>=0;i=text.indexOf(want,i+1)){const d=Math.abs(from[i]-p.start_ms);if(d<gap){gap=d;best=i;}}
+   if(best>=0)for(let k=best;k<best+want.length;k++)keep[k]=false;
+  }
+  return [...text].filter((c,i)=>keep[i]&&said[i]<=now).join('').replace(/\s+/g,' ').trim();
  }
  // chips: each timed word, split only when the dictionary cuts it cleanly ("ยกตัวอย่าง" -> "ยก|ตัวอย่าง");
  // splitting the whole line cut loan words apart ("เจน|เทิ|ลม|อนส|เต|อร์")
@@ -430,7 +439,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const story=current(),said=story&&(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept).find(l=>now>=l.start_ms&&now<l.end_ms);
   const words=said?.words || [],wordByWord=(read().text_styles?.speech?.enter ?? 'words')==='words'&&words.length;
   // while a line plays, an empty box stays empty (a no-break space) instead of falling back to the sample text
-  caption(!said?'':(wordByWord?joinWords(words.filter(w=>w.start_ms<=now).map(w=>w.text)):said.text) || '\u00a0');
+  caption(!said?'':(words.length?speechText(said,wordByWord?now:Infinity):said.text) || '\u00a0');
   emphasis(said?joinPicks(picks(said).filter(w=>w.start_ms<=now)) || '\u00a0':'');
   if(said&&said.segment_id!==wordLine?.segment_id&&!video.paused)showWords(said);
   const head=$('editHead');

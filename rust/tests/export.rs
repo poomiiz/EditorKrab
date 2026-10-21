@@ -272,3 +272,27 @@ fn blurred_shadow_goes_under_the_text_and_blend_layers_get_their_own_file() {
     assert!(args.contains("ass=subs_screen.ass,format=gbrp[l0]"), "{args}");
     assert!(args.contains("blend=all_mode=screen,format=yuv420p[vout]"), "{args}");
 }
+
+#[test]
+fn emphasised_words_leave_the_speech_line() {
+    let piece = Piece {
+        source: 0,
+        start_ms: 1000,
+        end_ms: 4000,
+        text: "หนึ่งสองสาม".into(),
+        words: vec![("หนึ่ง".into(), 1200, 1500), ("สองสาม".into(), 2000, 3600)],
+        timed: true,
+        segment: "a1".into(),
+    };
+    let story = editorkrab::export::Story { id: "s".into(), title: String::new(), sources: vec!["a.mp4".into()], pieces: vec![piece] };
+    let mut doc = json!({"text_roles": ["speech", "emphasis"], "text_styles": {"speech": {"font":"system","size":64,"color":"#ffffff","x":50,"y":69,"enter":"none"}},
+        "emphasis": {"a1": [{"text": "สาม", "start_ms": 2800, "end_ms": 3600}]}});
+    let (ass, _) = subtitles(&story, &doc);
+    let speech: Vec<&str> = ass.lines().filter(|l| l.contains(r"\pos(540,1325)")).collect();
+    assert!(speech.iter().any(|l| l.ends_with("}หนึ่งสอง")), "{ass}");
+    assert!(ass.lines().any(|l| l.ends_with("}สาม")), "the pick still shows as emphasis: {ass}");
+    // with emphasis off the speech keeps every word
+    doc["text_roles"] = json!(["speech"]);
+    let (ass, _) = subtitles(&story, &doc);
+    assert!(ass.lines().any(|l| l.ends_with("}หนึ่งสองสาม")), "{ass}");
+}

@@ -435,15 +435,17 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
 [Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     );
     let total = story.duration_ms();
-    let (speech, mut skipped) = speech_lines(story, document);
+    let spoken = speech_story(story, document);
+    let (speech, mut skipped) = speech_lines(&spoken, document);
     let style = speech_style(document);
+    // a speech layer with another blend mode is drawn in that mode's own file
     let speech = if blend_of(&style) == mode { speech } else { Vec::new() };
-    if blend_of(&style) != mode {
-    } else if style["enter"].as_str().unwrap_or("words") == "words" && !speech.is_empty() {
+    if speech.is_empty() {
+    } else if style["enter"].as_str().unwrap_or("words") == "words" {
         let size = style["size"].as_f64().unwrap_or(64.0);
         let limit = (0.86 * WIDTH as f64 / (size * 0.55)).max(4.0) as usize;
         let mut at = 0;
-        for p in &story.pieces {
+        for p in &spoken.pieces {
             for (start, end, text) in karaoke(p, limit) {
                 ass.push_str(&event((width, height), 0, at + start, at + end, &style, &text));
             }
@@ -540,21 +542,7 @@ pub fn emphasis_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)
     }
     let mut at = 0;
     for p in &story.pieces {
-        // a pick is {text, start_ms} (one dictionary word, step 4) or a bare start time of a timed word (older drafts)
-        let mut words: Vec<(u64, String, u64)> = document["emphasis"][&p.segment]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|v| match v.as_u64() {
-                Some(at) => p.words.iter().find(|w| w.1 == at).map(|w| (w.1, w.0.trim().to_owned(), w.2)),
-                None => {
-                    let at = v["start_ms"].as_u64()?;
-                    Some((at, v["text"].as_str()?.trim().to_owned(), v["end_ms"].as_u64().unwrap_or(at)))
-                }
-            })
-            .filter(|(at, text, _)| !text.is_empty() && *at < p.end_ms && *at + 1 > p.start_ms)
-            .collect();
-        words.sort();
+        let words = picks(p, document);
         if let Some(first) = words.first() {
             // neighbouring words read as one phrase: no space between them unless both sides are Latin
             let latin = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
@@ -575,6 +563,80 @@ pub fn emphasis_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)
         at += p.end_ms - p.start_ms;
     }
     out
+}
+
+/// A piece's emphasis picks as (start, text, end), in time order. A pick is {text, start_ms, end_ms}
+/// (step 4) or a bare start time of a timed word (older drafts).
+fn picks(p: &Piece, document: &Value) -> Vec<(u64, String, u64)> {
+    let mut words: Vec<(u64, String, u64)> = document["emphasis"][&p.segment]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| match v.as_u64() {
+            Some(at) => p.words.iter().find(|w| w.1 == at).map(|w| (w.1, w.0.trim().to_owned(), w.2)),
+            None => {
+                let at = v["start_ms"].as_u64()?;
+                Some((at, v["text"].as_str()?.trim().to_owned(), v["end_ms"].as_u64().unwrap_or(at)))
+            }
+        })
+        .filter(|(at, text, _)| !text.is_empty() && *at < p.end_ms && *at + 1 > p.start_ms)
+        .collect();
+    words.sort();
+    words
+}
+/// The piece with its emphasised words taken out of the speech, so a word is not on screen twice
+/// (P'Ohm 21 Oct 2026). Each pick is cut where its letters are said closest to its time; a timed
+/// word left empty is dropped. Matches the step 4 preview (`speechText` in stories.js).
+fn without_picks(p: &Piece, document: &Value) -> Piece {
+    let picked = picks(p, document);
+    if picked.is_empty() || p.words.is_empty() {
+        return p.clone();
+    }
+    // every letter with its timed word and the moment it is said, shared by length within the word
+    let mut letters: Vec<(usize, char, u64)> = Vec::new();
+    for (n, (text, from, to)) in p.words.iter().enumerate() {
+        let text = text.trim();
+        let count = text.chars().count().max(1) as u64;
+        for (k, c) in text.chars().enumerate() {
+            letters.push((n, c, from + (to.saturating_sub(*from)) * k as u64 / count));
+        }
+    }
+    let mut keep = vec![true; letters.len()];
+    for (start, text, _) in &picked {
+        let want: Vec<char> = text.chars().filter(|c| !c.is_whitespace()).collect();
+        if want.is_empty() || want.len() > letters.len() {
+            continue;
+        }
+        let best = (0..=letters.len() - want.len())
+            .filter(|&i| letters[i..i + want.len()].iter().zip(&want).all(|(l, w)| l.1 == *w))
+            .min_by_key(|&i| letters[i].2.abs_diff(*start));
+        if let Some(i) = best {
+            keep[i..i + want.len()].fill(false);
+        }
+    }
+    let words: Vec<(String, u64, u64)> = p
+        .words
+        .iter()
+        .enumerate()
+        .map(|(n, (_, from, to))| {
+            let text: String = letters.iter().zip(&keep).filter(|(l, k)| l.0 == n && **k).map(|(l, _)| l.1).collect();
+            (text, *from, *to)
+        })
+        .filter(|(text, _, _)| !text.is_empty())
+        .collect();
+    let mut text = String::new();
+    for (w, _, _) in &words {
+        join(&mut text, w);
+    }
+    Piece { words, text, ..p.clone() }
+}
+/// The story whose speech leaves out the emphasised words, when emphasis is on screen.
+fn speech_story(story: &Story, document: &Value) -> Story {
+    let ticked = document["text_roles"].as_array().is_some_and(|r| r.iter().any(|v| v == "emphasis"));
+    if !ticked {
+        return story.clone();
+    }
+    Story { pieces: story.pieces.iter().map(|p| without_picks(p, document)).collect(), ..story.clone() }
 }
 
 /// Step 4's speech style; a draft that never opened its style panel uses that panel's defaults.
