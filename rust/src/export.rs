@@ -324,6 +324,11 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
     if style["box_on"].as_bool() == Some(true) {
         // in the Box style the outline is the box: its colour, and its width is the padding round the text
         tags += &format!("\\bord{}\\shad0\\3c{}", px("outline", 12.0).max(4.0), colour(style["box_color"].as_str().unwrap_or("#000000")));
+        // its own room across and up/down, when set (libass draws \xbord/\ybord as the box padding)
+        if style["box_pad_x"].is_u64() || style["box_pad_y"].is_u64() {
+            let pad = |key: &str| style[key].as_f64().map_or(px("outline", 12.0).max(4.0), |v| (v * scale * 10.0).round() / 10.0);
+            tags += &format!("\\xbord{}\\ybord{}", pad("box_pad_x"), pad("box_pad_y"));
+        }
     } else {
         tags += &format!(
             "\\bord{}\\shad{}\\3c{}\\4c{}",
