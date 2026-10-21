@@ -14,10 +14,10 @@ export function defaults(){
   emphasis:{text:'คำเน้นสำคัญ',font:'system',size:84,color:orange,x:50,y:55},english:{text:'English subtitle',font:'system',size:56,color:white,x:50,y:78}};
 }
 // optional text effects; absent fields mean the export defaults (outline 4 black, shadow 1, no box, no entrance)
-export const effectDefaults={outline:4,outline_color:'#000000',shadow:1,shadow_blur:0,shadow_color:'#000000',box_on:false,box_color:'#000000',enter:'none',blend:'normal'};
+export const effectDefaults={outline:4,outline_color:'#000000',shadow:1,shadow_blur:0,shadow_color:'#000000',shadow_opacity:60,box_on:false,box_color:'#000000',enter:'none',blend:'normal'};
 const effectValid={outline:v=>Number.isInteger(v)&&v>=0&&v<=20,shadow:v=>Number.isInteger(v)&&v>=0&&v<=20,outline_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),
  box_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),box_on:v=>typeof v==='boolean',enter:v=>['none','fade','pop','wipe','words'].includes(v),
- shadow_blur:v=>Number.isInteger(v)&&v>=0&&v<=20,shadow_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),blend:v=>['normal','add','screen','multiply'].includes(v)};
+ shadow_blur:v=>Number.isInteger(v)&&v>=0&&v<=20,shadow_opacity:v=>Number.isInteger(v)&&v>=0&&v<=100,shadow_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),blend:v=>['normal','add','screen','multiply'].includes(v)};
 // speech appears word by word unless another entrance is picked
 export const roleEffects=key=>key==='speech'?{...effectDefaults,enter:'words'}:effectDefaults;
 const baseKeys=['text','font','size','color','x','y'];
@@ -133,7 +133,7 @@ export function createStyleEditor(read,write,layout,writeItems){
    node.firstElementChild.style.fontFamily=fontCss(v.font);node.firstElementChild.style.fontSize=(v.size*frame.clientWidth/1080)+'px';
    const e={...roleEffects(key),...v},k=frame.clientWidth/1080,span=node.firstElementChild;
    span.style.webkitTextStroke='';span.style.textShadow=!e.box_on&&e.outline?ring(e.outline*k,e.outline_color):'';
-   span.style.filter=!e.box_on&&e.shadow?`drop-shadow(${e.shadow*k}px ${e.shadow*k}px ${e.shadow_blur*k}px ${e.shadow_color}99)`:'';
+   span.style.filter=!e.box_on&&e.shadow?`drop-shadow(${e.shadow*k}px ${e.shadow*k}px ${e.shadow_blur*k}px ${e.shadow_color}${Math.round(e.shadow_opacity*2.55).toString(16).padStart(2,'0')})`:'';
    node.style.mixBlendMode={add:'plus-lighter',screen:'screen',multiply:'multiply'}[e.blend] || '';
    span.style.background=e.box_on?e.box_color:'';span.style.padding=e.box_on?`${Math.max(4,e.outline || 12)*k}px`:'';
    span.dataset.enter=e.enter;
@@ -188,11 +188,11 @@ export function createStyleEditor(read,write,layout,writeItems){
    $('textFieldError').hidden=true;commit(next);$('text-color-hex').removeAttribute('aria-invalid');$('text-color-hex').value=next[selected].color;checkFont(next[selected].font);paint();
   });
  }
- const effectInputs={outline:$('fx-outline'),outline_color:$('fx-outline-color'),shadow:$('fx-shadow'),shadow_blur:$('fx-shadow-blur'),shadow_color:$('fx-shadow-color'),box_on:$('fx-box'),box_color:$('fx-box-color'),enter:$('fx-enter'),blend:$('fx-blend')};
+ const effectInputs={outline:$('fx-outline'),outline_color:$('fx-outline-color'),shadow:$('fx-shadow'),shadow_blur:$('fx-shadow-blur'),shadow_color:$('fx-shadow-color'),shadow_opacity:$('fx-shadow-opacity'),box_on:$('fx-box'),box_color:$('fx-box-color'),enter:$('fx-enter'),blend:$('fx-blend')};
  function showEffects(){
   const current=values()[selected],e={...roleEffects(selected),...(current || {})};
   for(const [key,input] of Object.entries(effectInputs)){if(input.type==='checkbox')input.checked=!!e[key];else input.value=e[key];input.disabled=!enabled || !current;}
-  effectInputs.outline_color.disabled=effectInputs.shadow.disabled=effectInputs.shadow_blur.disabled=effectInputs.shadow_color.disabled=!enabled || !current || e.box_on;effectInputs.box_color.disabled=!enabled || !current || !e.box_on;
+  effectInputs.outline_color.disabled=effectInputs.shadow.disabled=effectInputs.shadow_blur.disabled=effectInputs.shadow_color.disabled=effectInputs.shadow_opacity.disabled=!enabled || !current || e.box_on;effectInputs.box_color.disabled=!enabled || !current || !e.box_on;
   for(const tile of document.querySelectorAll('[data-enter-pick]')){tile.setAttribute('aria-pressed',String(tile.dataset.enterPick===e.enter));tile.disabled=!enabled || !current;}
  }
  for(const [key,input] of Object.entries(effectInputs))input.addEventListener(input.type==='checkbox'||input.tagName==='SELECT'?'change':'input',()=>{

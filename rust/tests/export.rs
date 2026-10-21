@@ -243,7 +243,9 @@ fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
     let latin = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "Gentle", "start_ms": 3000, "end_ms": 3300}, {"text": "Monster", "start_ms": 3300, "end_ms": 3600}]}});
     assert_eq!(editorkrab::export::emphasis_lines(&story, &latin), vec![(2000, 3000, "Gentle Monster".to_owned())]);
     let (ass, skipped) = subtitles(&story, &doc);
-    assert!(ass.contains("0:00:00.20,0:00:01.00,Text") && ass.contains("}หนึ่งสอง\n"), "{ass}");
+    // the picked word is on screen as emphasis, so the speech line leaves it out
+    assert!(ass.contains("0:00:00.20,0:00:02.00,Text") && ass.contains("}หนึ่ง\n") && ass.contains("}หนึ่งสาม\n"), "{ass}");
+    assert!(!ass.contains("}หนึ่งสอง"), "{ass}");
     assert!(ass.contains("0:00:01.00,0:00:03.00,Text") && ass.contains("}สอง\n"), "{ass}");
     assert!(skipped.is_empty(), "emphasis is drawn now: {skipped:?}");
 }
@@ -295,4 +297,13 @@ fn emphasised_words_leave_the_speech_line() {
     doc["text_roles"] = json!(["speech"]);
     let (ass, _) = subtitles(&story, &doc);
     assert!(ass.lines().any(|l| l.ends_with("}หนึ่งสองสาม")), "{ass}");
+}
+
+#[test]
+fn shadow_opacity_becomes_ass_alpha() {
+    let mut doc = document(json!({"stories": [{"segment_ids": ["a1"]}]}));
+    let story = &plan(&doc, &jobs()).unwrap()[0];
+    doc["text_styles"]["speech"]["shadow_opacity"] = json!(25);
+    let (ass, _) = subtitles(story, &doc);
+    assert!(ass.contains(r"&H000000&\4a&HBF&"), "{ass}");
 }

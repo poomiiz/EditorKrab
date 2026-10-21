@@ -29,6 +29,8 @@ struct Text {
     #[serde(default)]
     shadow_color: Option<String>,
     #[serde(default)]
+    shadow_opacity: Option<u8>,
+    #[serde(default)]
     blend: Option<String>,
 }
 fn hex(v: &str) -> bool {
@@ -75,6 +77,7 @@ fn valid_text(v: &Text) -> bool {
         && v.enter.as_deref().is_none_or(|e| ["none", "fade", "pop", "wipe", "words"].contains(&e))
         && v.shadow_blur.is_none_or(|n| n <= 20)
         && v.shadow_color.as_deref().is_none_or(hex)
+        && v.shadow_opacity.is_none_or(|n| n <= 100)
         && v.blend.as_deref().is_none_or(|b| BLENDS.contains(&b))
 }
 /// How a text layer mixes with the video under it.

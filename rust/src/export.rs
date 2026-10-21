@@ -332,6 +332,10 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
             colour(style["outline_color"].as_str().unwrap_or("#000000")),
             colour(style["shadow_color"].as_str().unwrap_or("#000000"))
         );
+        // shadow opacity in percent; ASS alpha counts the other way (00 solid, FF clear)
+        if let Some(opacity) = style["shadow_opacity"].as_f64() {
+            tags += &format!("\\4a&H{:02X}&", (255.0 * (1.0 - opacity.clamp(0.0, 100.0) / 100.0)).round() as u8);
+        }
     }
     match style["enter"].as_str() {
         Some("fade") => tags += "\\fad(250,0)",
