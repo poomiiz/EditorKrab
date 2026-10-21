@@ -191,7 +191,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   for(const {line,kept,at} of boxes){
    const span=kept || line,box=document.createElement('div');box.className='edit-seg';box.dataset.keep=!!kept;
    box.style.left=px(at)+'px';box.style.width=Math.max(6,px(span.end_ms-span.start_ms)-2)+'px';box.title=line.text;
-   const text=document.createElement('button');text.type='button';text.className='edit-text';text.textContent=line.text;text.onclick=()=>{if(kept&&!showCut)seekTo(story,kept.start_ms,kept.segment_id,true);else{queue=[span];start();}};
+   const text=document.createElement('button');text.type='button';text.className='edit-text';text.textContent=line.text;text.onclick=()=>{if(showCut)playRaw(line.start_ms,true);else seekTo(story,kept.start_ms,kept.segment_id,true);};
    const toggle=document.createElement('button');toggle.type='button';toggle.className='edit-toggle';toggle.dataset.icon=kept?'x':'plus';
    toggle.title=kept?'ตัดท่อนนี้ทิ้ง':'เก็บท่อนนี้';toggle.setAttribute('aria-label',toggle.title);toggle.disabled=!editable()||(kept&&story.kept.length===1);
    toggle.onclick=()=>flip(story,line);
@@ -213,7 +213,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   lane.onclick=e=>{
    if(e.target!==lane&&!e.target.classList.contains('edit-mark'))return;
    const at=(e.clientX-lane.getBoundingClientRect().left)/zoom*1000;
-   if(showCut){const line=story.kept.find(k=>k.end_ms>at) || story.kept.at(-1);if(line)seekTo(story,Math.max(line.start_ms,at),line.segment_id,false);return;}
+   if(showCut){playRaw(at,false);return;}
    const box=boxes.find(b=>at<b.at+b.kept.end_ms-b.kept.start_ms) || boxes.at(-1);
    if(box)seekTo(story,box.kept.start_ms+Math.max(0,at-box.at),box.kept.segment_id,false);
   };
@@ -244,6 +244,11 @@ export function createStories({project,read,lines,write,go,editable,caption}){
    if(at&&id)write(d=>{d.crops={...(d.crops || {}),[id]:{x:Math.round(at.x*1000)/1000,y:Math.round(at.y*1000)/1000}};});
   };
   frame.addEventListener('pointerup',end);frame.addEventListener('pointercancel',end);
+ }
+ // with the cut lines shown, the preview is the video as filmed: from `ms` it plays on to the end, nothing skipped
+ function playRaw(ms,play){
+  queue=[{start_ms:ms,end_ms:Math.max(ms+1,(video.duration || 0)*1000 || Infinity)}];video.currentTime=ms/1000;
+  if(play)video.play().catch(()=>{});else{if(!video.paused)video.pause();step();}
  }
  // the playhead goes to `ms` inside the kept line `id`; play continues the story from there, paused shows that frame
  function seekTo(story,ms,id,play){
@@ -309,7 +314,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
    // seek only for a real jump: a next line that starts here, or overlaps this one after a trim, just plays on
    if(!next)video.pause();else if(next.start_ms>now+40 || next.start_ms<line.start_ms)video.currentTime=next.start_ms/1000;
   }
-  const story=current(),said=story&&story.kept.find(l=>now>=l.start_ms&&now<l.end_ms);
+  const story=current(),said=story&&(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept).find(l=>now>=l.start_ms&&now<l.end_ms);
   caption(said?.text || '');
   const head=$('editHead');
   if(head&&editView){
