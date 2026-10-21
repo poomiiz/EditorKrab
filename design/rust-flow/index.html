@@ -484,11 +484,6 @@ textarea{font-size:.75rem}
 @media(prefers-reduced-motion:reduce){.preview-text>span.entering{animation:none}}
 .editor-style .text-inspector{gap:var(--space-sm)}
 
-/* step 3 words row: the playing line's words; picked ones are emphasis */
-.edit-words{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-height:32px}
-.edit-words .caption{margin-right:var(--space-xs)}
-.edit-word{min-height:28px;padding:2px 8px;font-size:.8125rem;border-radius:999px}
-.edit-word[aria-pressed=true]{border-color:var(--warn);background:color-mix(in oklch,var(--warn) 22%,transparent);color:var(--txt)}
 
 /* step 2 after an answer is read: one line, send again or paste again, stories below */
 .ai-bar[data-done=true]{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-sm)}
@@ -499,6 +494,19 @@ textarea{font-size:.75rem}
 .ai-bar[data-done=true] .ai-text .plan-status{margin-top:0}
 .story-status[hidden]{display:none}
 .story-marks{min-width:6.5em}
+
+/* step 3 timeline in two tracks: spoken lines on top, emphasis words under them */
+.edit-lane{height:128px}
+.edit-mark::before{height:118px}
+.edit-seg{height:56px}
+.edit-lane::after{content:"คำเน้น · คลิกท่อนแล้วคลิกคำ";position:absolute;left:8px;top:92px;font-size:.6875rem;color:var(--mut);pointer-events:none;white-space:nowrap}
+.edit-word{position:absolute;top:88px;height:28px;min-height:0;padding:0 4px;font-size:.75rem;line-height:1;border-radius:6px;overflow:hidden;white-space:nowrap;text-overflow:clip;z-index:1;background:var(--surface);border:1px dashed var(--line-strong);color:var(--txt-sub)}
+.edit-word[aria-pressed=true]{border:1px solid var(--warn);background:color-mix(in oklch,var(--warn) 30%,var(--surface));color:var(--txt);font-weight:600}
+/* step 3 preview: no caption row or hint, the shape picker floats on the stage, tighter padding */
+.editor-style .text-stage{position:relative;padding:var(--space-sm)}
+.editor-style .preview-caption{position:absolute;top:var(--space-sm);right:var(--space-sm);z-index:3;margin:0}
+.editor-style .preview-caption>span:first-child,.editor-style #textDragHint{display:none}
+#editor:not([hidden]){gap:var(--space-sm)}
 </style>
 </head>
 <body data-loading="true">
@@ -571,7 +579,7 @@ textarea{font-size:.75rem}
 <div id="editor" class="editor" hidden>
 <div id="editStyleHost" class="editor-style"></div><video id="editVideo" class="frame-video" playsinline preload="metadata" title="ลากภาพเพื่อเลื่อนตำแหน่งครอป"></video><p id="editVideoNote" class="caption" role="status"></p>
 <div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><span class="caption">คลิกเส้นเวลาเพื่อเลือกจุดเล่น · ลากท่อนเพื่อสลับ · เว้นวรรคเล่น/หยุด</span><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
-<div id="editWords" class="edit-words" aria-label="คำในท่อนนี้ คลิกคำเพื่อเน้น"></div><div id="editTrack" class="edit-track"></div>
+<div id="editTrack" class="edit-track"></div>
 </div>
 </div>
 <div class="stage-foot"><button class="back" data-go="2" data-icon="back">กลับไปหน้าเรื่อง</button><div class="actions"><button class="primary" data-go="4">ถัดไป</button></div></div>

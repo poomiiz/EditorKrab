@@ -218,7 +218,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const head=document.createElement('div');head.className='edit-head';head.id='editHead';lane.append(head);
   const track=$('editTrack'),scroll=track.scrollLeft;track.replaceChildren(lane);track.scrollLeft=scroll;
   editView={story,showCut,boxes,zoom};
-  showWords(wordLine?lines().find(l=>l.segment_id===wordLine.segment_id):null);
+  wordLine=wordLine?lines().find(l=>l.segment_id===wordLine.segment_id) || null:null;drawWords();
   lane.onclick=e=>{
    if(e.target!==lane&&!e.target.classList.contains('edit-mark'))return;
    const at=(e.clientX-lane.getBoundingClientRect().left)/zoom*1000;
@@ -234,12 +234,24 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function joinWords(list,sep){return list.reduce((out,w)=>{w=String(w).trim();if(!w)return out;if(sep!==undefined)return out?out+sep+w:w;return out&&!thai(out.at(-1))&&!thai(w[0])?out+' '+w:out+w;},'');}
  // the words row: the line under the playhead (or the one clicked); each word toggles as emphasis
  function showWords(line){
-  wordLine=line || null;const host=$('editWords');if(!host)return;
-  if(!line){host.replaceChildren();return;}
-  const picked=new Set(read().emphasis?.[line.segment_id] || []),label=document.createElement('span');label.className='caption';
-  label.textContent=line.words?.length?'คลิกคำเพื่อเน้น:':'ท่อนนี้แก้ข้อความแล้ว ไม่มีเวลารายคำให้เลือกเน้น';
-  host.replaceChildren(label,...(line.words || []).map(w=>{const b=document.createElement('button');b.type='button';b.className='edit-word';b.textContent=w.text;
-   b.setAttribute('aria-pressed',String(picked.has(w.start_ms)));b.disabled=!editable();b.onclick=()=>toggleEmphasis(line,w);return b;}));
+  const same=(wordLine?.segment_id || null)===(line?.segment_id || null);wordLine=line || null;if(!same)drawWords();
+ }
+ function drawWords(){
+  const lane=$('editTrack').querySelector('.edit-lane');if(!lane || !editView)return;
+  lane.querySelectorAll('.edit-word').forEach(n=>n.remove());
+  const emphasis=read().emphasis || {},z=editView.zoom;
+  for(const {line,kept,at} of editView.boxes){
+   if(!kept && !editView.showCut)continue;
+   const span=kept || line,picked=new Set(emphasis[line.segment_id] || []),open=wordLine?.segment_id===line.segment_id;
+   for(const w of line.words || []){
+    if(!open && !picked.has(w.start_ms))continue;
+    if(w.end_ms<=span.start_ms || w.start_ms>=span.end_ms)continue;
+    const b=document.createElement('button');b.type='button';b.className='edit-word';b.textContent=w.text;b.title=picked.has(w.start_ms)?'คำเน้น · คลิกเพื่อเอาออก':'คลิกเพื่อเน้นคำนี้';
+    b.style.left=((at+Math.max(0,w.start_ms-span.start_ms))/1000*z)+'px';b.style.width=Math.max(18,(w.end_ms-w.start_ms)/1000*z-2)+'px';
+    b.setAttribute('aria-pressed',String(picked.has(w.start_ms)));b.disabled=!editable();b.onclick=e=>{e.stopPropagation();toggleEmphasis(line,w);};
+    lane.append(b);
+   }
+  }
  }
  function toggleEmphasis(line,word){
   write(d=>{
