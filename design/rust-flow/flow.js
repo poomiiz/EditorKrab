@@ -7,6 +7,8 @@ import {createExport} from './export.js';
 import {createStories,checkPlan} from './stories.js';
 import {createStyleEditor,validTextStyles,validHeadlineItems,defaults} from './text-style.js';
 const $ = id => document.getElementById(id);
+// dialogs live in the body: one opened from another step's hidden page would be invisible yet still block the page
+for (const dialog of document.querySelectorAll('dialog')) document.body.append(dialog);
 // a note shows when its text is set or it is unhidden, then hides itself after 3 seconds
 for (const note of document.querySelectorAll('.toast')) {
   let last = '', timer = 0;
