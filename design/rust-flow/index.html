@@ -160,6 +160,9 @@ textarea{width:100%;min-height:120px;resize:none;font:.8125rem/1.7 Consolas,"Lee
 .preview-text:hover:not(:disabled){border-color:var(--line-strong);background:transparent}
 .preview-text:active:not(:disabled){transform:translate(-50%,-50%)}
 .preview-text[data-selected=true]{border-color:var(--acc)}
+/* boxes hug their text and the size grip is small, so one selected text does not cover the next */
+.preview-text{min-width:0;min-height:0;padding:2px 6px}
+#textResize{min-width:24px;width:24px;height:24px;min-height:24px}
 .preview-text[data-overflow=true]{border-color:var(--danger)}
 .preview-text:disabled{color:inherit;opacity:1}
 .align-guide{position:absolute;z-index:2;pointer-events:none}.align-x{left:50%;top:0;bottom:0;border-left:1px solid var(--acc)}.align-y{top:50%;left:0;right:0;border-top:1px solid var(--acc)}

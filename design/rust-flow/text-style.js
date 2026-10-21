@@ -48,12 +48,12 @@ export function createStyleEditor(read,write,layout,writeItems){
   button.setAttribute('aria-label',`ปรับ${label(key)}`);button.setAttribute('aria-describedby','textDragHint');
   if(key==='english')button.lang='en';
   const span=document.createElement('span');button.append(span);frame.append(button);nodes.set(key,button);
-  button.onclick=()=>select(key);
+  button.onclick=()=>{if(button.dataset.passed){delete button.dataset.passed;return;}select(key);};
   button.onpointerdown=event=>{
    if(!enabled || drag || event.button!==0 || !event.isPrimary)return;
-   select(key);button.focus({preventScroll:true});
+   const was=key===selected;select(key);button.focus({preventScroll:true});
    const value=values()[key];
-   drag={key,pointer:event.pointerId,clientX:event.clientX,clientY:event.clientY,x:value.x,y:value.y,moved:false};
+   drag={was,key,pointer:event.pointerId,clientX:event.clientX,clientY:event.clientY,x:value.x,y:value.y,moved:false};
    button.setPointerCapture(event.pointerId);event.preventDefault();
   };
   button.onpointermove=event=>{
@@ -66,8 +66,12 @@ export function createStyleEditor(read,write,layout,writeItems){
   };
   button.onpointerup=event=>{
    if(!drag || drag.pointer!==event.pointerId)return;
-   const next=preview,changed=drag.moved && next && (next[key].x!==drag.x || next[key].y!==drag.y);
-   endDrag();if(changed && enabled)commit(next);render();
+   const next=preview,changed=drag.moved && next && (next[key].x!==drag.x || next[key].y!==drag.y),moved=drag.moved,was=drag.was;
+   endDrag();if(changed && enabled)commit(next);
+   // a click (no drag) on the text already selected picks the one lying under it, so overlapping texts stay reachable
+   if(!moved&&was){const under=document.elementsFromPoint(event.clientX,event.clientY).find(n=>n!==button&&n.classList?.contains('preview-text')&&!n.hidden);
+    const other=under&&[...nodes].find(([,n])=>n===under)?.[0];if(other){button.dataset.passed='1';select(other);return;}}
+   render();
   };
   button.onpointercancel=button.onlostpointercapture=event=>{if(drag?.key===key && drag.pointer===event.pointerId){endDrag();render();}};
   button.onkeydown=event=>{
