@@ -793,6 +793,10 @@ label[for="fx-blend"]::before{content:"🌗 "}
 .fx-sec[data-off=true]>.tc-row{opacity:.45}
 .tc-col input[type=color]{width:56px;height:30px;padding:2px;min-height:0}
 .tc .tc-row{grid-template-columns:7.5em minmax(0,1fr)}
+
+/* an effect section shows its settings only while ticked */
+.fx-sec[data-off=true]>.tc-row{display:none}
+.fx-sec[data-off=true]{padding-bottom:0}
 </style>
 </head>
 <body data-loading="true">
