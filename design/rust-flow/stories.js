@@ -280,8 +280,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   }));
   heads.style.height=$('editTrack').offsetHeight ? $('editTrack').offsetHeight+'px' : '';
  }
- // the engine's timed words are chunks that cut across real words ("บอ|กว่า", "ยกตัวอย่าง"); the line is
- // re-split into dictionary words, each character timed by its share of its timed word. Picks are stored as
+ // the line's characters, each timed by its share of its timed word. Picks are stored as
  // {text,start_ms,end_ms}; a bare number (older drafts) is the whole timed word starting there.
  const segmenter=typeof Intl!=='undefined'&&Intl.Segmenter?new Intl.Segmenter('th',{granularity:'word'}):null;
  const latin=/[A-Za-z0-9]/;
@@ -296,10 +295,17 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   }
   return {words,text,from,to};
  }
+ // chips: each timed word, split only when the dictionary cuts it cleanly ("ยกตัวอย่าง" -> "ยก|ตัวอย่าง");
+ // splitting the whole line cut loan words apart ("เจน|เทิ|ลม|อนส|เต|อร์")
  function subWords(line){
-  const {words,text,from,to}=timedText(line);
+  const {words}=timedText(line);
   if(!segmenter)return words;
-  return [...segmenter.segment(text)].filter(p=>p.isWordLike).map(p=>({text:p.segment,start_ms:from[p.index],end_ms:to[p.index+p.segment.length-1]}));
+  return words.flatMap(w=>{
+   const parts=[...segmenter.segment(w.text)].filter(p=>p.isWordLike);
+   if(parts.length<2 || parts.some(p=>p.segment.length<2) || parts.map(p=>p.segment).join('')!==w.text)return [w];
+   const n=w.text.length,span=w.end_ms-w.start_ms;
+   return parts.map(p=>({text:p.segment,start_ms:w.start_ms+Math.round(span*p.index/n),end_ms:w.start_ms+Math.round(span*(p.index+p.segment.length)/n)}));
+  });
  }
  // an AI's word found in the line as written (the dictionary split can cut loan words like "มอนสเตอร์"),
  // timed from its characters

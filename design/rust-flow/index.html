@@ -636,6 +636,12 @@ label[for="fx-box"]::before{content:"🟦 "}
 label[for="fx-enter"]::before{content:"🎬 "}
 #textQcTitle::before{content:"✅ "}
 .line-words .caption::before{content:"⭐ "}
+
+/* the check in the side panel: one column, badge and time on one line, the text at full width */
+.text-inspector .qc-finding{grid-template-columns:auto minmax(0,1fr);gap:4px var(--space-sm);align-items:center}
+.text-inspector .qc-finding .badge{grid-row:auto}
+.text-inspector .qc-finding>:not(.badge):not(.qc-head){grid-column:1/-1}
+.text-inspector .qc-shown{font-size:.9375rem}
 </style>
 </head>
 <body data-loading="true">
