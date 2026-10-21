@@ -25,7 +25,7 @@ export function createTextQc({texts,summary,list,listen,edit,go}){
   // One row per text that needs a look, worst first in time order; texts without findings pass silently.
   const groups=new Map();
   for(const f of findings){const key=f.id ?? `${f.kind}@${f.start_ms}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f);}
-  const count=level=>findings.filter(f=>f.severity===level).length;
+  const count=level=>[...groups.values()].filter(g=>order.find(l=>g.some(f=>f.severity===l))===level).length;
   summary.textContent=groups.size?`ตรวจ ${items.length} ข้อความ ต้องฟัง ${groups.size} จุด (ร้ายแรง ${count('critical')} / ปานกลาง ${count('moderate')} / เล็กน้อย ${count('minor')}) ที่เหลือผ่าน`:`ตรวจ ${items.length} ข้อความ ผ่านทั้งหมด`;
   list.replaceChildren(...[...groups.values()].map(group=>{
    const first=group[0],worst=order.find(level=>group.some(f=>f.severity===level));

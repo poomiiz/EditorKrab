@@ -642,6 +642,14 @@ label[for="fx-enter"]::before{content:"🎬 "}
 .text-inspector .qc-finding .badge{grid-row:auto}
 .text-inspector .qc-finding>:not(.badge):not(.qc-head){grid-column:1/-1}
 .text-inspector .qc-shown{font-size:.9375rem}
+
+/* Unit 0 review: panels grow with the screen, labels fit on one line, nothing jumps */
+.stage[data-panel="4"] .text-workspace,.stage[data-panel="5"] .text-workspace{grid-template-columns:minmax(0,1fr) clamp(360px,26vw,500px)}
+.text-controls>.field{grid-template-columns:7.5em minmax(0,1fr)}
+.stage[data-panel="4"] label[for="text-text"]{display:none}
+.stage[data-panel="2"] .stage-body{padding-top:var(--space-md)}
+.story-marks{min-width:12em}
+#editVideoNote{min-height:1.4em}
 </style>
 </head>
 <body data-loading="true">

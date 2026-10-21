@@ -124,7 +124,7 @@ function renderSteps() {
     next.classList.toggle('primary',ready);
     let note=foot.querySelector('.foot-hint');
     if(!note){note=document.createElement('span');note.className='foot-hint caption';foot.querySelector('.actions').before(note);}
-    note.textContent=ready ? '' : hint;
+    note.textContent=hint;note.style.visibility=ready ? 'hidden' : '';
   }
 }
 const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('textQcList'),listen:id=>speech.listen(id),

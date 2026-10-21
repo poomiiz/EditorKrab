@@ -174,7 +174,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   // only stories already arranged with the AI (round 2) are offered; the one open now always is
   pick.replaceChildren(...model().stories.map(s=>{const o=document.createElement('option');o.value=s.id;o.selected=s.id===story.id;
    o.disabled=!s.refined&&s.id!==story.id;o.textContent=`${s.index+1}. ${s.title}`+(s.refined?'':' (ยังไม่เรียบเรียง)');return o;}));
-  const done=!!reviews()[story.id];$('editReviewed').textContent=done?'ตรวจแล้ว':'ตรวจเรื่องนี้แล้ว';$('editReviewed').classList.toggle('primary',!done);$('editReviewed').disabled=!editable();
+  const done=!!reviews()[story.id];$('editReviewed').textContent='ตรวจเรื่องนี้แล้ว';if(done)$('editReviewed').dataset.icon='check';else delete $('editReviewed').dataset.icon;$('editReviewed').setAttribute('aria-pressed',String(done));$('editReviewed').title=done?'ตรวจแล้ว · กดอีกครั้งเพื่อยกเลิก':'';$('editReviewed').classList.toggle('primary',!done);$('editReviewed').disabled=!editable();
   // step 3 cuts the video in its own frame; step 4 plays it under the subtitle frame with the emphasis track
   const textMode=!$('captionDock').closest('[data-panel]').hidden,frame=$(textMode?'textFrame':'editFrame');
   if(frame&&video.parentElement!==frame)frame.prepend(video);
