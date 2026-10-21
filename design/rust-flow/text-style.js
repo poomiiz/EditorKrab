@@ -212,6 +212,19 @@ export function createStyleEditor(read,write,layout,writeItems){
   if(!fontChecks.has(value))fontChecks.set(value,new FontFace('EditorKrabCheck','local('+JSON.stringify(value.slice(7))+')').load().then(()=>true,()=>false));
   fontChecks.get(value).then(found=>{if(request===fontRequest){$('fontStatus').textContent=found?'ใช้ฟอนต์ในเครื่อง':'ไม่พบฟอนต์นี้ · แสดงฟอนต์สำรอง';paint();}});
  }
+ // the read fonts as a list under the field, each shown in its own face and narrowed by what is typed
+ let localNames=[];
+ function showFontList(filter=false){
+  const list=$('fontList');if(!localNames.length){list.hidden=true;return;}
+  const current=$('text-font').value.trim(),typed=filter?current.toLowerCase():'';
+  const shown=localNames.filter(n=>!typed || n.toLowerCase().includes(typed) || n===current).slice(0,200);
+  const names=shown.length?shown:localNames.slice(0,200);
+  list.replaceChildren(...names.map(name=>{const b=document.createElement('button');b.type='button';b.setAttribute('role','option');b.setAttribute('aria-selected',String(name===current));
+   b.style.fontFamily=JSON.stringify(name)+',system-ui,sans-serif';b.append(name);const sample=document.createElement('small');sample.textContent='สวัสดี Aa';sample.style.fontFamily=b.style.fontFamily;b.append(sample);
+   b.onclick=()=>{const input=$('text-font');input.value=name;input.dispatchEvent(new Event('input'));showFontList();};return b;}));
+  list.hidden=false;
+ }
+ $('text-font').addEventListener('input',e=>{if(e.isTrusted)showFontList(true);});
  $('localFonts').onclick=async()=>{
   if(!enabled || !selected || fontLoading)return;
   if(!window.queryLocalFonts){$('fontStatus').textContent='เบราว์เซอร์นี้อ่านรายชื่อไม่ได้ · พิมพ์ชื่อฟอนต์แทน';return;}
@@ -221,9 +234,10 @@ export function createStyleEditor(read,write,layout,writeItems){
    const names=[...new Set(entries.map(v=>v.family).filter(v=>validFont('family:'+v)))].sort((a,b)=>a.localeCompare(b));
    const options=names.map(name=>{const option=document.createElement('option');option.value=name;return option;});
    $('textFonts').replaceChildren(...Object.values(fontLabels).map(name=>{const option=document.createElement('option');option.value=name;return option;}),...options);
-   $('fontStatus').textContent=names.length?'อ่านแล้ว '+names.length+' ฟอนต์ · เลือกจากช่องฟอนต์':'ไม่พบรายชื่อ · พิมพ์ชื่อฟอนต์แทน';
+   localNames=names;showFontList();
+   $('fontStatus').textContent=names.length?'อ่านแล้ว '+names.length+' ฟอนต์ · คลิกชื่อในรายการ หรือพิมพ์เพื่อค้น':'ไม่พบรายชื่อ · พิมพ์ชื่อฟอนต์แทน';
   }catch(_){$('fontStatus').textContent='อ่านรายชื่อไม่ได้ · ลองใหม่หรือพิมพ์ชื่อฟอนต์';}
-  finally{fontLoading=false;$('localFonts').disabled=!enabled || !selected;$('localFonts').textContent='อ่านรายชื่อฟอนต์';}
+  finally{fontLoading=false;$('localFonts').disabled=!enabled || !selected;$('localFonts').textContent='ฟอนต์ในเครื่อง';}
  };
  $('text-color-hex').oninput=()=>{
   if(!enabled || !selected)return;
