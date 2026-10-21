@@ -270,7 +270,7 @@ for(const button of document.querySelectorAll('[data-role-pick]'))button.onclick
 $('planOpen').onclick=()=>{$('planDialog').showModal();$('plan').focus();};
 // step 4's right panel: text tools or the subtitle check
 for(const tab of document.querySelectorAll('.inspector-tabs [data-tab]'))tab.onclick=()=>{
- const panel=tab.closest('.text-inspector');panel.dataset.tab=tab.dataset.tab;
+ const panel=tab.closest('.text-inspector');panel.dataset.tab=tab.dataset.tab;panel.scrollTop=0;
  for(const t of panel.querySelectorAll('.inspector-tabs [data-tab]'))t.setAttribute('aria-selected',String(t===tab));
 };
 $('planDialog').addEventListener('close',()=>{stories.renderCards();renderSteps();});

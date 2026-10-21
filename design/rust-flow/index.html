@@ -616,6 +616,26 @@ textarea{font-size:.75rem}
 /* short notes pop up at the bottom and go away by themselves, so nothing around them jumps */
 .toast{position:fixed !important;left:50%;bottom:24px;transform:translateX(-50%);z-index:1000;margin:0 !important;max-width:min(560px,90vw);padding:8px 16px;border:1px solid var(--line-strong);border-radius:999px;background:var(--raised);color:var(--txt);font-size:.875rem;box-shadow:0 8px 24px oklch(0% 0 0 / .35);white-space:normal;pointer-events:none}
 .toast[hidden]{display:none !important}
+
+/* step 4's tool panel: wider, and an icon in front of every tool so it reads at a glance */
+.stage[data-panel="4"] .text-workspace{grid-template-columns:minmax(0,1fr) 360px}
+.inspector-tabs [data-tab=style]::before{content:"✏️ "}
+.inspector-tabs [data-tab=qc]::before{content:"✅ "}
+#textRoleTitle::before{content:"🅰️ "}
+label[for="text-text"]>span::before{content:"💬 "}
+label[for="text-font"]>span::before{content:"🔤 "}
+label[for="text-size"]>span::before{content:"📏 "}
+#colorLabel::before{content:"🎨 "}
+label[for="text-color-hex"]>span::before{content:"#️⃣ "}
+details:has(#localFonts)>summary::after{content:" 💻"}
+details:has(#text-color-hex)>summary::after{content:" #️⃣"}
+details:has(#fx-outline)>summary::after{content:" ✨"}
+label[for="fx-outline"]::before{content:"🔲 "}
+label[for="fx-shadow"]::before{content:"🌑 "}
+label[for="fx-box"]::before{content:"🟦 "}
+label[for="fx-enter"]::before{content:"🎬 "}
+#textQcTitle::before{content:"✅ "}
+.line-words .caption::before{content:"⭐ "}
 </style>
 </head>
 <body data-loading="true">
