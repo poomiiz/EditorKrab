@@ -3,7 +3,7 @@ const clock=ms=>`${String(Math.floor(ms/60000)).padStart(2,'0')}:${(ms/1000%60).
 const kinds={headline:'หัวคลิป',super:'ข้อความซ้อน',subtitle:'ซับ',emphasis:'คำเน้น',english:'ซับอังกฤษ',graphic:'กราฟิก'};
 const levels={critical:'ร้ายแรง',moderate:'ปานกลาง',minor:'เล็กน้อย'};
 const order=['critical','moderate','minor'];
-export function createTextQc({texts,summary,list,listen,edit,go}){
+export function createTextQc({texts,summary,list,listen,edit,go,verdicts=()=>{}}){
  let lastKey='',running=false,again=false;
  async function run(force=false){
   const items=texts(),key=JSON.stringify(items);
@@ -26,6 +26,7 @@ export function createTextQc({texts,summary,list,listen,edit,go}){
   const groups=new Map();
   for(const f of findings){const key=f.id ?? `${f.kind}@${f.start_ms}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f);}
   const count=level=>[...groups.values()].filter(g=>order.find(l=>g.some(f=>f.severity===l))===level).length;
+  verdicts(new Map([...groups].map(([id,g])=>[id,{worst:order.find(l=>g.some(f=>f.severity===l)),problems:g.map(f=>f.problem)}])));
   summary.textContent=groups.size?`🔴 ${count('critical')}   🟡 ${count('moderate')}   🟢 ${count('minor')}`:'✅ ผ่านทั้งหมด';summary.title=`ตรวจ ${items.length} ข้อความ · แดง ร้ายแรง · เหลือง ปานกลาง · เขียว เล็กน้อย`;
   list.replaceChildren(...[...groups.values()].map(group=>{
    const first=group[0],worst=order.find(level=>group.some(f=>f.severity===level));
