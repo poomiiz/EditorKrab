@@ -244,6 +244,9 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const line=wordLine,inStep4=!!$('editTrack').closest('#captionTransport');box.hidden=!inStep4 || !line;if(box.hidden)return;
   const verdict=qcBy.get(line.id);
   $('lineText').value=line.text;$('lineText').disabled=!editable();$('lineSave').disabled=true;
+  // the words of this line that show as emphasis, so the full text in the box does not read as a repeat
+  const shown=(read().text_roles || []).includes('emphasis')?picks(line):[];
+  $('lineEmph').hidden=!shown.length;$('lineEmph').textContent=shown.length?`⭐ คำเน้น: ${joinPicks(shown)} · บนจอขึ้นตัวใหญ่แยก ไม่ซ้ำในซับ`:'';
   $('lineTime').textContent=`${clock(line.start_ms)}–${clock(line.end_ms)}`;
   $('lineProblems').replaceChildren(...(verdict?.problems || []).map(p=>{const li=document.createElement('li');li.textContent=p;li.dataset.severity=verdict.worst;return li;}));
  }
@@ -332,10 +335,12 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function speechText(line,now=Infinity,reveal=true){
   const {text,from,said}=timedText(line);if(!text)return line?.text || '';
   const keep=[...text].map(()=>true),list=(read().text_roles || []).includes('emphasis')?picks(line):[];
+  // matched on letters only, so "Customer Experience" is found though the line holds a space between them
+  const letters=[...text].map((c,i)=>({c,i})).filter(x=>!/\s/.test(x.c)),flat=letters.map(x=>x.c).join('');
   for(const p of list){
    const want=p.text.replace(/\s+/g,'');let best=-1,gap=Infinity;
-   for(let i=text.indexOf(want);i>=0;i=text.indexOf(want,i+1)){const d=Math.abs(from[i]-p.start_ms);if(d<gap){gap=d;best=i;}}
-   if(best>=0)for(let k=best;k<best+want.length;k++)keep[k]=false;
+   for(let i=flat.indexOf(want);i>=0&&want;i=flat.indexOf(want,i+1)){const d=Math.abs(from[letters[i].i]-p.start_ms);if(d<gap){gap=d;best=i;}}
+   if(best>=0)for(let k=letters[best].i;k<=letters[best+want.length-1].i;k++)keep[k]=false;
   }
   // the kept letters of each timed word, then display lines that fit the frame, broken like the export
   // (lines() in export.rs): a line holds words while their letters fit `limit`
