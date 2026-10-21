@@ -502,22 +502,21 @@ pub fn emphasis_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)
     }
     let mut at = 0;
     for p in &story.pieces {
-        let picked: Vec<u64> = document["emphasis"][&p.segment]
+        // a pick is {text, start_ms} (one dictionary word, step 4) or a bare start time of a timed word (older drafts)
+        let mut words: Vec<(u64, String)> = document["emphasis"][&p.segment]
             .as_array()
             .into_iter()
             .flatten()
-            .filter_map(Value::as_u64)
+            .filter_map(|v| match v.as_u64() {
+                Some(at) => p.words.iter().find(|w| w.1 == at).map(|w| (w.1, w.0.trim().to_owned())),
+                None => Some((v["start_ms"].as_u64()?, v["text"].as_str()?.trim().to_owned())),
+            })
+            .filter(|(at, text)| !text.is_empty() && *at < p.end_ms && *at + 1 > p.start_ms)
             .collect();
-        let words: Vec<&(String, u64, u64)> = p.words.iter().filter(|w| picked.contains(&w.1)).collect();
+        words.sort();
         if let Some(first) = words.first() {
-            let mut text = String::new();
-            for w in &words {
-                if !text.is_empty() {
-                    text.push(' ');
-                }
-                text.push_str(w.0.trim());
-            }
-            let start = first.1.clamp(p.start_ms, p.end_ms) - p.start_ms;
+            let text = words.iter().map(|w| w.1.as_str()).collect::<Vec<_>>().join(" ");
+            let start = first.0.clamp(p.start_ms, p.end_ms) - p.start_ms;
             out.push((at + start, at + p.end_ms - p.start_ms, text));
         }
         at += p.end_ms - p.start_ms;

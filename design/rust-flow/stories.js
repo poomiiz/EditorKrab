@@ -180,7 +180,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   if(frame&&video.parentElement!==frame)frame.prepend(video);
   const controls=$('editPlay').closest('.editor-controls'),dock=textMode?$('captionTransport'):$('editor');
   if(controls.parentElement!==dock){dock.append(controls,$('editTrack'));}
-  if(textMode){if(pick.parentElement!==controls)controls.prepend(pick);}else if(pick.parentElement!==$('editTitle'))$('editTitle').append(pick);
+  const title=$(textMode?'captionsTitle':'editTitle');if(pick.parentElement!==title)title.append(pick);
   cropSource=story.source_id;showCrop();
   const src=`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(story.source_id)}/preview`;
   if(video.dataset.src!==src){video.dataset.src=src;$('editVideoNote').textContent='กำลังเตรียมพรีวิว 360p ครั้งแรกอาจรอสักครู่';video.src=src;video.load();}
@@ -245,10 +245,10 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    for(const {line,kept,at} of editView.boxes){
     const span=kept || line;
     const bar=document.createElement('div');bar.className='edit-vid';bar.style.left=px(at)+'px';bar.style.width=Math.max(4,px(span.end_ms-span.start_ms)-2)+'px';lane.append(bar);
-    const picked=new Set(emphasis[line.segment_id] || []),words=(line.words || []).filter(w=>picked.has(w.start_ms)&&w.end_ms>span.start_ms&&w.start_ms<span.end_ms);
+    const words=picks(line).filter(w=>w.start_ms<span.end_ms&&(w.end_ms ?? w.start_ms+1)>span.start_ms);
     if(words.length){
      const first=Math.max(words[0].start_ms,span.start_ms),clip=document.createElement('button');clip.type='button';clip.className='edit-emph';
-     clip.textContent=words.map(w=>w.text.trim()).join(' ');clip.title='คำเน้น · คลิกเพื่อแก้คำ';
+     clip.textContent=words.map(w=>w.text).join(' ');clip.title='คำเน้น · คลิกเพื่อแก้คำ';
      clip.style.left=px(at+first-span.start_ms)+'px';clip.style.width=Math.max(24,px(span.end_ms-first)-2)+'px';
      clip.onclick=e=>{e.stopPropagation();wordLine=line;drawWords();};lane.append(clip);
     }
@@ -257,10 +257,10 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   }
   const host=$('lineWords');if(!host)return;
   host.hidden=!textMode || !wordLine;if(host.hidden){host.replaceChildren();return;}
-  const picked=new Set(emphasis[wordLine.segment_id] || []),label=document.createElement('span');label.className='caption';
+  const chosen=picks(wordLine),label=document.createElement('span');label.className='caption';
   label.textContent=wordLine.words?.length?'คำในท่อนนี้ · คลิกคำเพื่อเน้น':'ท่อนนี้แก้ข้อความแล้ว ไม่มีเวลารายคำให้เลือกเน้น';
-  host.replaceChildren(label,...(wordLine.words || []).map(w=>{const b=document.createElement('button');b.type='button';b.className='line-word';b.textContent=w.text;
-   b.setAttribute('aria-pressed',String(picked.has(w.start_ms)));b.disabled=!editable();b.onclick=()=>toggleEmphasis(wordLine,w);return b;}));
+  host.replaceChildren(label,...subWords(wordLine).map(w=>{const b=document.createElement('button');b.type='button';b.className='line-word';b.textContent=w.text;
+   b.setAttribute('aria-pressed',String(chosen.some(p=>samePick(p,w))));b.disabled=!editable();b.onclick=()=>toggleEmphasis(wordLine,w);return b;}));
  }
  // track heads for the step 4 layers; the ticks are the "on screen" choices
  function drawHeads(){
@@ -279,13 +279,28 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   }));
   heads.style.height=$('editTrack').offsetHeight ? $('editTrack').offsetHeight+'px' : '';
  }
- function toggleEmphasis(line,word){
-  write(d=>{
-   const all={...(d.emphasis || {})},list=new Set(all[line.segment_id] || []);
-   if(list.has(word.start_ms))list.delete(word.start_ms);else list.add(word.start_ms);
-   if(list.size)all[line.segment_id]=[...list].sort((a,b)=>a-b);else delete all[line.segment_id];d.emphasis=all;
-  });
+ // the engine's timed words are sometimes phrases ("ยกตัวอย่าง"); split them into dictionary words with time
+ // shared by length, so emphasis can be one word. Picks are stored as {text,start_ms,end_ms}; a bare number (older
+ // drafts) is the whole timed word starting there.
+ const segmenter=typeof Intl!=='undefined'&&Intl.Segmenter?new Intl.Segmenter('th',{granularity:'word'}):null;
+ function subWords(line){
+  return (line?.words || []).flatMap(w=>{
+   const parts=segmenter?[...segmenter.segment(w.text.trim())].filter(p=>p.isWordLike).map(p=>p.segment):[w.text.trim()];
+   if(parts.length<2)return [{text:w.text.trim(),start_ms:w.start_ms,end_ms:w.end_ms}];
+   const total=parts.reduce((n,p)=>n+p.length,0),span=w.end_ms-w.start_ms;let at=0;
+   return parts.map(p=>{const start=w.start_ms+Math.round(span*at/total);at+=p.length;return {text:p,start_ms:start,end_ms:w.start_ms+Math.round(span*at/total)};});
+  }).filter(w=>w.text);
  }
+ function picks(line){
+  return (read().emphasis?.[line?.segment_id] || []).map(p=>typeof p==='number'?(()=>{const w=(line.words || []).find(w=>w.start_ms===p);return w&&{text:w.text.trim(),start_ms:w.start_ms,end_ms:w.end_ms};})():p)
+   .filter(p=>p&&typeof p.text==='string'&&Number.isFinite(p.start_ms)).sort((a,b)=>a.start_ms-b.start_ms);
+ }
+ const samePick=(a,b)=>a.start_ms===b.start_ms&&a.text===b.text;
+ function toggleEmphasis(line,word){
+  const current=picks(line),next=current.some(p=>samePick(p,word))?current.filter(p=>!samePick(p,word)):[...current,{text:word.text,start_ms:word.start_ms,end_ms:word.end_ms}];
+  write(d=>{const all={...(d.emphasis || {})};if(next.length)all[line.segment_id]=next.sort((a,b)=>a.start_ms-b.start_ms);else delete all[line.segment_id];d.emphasis=all;});
+ }
+
  // crop: where the clip-shaped window sits on the video, 0..1 across the slack each way (0.5 = centred)
  const cropOf=id=>{const c=read().crops?.[id] || {};const f=v=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):0.5;return {x:f(c.x),y:f(c.y)};};
  function showCrop(at=cropOf(cropSource)){video.style.objectPosition=`${at.x*100}% ${at.y*100}%`;}
@@ -332,7 +347,9 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const grip=document.createElement('button');grip.type='button';grip.className='edit-grip';grip.dataset.edge=edge;
   grip.title=edge==='start_ms'?'ลากเพื่อยืดหรือหดต้นท่อน':'ลากเพื่อยืดหรือหดท้ายท่อน';grip.setAttribute('aria-label',grip.title+' ใช้ลูกศรซ้ายขวาทีละ 0.1 วินาที');
   let from=null,value=kept[edge];
-  const preview=v=>{value=trimmed({start_ms:kept.from_ms,end_ms:kept.to_ms},{start_ms:edge==='start_ms'?v:kept.start_ms,end_ms:edge==='end_ms'?v:kept.end_ms})[edge];
+  const snaps=()=>[video.currentTime*1000,...(kept.words || []).flatMap(w=>[w.start_ms,w.end_ms])];
+  const snap=v=>{let best=v,gap=Infinity;for(const t of snaps()){const d=Math.abs(t-v);if(d/1000*zoom<=8&&d<gap){best=t;gap=d;}}return best;};
+  const preview=v=>{v=snap(v);value=trimmed({start_ms:kept.from_ms,end_ms:kept.to_ms},{start_ms:edge==='start_ms'?v:kept.start_ms,end_ms:edge==='end_ms'?v:kept.end_ms})[edge];
    const span=edge==='start_ms'?kept.end_ms-value:value-kept.start_ms;box.style.width=Math.max(6,span/1000*zoom-2)+'px';
    $('editClock').textContent=`${edge==='start_ms'?'ต้น':'ท้าย'}ท่อน ${clock(value)}.${Math.floor(value/100)%10} · ท่อนนี้ยาว ${(span/1000).toFixed(1)} วินาที`;};
   grip.onpointerdown=e=>{from=e.clientX;grip.setPointerCapture(e.pointerId);e.preventDefault();};
@@ -387,8 +404,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const words=said?.words || [],wordByWord=(read().text_styles?.speech?.enter ?? 'words')==='words'&&words.length;
   // while a line plays, an empty box stays empty (a no-break space) instead of falling back to the sample text
   caption(!said?'':(wordByWord?joinWords(words.filter(w=>w.start_ms<=now).map(w=>w.text)):said.text) || '\u00a0');
-  const picked=new Set(read().emphasis?.[said?.segment_id] || []);
-  emphasis(said?joinWords(words.filter(w=>picked.has(w.start_ms)&&w.start_ms<=now).map(w=>w.text),' ') || '\u00a0':'');
+  emphasis(said?picks(said).filter(w=>w.start_ms<=now).map(w=>w.text).join(' ') || '\u00a0':'');
   if(said&&said.segment_id!==wordLine?.segment_id&&!video.paused)showWords(said);
   const head=$('editHead');
   if(head&&editView){
@@ -413,10 +429,20 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  const playLabel=()=>{const playing=!video.paused;$('editPlay').dataset.icon=playing?'pause':'play';$('editPlay').textContent=playing?'หยุด':'เล่นทั้งเรื่อง';};
  video.addEventListener('play',playLabel);video.addEventListener('pause',playLabel);
  // space plays or pauses on step 3, except while typing or when a button already takes the key
+ // keys on steps 3 and 4: Space play/pause, arrows step a frame (Shift: a second); on step 3 Q/W trim the line
+ // under the playhead up to it from the start/end, Delete cuts that line
  document.addEventListener('keydown',e=>{
-  if(e.code!=='Space' || e.repeat || $('editor').hidden || $('editor').closest('[hidden]'))return;
-  if(e.target.closest?.('input,textarea,select,button,[contenteditable="true"],dialog'))return;
-  e.preventDefault();playPause();
+  const step3=!$('editor').closest('[hidden]')&&!$('editor').hidden,step4=!$('captionDock').closest('[hidden]');
+  if((!step3&&!step4) || e.ctrlKey || e.metaKey || e.altKey)return;
+  if(e.target.closest?.('input,textarea,select,[contenteditable="true"],dialog,.edit-grip'))return;
+  const story=current();if(!story)return;
+  if(e.code==='Space'){if(e.repeat)return;e.preventDefault();playPause();return;}
+  if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();if(!video.paused)video.pause();video.currentTime=Math.max(0,video.currentTime+(e.key==='ArrowLeft'?-1:1)*(e.shiftKey?1:1/30));step();return;}
+  if(!step3 || !editable())return;
+  const now=Math.round(video.currentTime*1000),line=story.kept.find(k=>now>=k.start_ms&&now<k.end_ms);if(!line)return;
+  if(e.key==='q'||e.key==='Q'){e.preventDefault();save(story,line,'start_ms',now);}
+  else if(e.key==='w'||e.key==='W'){e.preventDefault();save(story,line,'end_ms',now);}
+  else if(e.key==='Delete'||e.key==='Backspace'){if(story.kept.length>1){e.preventDefault();flip(story,line);}}
  });
  $('editZoom').oninput=renderEditor;
  $('editStory').onchange=()=>{const id=$('editStory').value;if(video&&!video.paused)video.pause();queue=[];write(d=>{d.edit_story=id;});};
@@ -445,8 +471,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const byId=new Map(keptLines().map(({line})=>[line.segment_id,line])),picked={};let words=0;
   for(const [id,list] of Object.entries(answer)){
    const line=byId.get(id);if(!line?.words?.length || !Array.isArray(list))continue;
-   const starts=line.words.filter(w=>list.some(p=>typeof p==='string'&&p.trim()&&(p.trim()===w.text.trim() || (p.includes(w.text.trim())&&w.text.trim().length>1)))).map(w=>w.start_ms);
-   if(starts.length){picked[id]=[...new Set(starts)].sort((a,b)=>a-b);words+=picked[id].length;}
+   const found=subWords(line).filter(w=>list.some(p=>typeof p==='string'&&p.trim()&&(p.trim()===w.text || (p.includes(w.text)&&w.text.length>1))));
+   if(found.length){picked[id]=found;words+=found.length;}
   }
   if(!words)return {error:'คำตอบไม่ตรงกับท่อนหรือคำที่ส่งไป ลองให้ AI ตอบใหม่'};
   return {picked,note:`เน้น ${words} คำ ใน ${Object.keys(picked).length} ท่อน`};
