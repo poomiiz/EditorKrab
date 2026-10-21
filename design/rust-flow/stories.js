@@ -249,7 +249,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
     const words=picks(line).filter(w=>w.start_ms<span.end_ms&&(w.end_ms ?? w.start_ms+1)>span.start_ms);
     if(words.length){
      const first=Math.max(words[0].start_ms,span.start_ms),clip=document.createElement('button');clip.type='button';clip.className='edit-emph';
-     clip.textContent=words.map(w=>w.text).join(' ');clip.title='คำเน้น · คลิกเพื่อแก้คำ';
+     clip.textContent=joinPicks(words);clip.title='คำเน้น · คลิกเพื่อแก้คำ';
      clip.style.left=px(at+first-span.start_ms)+'px';clip.style.width=Math.max(24,px(span.end_ms-first)-2)+'px';
      clip.onclick=e=>{e.stopPropagation();wordLine=line;drawWords();};lane.append(clip);
     }
@@ -280,18 +280,38 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   }));
   heads.style.height=$('editTrack').offsetHeight ? $('editTrack').offsetHeight+'px' : '';
  }
- // the engine's timed words are sometimes phrases ("ยกตัวอย่าง"); split them into dictionary words with time
- // shared by length, so emphasis can be one word. Picks are stored as {text,start_ms,end_ms}; a bare number (older
- // drafts) is the whole timed word starting there.
+ // the engine's timed words are chunks that cut across real words ("บอ|กว่า", "ยกตัวอย่าง"); the line is
+ // re-split into dictionary words, each character timed by its share of its timed word. Picks are stored as
+ // {text,start_ms,end_ms}; a bare number (older drafts) is the whole timed word starting there.
  const segmenter=typeof Intl!=='undefined'&&Intl.Segmenter?new Intl.Segmenter('th',{granularity:'word'}):null;
- function subWords(line){
-  return (line?.words || []).flatMap(w=>{
-   const parts=segmenter?[...segmenter.segment(w.text.trim())].filter(p=>p.isWordLike).map(p=>p.segment):[w.text.trim()];
-   if(parts.length<2)return [{text:w.text.trim(),start_ms:w.start_ms,end_ms:w.end_ms}];
-   const total=parts.reduce((n,p)=>n+p.length,0),span=w.end_ms-w.start_ms;let at=0;
-   return parts.map(p=>{const start=w.start_ms+Math.round(span*at/total);at+=p.length;return {text:p,start_ms:start,end_ms:w.start_ms+Math.round(span*at/total)};});
-  }).filter(w=>w.text);
+ const latin=/[A-Za-z0-9]/;
+ function timedText(line){
+  const words=(line?.words || []).map(w=>({text:w.text.trim(),start_ms:w.start_ms,end_ms:w.end_ms})).filter(w=>w.text);
+  let text='';const from=[],to=[];
+  for(const w of words){
+   if(latin.test(text.at(-1) || '')&&latin.test(w.text[0])){text+=' ';from.push(w.start_ms);to.push(w.start_ms);}
+   const n=w.text.length,span=w.end_ms-w.start_ms;
+   for(let i=0;i<n;i++){from.push(w.start_ms+Math.round(span*i/n));to.push(w.start_ms+Math.round(span*(i+1)/n));}
+   text+=w.text;
+  }
+  return {words,text,from,to};
  }
+ function subWords(line){
+  const {words,text,from,to}=timedText(line);
+  if(!segmenter)return words;
+  return [...segmenter.segment(text)].filter(p=>p.isWordLike).map(p=>({text:p.segment,start_ms:from[p.index],end_ms:to[p.index+p.segment.length-1]}));
+ }
+ // an AI's word found in the line as written (the dictionary split can cut loan words like "มอนสเตอร์"),
+ // timed from its characters
+ function findSaid(line,want){
+  const {text,from,to}=timedText(line),key=want.replace(/\s+/g,'').toLowerCase();if(!key)return null;
+  const chars=[...text].map((c,i)=>({c:c.toLowerCase(),i})).filter(x=>!/\s/.test(x.c)),flat=chars.map(x=>x.c).join('');
+  const at=flat.indexOf(key);if(at<0)return null;
+  const a=chars[at].i,b=chars[at+key.length-1].i;
+  return {text:text.slice(a,b+1),start_ms:from[a],end_ms:to[b]};
+ }
+ // picked words read as one phrase: neighbours join without a space unless both sides are Latin
+ const joinPicks=list=>list.reduce((out,w,i)=>{const prev=list[i-1];const tight=prev&&w.start_ms<=prev.end_ms+1&&!(latin.test(prev.text.at(-1))&&latin.test(w.text[0]));return out+(i&&!tight?' ':'')+w.text;},'');
  function picks(line){
   return (read().emphasis?.[line?.segment_id] || []).map(p=>typeof p==='number'?(()=>{const w=(line.words || []).find(w=>w.start_ms===p);return w&&{text:w.text.trim(),start_ms:w.start_ms,end_ms:w.end_ms};})():p)
    .filter(p=>p&&typeof p.text==='string'&&Number.isFinite(p.start_ms)).sort((a,b)=>a.start_ms-b.start_ms);
@@ -405,7 +425,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const words=said?.words || [],wordByWord=(read().text_styles?.speech?.enter ?? 'words')==='words'&&words.length;
   // while a line plays, an empty box stays empty (a no-break space) instead of falling back to the sample text
   caption(!said?'':(wordByWord?joinWords(words.filter(w=>w.start_ms<=now).map(w=>w.text)):said.text) || '\u00a0');
-  emphasis(said?picks(said).filter(w=>w.start_ms<=now).map(w=>w.text).join(' ') || '\u00a0':'');
+  emphasis(said?joinPicks(picks(said).filter(w=>w.start_ms<=now)) || '\u00a0':'');
   if(said&&said.segment_id!==wordLine?.segment_id&&!video.paused)showWords(said);
   const head=$('editHead');
   if(head&&editView){
@@ -458,10 +478,10 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function keptLines(){const m=model();if(!m)return [];const seen=new Set();return m.stories.flatMap(s=>s.kept.map(l=>({story:s,line:lines().find(x=>x.segment_id===l.segment_id) || l}))).filter(({line})=>!seen.has(line.segment_id)&&seen.add(line.segment_id));}
  function emphasisText(){
   const packet={schema_version:1,step:'emphasis',project_id:project,
-   stories:(model()?.stories || []).filter(s=>s.kept.length).map(s=>({title:s.title,lines:s.kept.map(k=>{const l=lines().find(x=>x.segment_id===k.segment_id) || k;return {id:l.segment_id,text:l.text,words:(l.words || []).map(w=>w.text)};})})),
+   stories:(model()?.stories || []).filter(s=>s.kept.length).map(s=>({title:s.title,lines:s.kept.map(k=>{const l=lines().find(x=>x.segment_id===k.segment_id) || k;return {id:l.segment_id,text:l.text,words:subWords(l).map(w=>w.text)};})})),
    response_schema:{emphasis:{'<line id>':['คำที่เน้น']}}};
   return 'เลือกคำเน้นสำหรับซับ: แต่ละท่อนเลือกได้ 0-2 คำที่สำคัญที่สุด (ชื่อแบรนด์ ตัวเลข คำที่ให้อารมณ์ หรือใจความหลัก) ท่อนที่ไม่มีอะไรเด่นไม่ต้องใส่ '
-   +'ใช้คำตาม words ของท่อนนั้นเท่านั้น อ้างท่อนด้วย id ที่ให้\nตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,1);
+   +'ใช้คำตาม words ของท่อนนั้นเท่านั้น ถ้าเป็นชื่อที่ยาวหลายคำ ให้เขียนคำที่ติดกันใน words ต่อกันเป็นคำตอบเดียว อ้างท่อนด้วย id ที่ให้\nตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,1);
  }
  function checkEmphasis(){
   const raw=$('emphasisAnswer').value.trim();if(!raw)return {error:''};
@@ -472,7 +492,19 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const byId=new Map(keptLines().map(({line})=>[line.segment_id,line])),picked={};let words=0;
   for(const [id,list] of Object.entries(answer)){
    const line=byId.get(id);if(!line?.words?.length || !Array.isArray(list))continue;
-   const found=subWords(line).filter(w=>list.some(p=>typeof p==='string'&&p.trim()&&(p.trim()===w.text || (p.includes(w.text)&&w.text.length>1))));
+   // each answer is a whole word, or neighbouring words written together; first match in the line wins
+   const all=subWords(line),squash=t=>t.replace(/\s+/g,'').toLowerCase(),found=[];
+   for(const p of list){
+    const want=typeof p==='string'?squash(p):'';if(!want)continue;
+    let hit=false;
+    for(let i=0;i<all.length&&!hit;i++){
+     let got='',j=i;while(j<all.length&&got.length<want.length)got+=squash(all[j++].text);
+     if(got===want){hit=true;for(const w of all.slice(i,j))if(!found.includes(w))found.push(w);}
+    }
+    // not on word edges: take the characters as said
+    if(!hit){const said=findSaid(line,p);if(said&&!found.some(w=>samePick(w,said)))found.push(said);}
+   }
+   found.sort((a,b)=>a.start_ms-b.start_ms);
    if(found.length){picked[id]=found;words+=found.length;}
   }
   if(!words)return {error:'คำตอบไม่ตรงกับท่อนหรือคำที่ส่งไป ลองให้ AI ตอบใหม่'};

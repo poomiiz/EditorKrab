@@ -237,6 +237,11 @@ fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
     // a dictionary word split out of a timed phrase is stored with its own text and start
     let split = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "สาม", "start_ms": 3100, "end_ms": 3400}, 2000]}});
     assert_eq!(editorkrab::export::emphasis_lines(&story, &split), vec![(1000, 3000, "สอง สาม".to_owned())]);
+    // neighbouring dictionary words read as one name: no space between Thai words, a space between Latin ones
+    let name = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "มอน", "start_ms": 3000, "end_ms": 3300}, {"text": "สเตอร์", "start_ms": 3300, "end_ms": 3600}]}});
+    assert_eq!(editorkrab::export::emphasis_lines(&story, &name), vec![(2000, 3000, "มอนสเตอร์".to_owned())]);
+    let latin = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "Gentle", "start_ms": 3000, "end_ms": 3300}, {"text": "Monster", "start_ms": 3300, "end_ms": 3600}]}});
+    assert_eq!(editorkrab::export::emphasis_lines(&story, &latin), vec![(2000, 3000, "Gentle Monster".to_owned())]);
     let (ass, skipped) = subtitles(&story, &doc);
     assert!(ass.contains("0:00:00.20,0:00:01.00,Text") && ass.contains("}หนึ่งสอง\n"), "{ass}");
     assert!(ass.contains("0:00:01.00,0:00:03.00,Text") && ass.contains("}สอง\n"), "{ass}");

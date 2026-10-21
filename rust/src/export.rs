@@ -503,19 +503,34 @@ pub fn emphasis_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)
     let mut at = 0;
     for p in &story.pieces {
         // a pick is {text, start_ms} (one dictionary word, step 4) or a bare start time of a timed word (older drafts)
-        let mut words: Vec<(u64, String)> = document["emphasis"][&p.segment]
+        let mut words: Vec<(u64, String, u64)> = document["emphasis"][&p.segment]
             .as_array()
             .into_iter()
             .flatten()
             .filter_map(|v| match v.as_u64() {
-                Some(at) => p.words.iter().find(|w| w.1 == at).map(|w| (w.1, w.0.trim().to_owned())),
-                None => Some((v["start_ms"].as_u64()?, v["text"].as_str()?.trim().to_owned())),
+                Some(at) => p.words.iter().find(|w| w.1 == at).map(|w| (w.1, w.0.trim().to_owned(), w.2)),
+                None => {
+                    let at = v["start_ms"].as_u64()?;
+                    Some((at, v["text"].as_str()?.trim().to_owned(), v["end_ms"].as_u64().unwrap_or(at)))
+                }
             })
-            .filter(|(at, text)| !text.is_empty() && *at < p.end_ms && *at + 1 > p.start_ms)
+            .filter(|(at, text, _)| !text.is_empty() && *at < p.end_ms && *at + 1 > p.start_ms)
             .collect();
         words.sort();
         if let Some(first) = words.first() {
-            let text = words.iter().map(|w| w.1.as_str()).collect::<Vec<_>>().join(" ");
+            // neighbouring words read as one phrase: no space between them unless both sides are Latin
+            let latin = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
+            let mut text = String::new();
+            for (i, w) in words.iter().enumerate() {
+                if i > 0 {
+                    let prev = &words[i - 1];
+                    let tight = w.0 <= prev.2 + 1 && !(latin(prev.1.chars().last()) && latin(w.1.chars().next()));
+                    if !tight {
+                        text.push(' ');
+                    }
+                }
+                text.push_str(&w.1);
+            }
             let start = first.0.clamp(p.start_ms, p.end_ms) - p.start_ms;
             out.push((at + start, at + p.end_ms - p.start_ms, text));
         }
