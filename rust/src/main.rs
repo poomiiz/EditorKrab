@@ -268,6 +268,12 @@ async fn run_export(
             tokio::fs::write(dir.join("subs.ass"), ass)
                 .await
                 .map_err(|e| e.to_string())?;
+            for mode in editorkrab::export::blend_modes(&document) {
+                let (layer, _) = editorkrab::export::subtitles_in(story, &document, &mode);
+                tokio::fs::write(dir.join(format!("subs_{mode}.ass")), layer)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
             let partial = dir.join("out.mp4");
             let total = story.duration_ms().max(1);
             let base = n as f64 / stories.len() as f64;

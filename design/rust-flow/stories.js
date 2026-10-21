@@ -472,6 +472,11 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   else if(e.key==='Delete'||e.key==='Backspace'){if(story.kept.length>1){e.preventDefault();flip(story,line);}}
  });
  $('editZoom').oninput=renderEditor;
+ $('editTrack').addEventListener('wheel',e=>{
+  if(!e.ctrlKey)return;e.preventDefault();
+  const zoom=$('editZoom'),next=Math.min(Number(zoom.max),Math.max(Number(zoom.min),Math.round(Number(zoom.value)*(e.deltaY<0?1.2:1/1.2))));
+  if(next!==Number(zoom.value)){zoom.value=next;renderEditor();}
+ },{passive:false});
  $('editStory').onchange=()=>{const id=$('editStory').value;if(video&&!video.paused)video.pause();queue=[];write(d=>{d.edit_story=id;});};
  $('editShowCut').onchange=renderEditor;
  $('editReviewed').onclick=()=>{const story=current();if(!story)return;write(d=>{const next={...(d.story_reviews || {})};if(next[story.id])delete next[story.id];else next[story.id]=true;d.story_reviews=next;});};

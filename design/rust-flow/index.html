@@ -661,6 +661,25 @@ label[for="fx-enter"]::before{content:"🎬 "}
 .text-inspector .qc-finding[data-severity=moderate]{border-color:var(--warn);background:color-mix(in oklch,var(--warn) 12%,transparent)}
 .text-inspector .qc-finding[data-severity=minor]{border-color:var(--ok);background:color-mix(in oklch,var(--ok) 12%,transparent)}
 #captionTransport .frame-aspect select{min-height:32px;padding:2px 8px;font-size:.8125rem}
+
+/* shadow blur and colour, blend mode, and entrance picked from looping samples instead of a list */
+label[for="fx-shadow-blur"]::before{content:"🌫️ "}
+label[for="fx-blend"]::before{content:"🌗 "}
+.fx-grid .enter-tiles{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.enter-tile{display:grid;justify-items:center;gap:2px;min-height:0;padding:6px 2px;border-radius:var(--radius-sm)}
+.enter-tile[aria-pressed=true]{border-color:var(--acc);background:var(--acc-soft)}
+.enter-tile small{font-size:.6875rem;color:var(--txt-sub)}
+.enter-sample{display:block;height:24px;line-height:24px;font-weight:700;font-size:1rem;color:var(--txt)}
+.enter-sample[data-sample=fade]{animation:sample-fade 1.6s ease-out infinite}
+.enter-sample[data-sample=pop]{animation:sample-pop 1.6s cubic-bezier(.22,1,.36,1) infinite}
+.enter-sample[data-sample=wipe]{animation:sample-wipe 1.6s linear infinite}
+.enter-sample[data-sample=words]{animation:sample-words 1.6s steps(3,end) infinite}
+@keyframes sample-fade{0%{opacity:0}40%,100%{opacity:1}}
+@keyframes sample-pop{0%{transform:scale(.6)}25%,100%{transform:scale(1)}}
+@keyframes sample-wipe{0%{clip-path:inset(0 100% 0 0)}50%,100%{clip-path:inset(0 0 0 0)}}
+@keyframes sample-words{0%{clip-path:inset(0 66% 0 0)}100%{clip-path:inset(0 0 0 0)}}
+@media(prefers-reduced-motion:reduce){.enter-sample{animation:none}}
+.fx-grid{grid-template-columns:7.5em minmax(0,1fr)}.fx-grid>label{white-space:nowrap}
 </style>
 </head>
 <body data-loading="true">
@@ -755,7 +774,7 @@ label[for="fx-enter"]::before{content:"🎬 "}
 <p id="fontStatus" class="preview-hint" role="status"></p>
 <details class="font-more"><summary>ใช้ฟอนต์อื่นในเครื่อง</summary><button id="localFonts" type="button" data-icon="font">แสดงฟอนต์ในเครื่อง</button></details>
 <div class="parameter-row"><label class="field" for="text-size"><span>ขนาด</span><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"></label><div class="field"><label id="colorLabel" for="text-color">สี</label><input id="text-color" type="color" aria-labelledby="colorLabel"><details class="color-more"><summary>ใส่รหัสสี</summary><label class="field" for="text-color-hex"><span>รหัสสี เช่น #FFFFFF</span><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false"></label></details></div></div>
-<details class="fx"><summary>เอฟเฟกต์ (ขอบ เงา แถบหลัง ตอนขึ้น)</summary><div class="fx-grid"><label for="fx-outline">ขอบ</label><span class="fx-pair"><input id="fx-outline" type="number" min="0" max="20" step="1" inputmode="numeric"><input id="fx-outline-color" type="color" aria-label="สีขอบ"></span><label for="fx-shadow">เงา</label><input id="fx-shadow" type="number" min="0" max="20" step="1" inputmode="numeric"><label for="fx-box">แถบหลัง</label><span class="fx-pair"><input id="fx-box" type="checkbox"><input id="fx-box-color" type="color" aria-label="สีแถบพื้นหลัง"></span><label for="fx-enter">ตอนขึ้น</label><select id="fx-enter"><option value="none">ไม่มี</option><option value="fade">จางเข้า</option><option value="pop">เด้ง</option><option value="wipe">กวาดเปิด</option><option value="words">คำต่อคำ</option></select></div></details><p id="textFieldError" class="field-warning" role="status" hidden></p></div>
+<details class="fx"><summary>เอฟเฟกต์ (ขอบ เงา แถบหลัง ตอนขึ้น)</summary><div class="fx-grid"><label for="fx-outline">ขอบ</label><span class="fx-pair"><input id="fx-outline" type="number" min="0" max="20" step="1" inputmode="numeric"><input id="fx-outline-color" type="color" aria-label="สีขอบ"></span><label for="fx-shadow">เงา</label><span class="fx-pair"><input id="fx-shadow" type="number" min="0" max="20" step="1" inputmode="numeric" title="ระยะเงา"><input id="fx-shadow-color" type="color" aria-label="สีเงา"></span><label for="fx-shadow-blur">เบลอเงา</label><input id="fx-shadow-blur" type="number" min="0" max="20" step="1" inputmode="numeric"><label for="fx-blend">โหมดผสม</label><select id="fx-blend"><option value="normal">ปกติ</option><option value="add">Add (สว่างขึ้น)</option><option value="screen">Screen (สว่างนุ่ม)</option><option value="multiply">Multiply (เข้มขึ้น)</option></select><label for="fx-box">แถบหลัง</label><span class="fx-pair"><input id="fx-box" type="checkbox"><input id="fx-box-color" type="color" aria-label="สีแถบพื้นหลัง"></span><label>ตอนขึ้น</label><div class="enter-tiles" role="group" aria-label="ตอนขึ้น"><button type="button" class="enter-tile" data-enter-pick="none" aria-pressed="false"><span class="enter-sample" data-sample="none">Aa</span><small>ไม่มี</small></button><button type="button" class="enter-tile" data-enter-pick="fade" aria-pressed="false"><span class="enter-sample" data-sample="fade">Aa</span><small>จางเข้า</small></button><button type="button" class="enter-tile" data-enter-pick="pop" aria-pressed="false"><span class="enter-sample" data-sample="pop">Aa</span><small>เด้ง</small></button><button type="button" class="enter-tile" data-enter-pick="wipe" aria-pressed="false"><span class="enter-sample" data-sample="wipe">Aa</span><small>กวาดเปิด</small></button><button type="button" class="enter-tile" data-enter-pick="words" aria-pressed="false"><span class="enter-sample" data-sample="words">ก ข ค</span><small>คำต่อคำ</small></button></div><select id="fx-enter" hidden><option value="none">ไม่มี</option><option value="fade">จางเข้า</option><option value="pop">เด้ง</option><option value="wipe">กวาดเปิด</option><option value="words">คำต่อคำ</option></select></div></details><p id="textFieldError" class="field-warning" role="status" hidden></p></div>
 <section class="qc" aria-labelledby="textQcTitle"><h2 id="textQcTitle">ตรวจซับ</h2><p id="textQcSummary" class="caption" role="status"></p><button id="textQcGo" data-go="1" hidden>ไปขั้น 1</button><ol id="textQcList" class="qc-list"></ol></section></aside></div></div>
 </div>
 <div class="stage-foot"><button class="back" data-go="3" data-icon="back">ย้อนกลับ</button><div class="actions"><button class="primary" data-go="5">ถัดไป</button></div></div>

@@ -24,6 +24,12 @@ struct Text {
     box_color: Option<String>,
     #[serde(default)]
     enter: Option<String>,
+    #[serde(default)]
+    shadow_blur: Option<u8>,
+    #[serde(default)]
+    shadow_color: Option<String>,
+    #[serde(default)]
+    blend: Option<String>,
 }
 fn hex(v: &str) -> bool {
     v.len() == 7 && v.starts_with('#') && v[1..].bytes().all(|b| b.is_ascii_hexdigit())
@@ -67,7 +73,12 @@ fn valid_text(v: &Text) -> bool {
         && v.outline_color.as_deref().is_none_or(hex)
         && v.box_color.as_deref().is_none_or(hex)
         && v.enter.as_deref().is_none_or(|e| ["none", "fade", "pop", "wipe", "words"].contains(&e))
+        && v.shadow_blur.is_none_or(|n| n <= 20)
+        && v.shadow_color.as_deref().is_none_or(hex)
+        && v.blend.as_deref().is_none_or(|b| BLENDS.contains(&b))
 }
+/// How a text layer mixes with the video under it.
+pub const BLENDS: [&str; 4] = ["normal", "add", "screen", "multiply"];
 pub fn valid(document: &Value) -> bool {
     if !crate::transcript_edits::valid(document) {
         return false;

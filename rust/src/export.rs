@@ -295,17 +295,26 @@ fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, 
     let y = style["y"].as_f64().unwrap_or(50.0) / 100.0 * frame.1 as f64;
     let scale = frame.0 as f64 / 1080.0;
     let size = (style["size"].as_f64().unwrap_or(64.0) * scale).round() as u64;
-    format!(
-        "Dialogue: {layer},{},{},{},,0,0,0,,{{\\an5\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}{}}}{}\n",
-        clock(start),
-        clock(end),
-        if style["box_on"].as_bool() == Some(true) { "Box" } else { "Text" },
-        font(style["font"].as_str().unwrap_or("system")),
-        size,
-        colour(style["color"].as_str().unwrap_or("#ffffff")),
-        effects(style, scale, frame),
-        text
-    )
+    let line = |layer: u8, extra: &str| {
+        format!(
+            "Dialogue: {layer},{},{},{},,0,0,0,,{{\\an5\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}{}{extra}}}{}\n",
+            clock(start),
+            clock(end),
+            if style["box_on"].as_bool() == Some(true) { "Box" } else { "Text" },
+            font(style["font"].as_str().unwrap_or("system")),
+            size,
+            colour(style["color"].as_str().unwrap_or("#ffffff")),
+            effects(style, scale, frame),
+            text
+        )
+    };
+    let blur = (style["shadow_blur"].as_f64().unwrap_or(0.0) * scale * 10.0).round() / 10.0;
+    let shadowed = style["box_on"].as_bool() != Some(true) && style["shadow"].as_f64().unwrap_or(1.0) > 0.0;
+    if shadowed && blur > 0.0 {
+        line(layer * 2, &format!("\\1a&HFF&\\3a&HFF&\\blur{blur}")) + &line(layer * 2 + 1, "\\shad0")
+    } else {
+        line(layer * 2 + 1, "")
+    }
 }
 
 /// Outline, shadow, box and entrance as ASS override tags; sizes are reference px on a 1080-wide frame.
@@ -316,7 +325,13 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
         // in the Box style the outline is the box: its colour, and its width is the padding round the text
         tags += &format!("\\bord{}\\shad0\\3c{}", px("outline", 12.0).max(4.0), colour(style["box_color"].as_str().unwrap_or("#000000")));
     } else {
-        tags += &format!("\\bord{}\\shad{}\\3c{}", px("outline", 4.0), px("shadow", 1.0), colour(style["outline_color"].as_str().unwrap_or("#000000")));
+        tags += &format!(
+            "\\bord{}\\shad{}\\3c{}\\4c{}",
+            px("outline", 4.0),
+            px("shadow", 1.0),
+            colour(style["outline_color"].as_str().unwrap_or("#000000")),
+            colour(style["shadow_color"].as_str().unwrap_or("#000000"))
+        );
     }
     match style["enter"].as_str() {
         Some("fade") => tags += "\\fad(250,0)",
@@ -392,6 +407,25 @@ pub fn lines(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
 /// What step 4/5 shows on screen, as ASS: headline items for the whole clip, speech lines in time.
 /// Returns the subtitle file and the text roles that were asked for but have nothing to draw yet.
 pub fn subtitles(story: &Story, document: &Value) -> (String, Vec<String>) {
+    subtitles_in(story, document, "normal")
+}
+/// A role's blend mode; headlines always draw normally.
+fn blend_of(style: &Value) -> &str {
+    style["blend"].as_str().filter(|b| crate::styles::BLENDS.contains(b)).unwrap_or("normal")
+}
+/// The non-normal blend modes the speech and emphasis layers use, each needing its own subtitle file.
+pub fn blend_modes(document: &Value) -> Vec<String> {
+    let mut modes: Vec<String> = ["speech", "emphasis"]
+        .iter()
+        .map(|role| blend_of(&document["text_styles"][role]).to_owned())
+        .filter(|m| m != "normal")
+        .collect();
+    modes.sort();
+    modes.dedup();
+    modes
+}
+/// The subtitle file of the roles drawn with `mode`.
+pub fn subtitles_in(story: &Story, document: &Value, mode: &str) -> (String, Vec<String>) {
     let (width, height) = frame(document);
     let mut ass = format!(
         "[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n\
@@ -403,7 +437,9 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
     let total = story.duration_ms();
     let (speech, mut skipped) = speech_lines(story, document);
     let style = speech_style(document);
-    if style["enter"].as_str().unwrap_or("words") == "words" && !speech.is_empty() {
+    let speech = if blend_of(&style) == mode { speech } else { Vec::new() };
+    if blend_of(&style) != mode {
+    } else if style["enter"].as_str().unwrap_or("words") == "words" && !speech.is_empty() {
         let size = style["size"].as_f64().unwrap_or(64.0);
         let limit = (0.86 * WIDTH as f64 / (size * 0.55)).max(4.0) as usize;
         let mut at = 0;
@@ -425,11 +461,13 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
             s @ Value::Object(_) => s.clone(),
             _ => serde_json::json!({"font":"system","size":84,"color":"#f59e0b","x":50,"y":55}),
         };
-        for (start, end, text) in &emphasis {
-            ass.push_str(&event((width, height), 0, *start, *end, &style, text));
+        if blend_of(&style) == mode {
+            for (start, end, text) in &emphasis {
+                ass.push_str(&event((width, height), 0, *start, *end, &style, text));
+            }
         }
     }
-    for item in headlines(document) {
+    for item in headlines(document).into_iter().filter(|_| mode == "normal") {
         ass.push_str(&event(
             (width, height),
             1,
@@ -621,10 +659,19 @@ afade=t=out:st={fade:.3}:d=0.008[a{n}];",
     for n in 0..story.pieces.len() {
         graph.push_str(&format!("[v{n}][a{n}]"));
     }
-    graph.push_str(&format!(
-        "concat=n={}:v=1:a=1[cv][ca];[cv]ass=subs.ass[vout]",
-        story.pieces.len()
-    ));
+    graph.push_str(&format!("concat=n={}:v=1:a=1[cv][ca];[cv]ass=subs.ass", story.pieces.len()));
+    for (n, mode) in blend_modes(document).iter().enumerate() {
+        let (paper, how) = match mode.as_str() {
+            "multiply" => ("white", "multiply"),
+            "screen" => ("black", "screen"),
+            _ => ("black", "addition"),
+        };
+        graph.push_str(&format!(
+            "[m{n}];[m{n}]split[p{n}][q{n}];[q{n}]drawbox=x=0:y=0:w=iw:h=ih:c={paper}:t=fill,ass=subs_{mode}.ass,format=gbrp[l{n}];\
+[p{n}]format=gbrp[g{n}];[g{n}][l{n}]blend=all_mode={how},format=yuv420p"
+        ));
+    }
+    graph.push_str("[vout]");
     args.extend(
         [
             "-filter_complex",
