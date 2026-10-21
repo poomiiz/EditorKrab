@@ -5,11 +5,15 @@ const clock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padSta
 // The AI's pasted answer, checked before it counts. A ```json fence, words around the JSON and a bare list of stories
 // (some AIs drop the {"stories": ...} wrapper) are fixed into the one shape export reads (`fixed`); anything else names
 // the first thing missing so the paste can be redone, never guessed at.
-export function checkPlan(text,lines){
- const raw=String(text || '').trim();if(!raw)return {error:''};
+// the JSON inside a chat answer: a ```json fence or words around it are dropped; json is undefined when none parses
+function readJson(raw){
  const fence=raw.match(/```(?:json)?\s*([\s\S]*?)```/),body=(fence?fence[1]:raw).trim();
  const from=body.search(/[[{]/),to=Math.max(body.lastIndexOf('}'),body.lastIndexOf(']')),json=from<0?body:body.slice(from,to+1);
- let value;try{value=JSON.parse(json);}catch(_){return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};}
+ try{return {value:JSON.parse(json),json};}catch(_){return {};}
+}
+export function checkPlan(text,lines){
+ const raw=String(text || '').trim();if(!raw)return {error:''};
+ const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
  const plan=Array.isArray(value)?{stories:value}:value;
  if(!Array.isArray(plan?.stories) || !plan.stories.length)return {error:'ไม่พบรายการเรื่องในคำตอบ ลองให้ AI ตอบใหม่ตามไฟล์ที่ส่ง'};
  const known=new Set((lines || []).map(l=>l.segment_id));
@@ -20,7 +24,8 @@ export function checkPlan(text,lines){
   if(unknown)return {error:`เรื่อง ${i+1} อ้างช่วงพูดที่ไม่มีในงานนี้ ${unknown} ช่วง ใช้คำตอบของงานอื่นหรือเปล่า`};
  }
  // speech no story uses, as runs of neighbouring lines in each video: round 1 should cover the whole clip
- const used=new Set(plan.stories.flatMap(s=>s.segment_ids)),unused=[];let run=null;
+ // a story trimmed in round 2 still covers the stretch round 1 gave it
+ const used=new Set(plan.stories.flatMap(s=>[...s.segment_ids,...(Array.isArray(s.round1_ids)?s.round1_ids:[])])),unused=[];let run=null;
  for(const l of [...(lines || [])].sort((a,b)=>a.source_id===b.source_id?a.start_ms-b.start_ms:a.source_id<b.source_id?-1:1)){
   if(used.has(l.segment_id) || run?.source!==l.source_id)run=null;
   if(used.has(l.segment_id))continue;
@@ -71,15 +76,73 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   box.append(title,grid);return box;
  }
  function card(story){
+  const row=document.createElement('div');row.className='story-row';
   const button=document.createElement('button');button.type='button';button.className='story-card';button.disabled=!story.kept.length;
   const done=!!reviews()[story.id],status=document.createElement('span');status.className='badge story-status';status.dataset.done=done;status.textContent=done?'ตรวจแล้ว':'ยังไม่ดู';
   const title=document.createElement('strong');title.textContent=`${story.index+1}. ${story.title}`;
   const summary=document.createElement('span');summary.className='story-summary';summary.textContent=story.summary || story.kept.map(l=>l.text).join(' ').slice(0,100);
-  const meta=document.createElement('span');meta.className='caption';meta.textContent=`${clock(length(story.kept))} · ${pieces(story)} ท่อน`;
-  button.append(status,title,summary,meta);
+  const meta=document.createElement('span');meta.className='caption story-meta';meta.textContent=`${clock(length(story.kept))} · ${pieces(story)} ท่อน`;
+  button.title=`${story.title}\n${summary.textContent}`;button.append(status,title,summary,meta);
   button.onclick=()=>{write(d=>{d.edit_story=story.id;});go(3);};
-  return button;
+  const refine=document.createElement('button');refine.type='button';refine.dataset.icon='cut';refine.textContent='ตัดต่อเรียบเรียง';
+  refine.disabled=!story.kept.length || !editable();refine.onclick=()=>openRefine(story);
+  row.append(button,refine);return row;
  }
+ // round 2: one story's lines go to an AI, which keeps and orders the ones worth using; its answer changes only that story
+ let refining=null;
+ function offered(story){
+  const entry=parsePlan(read().plan)?.stories[story.index],ids=new Set(entry?.round1_ids || entry?.segment_ids || []);
+  const own=lines().filter(l=>l.source_id===story.source_id),hit=own.filter(l=>ids.has(l.segment_id));
+  if(!hit.length)return [];
+  const from=Math.min(...hit.map(l=>l.start_ms)),to=Math.max(...hit.map(l=>l.end_ms));
+  return own.filter(l=>l.start_ms>=from&&l.end_ms<=to);
+ }
+ function refineText(story){
+  const packet={schema_version:1,step:'refine_story',project_id:project,story_id:story.id,title:story.title,summary:story.summary,
+   lines:offered(story).map(l=>({id:l.segment_id,start_ms:l.start_ms,end_ms:l.end_ms,text:l.text})),
+   response_schema:{story_id:story.id,title:'หัวข้อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[]}};
+  return 'เรียบเรียงเรื่องนี้ให้เป็นคลิปที่ดูแล้วรู้เรื่องในตัวเอง เลือกเฉพาะท่อนที่ดีที่สุด ตัดท่อนที่พูดซ้ำ พูดติดขัด หรือออกนอกเรื่อง '
+   +'เรียงลำดับใหม่ได้ถ้าเล่าแล้วดีขึ้น เปิดเรื่องให้น่าสนใจและรักษาตอนจบให้ครบ อ้างท่อนด้วย id ใน lines เท่านั้น ห้ามสร้างท่อนหรือเวลาใหม่ '
+   +'segment_ids คือท่อนที่เก็บ เรียงตามลำดับที่จะเล่น ปรับ title และ summary ให้ตรงกับเรื่องที่เรียบเรียงแล้ว\n'
+   +'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,1);
+ }
+ const refineStory=()=>model()?.stories.find(s=>s.id===refining) || null;
+ async function copyRefine(){
+  const story=refineStory();if(!story)return;
+  try{await navigator.clipboard.writeText(refineText(story));$('refineCopyNote').textContent=`คัดลอก ${offered(story).length} ท่อนแล้ว วางในแชท AI ได้เลย`;}
+  catch(_){$('refineCopyNote').textContent='คัดลอกไม่ได้ กด "คัดลอกอีกครั้ง"';}
+ }
+ function openRefine(story){
+  refining=story.id;$('refineTitle').textContent=`ตัดต่อเรียบเรียง · ${story.index+1}. ${story.title}`;
+  $('refineAnswer').value='';checkRefineUi();$('refineDialog').showModal();copyRefine();
+ }
+ function checkRefine(){
+  const story=refineStory(),raw=$('refineAnswer').value.trim();if(!story || !raw)return {error:''};
+  const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
+  const answer=Array.isArray(value)?{segment_ids:value}:Array.isArray(value?.stories)?value.stories[0]:value;
+  if(answer?.story_id&&String(answer.story_id)!==story.id)return {error:'คำตอบนี้เป็นของเรื่องอื่น'};
+  const ids=answer?.segment_ids,allowed=new Set(offered(story).map(l=>l.segment_id));
+  if(!Array.isArray(ids) || !ids.length)return {error:'ไม่พบท่อนที่เก็บ (segment_ids) ในคำตอบ'};
+  if(ids.some(id=>!allowed.has(id)))return {error:'คำตอบอ้างท่อนที่ไม่ได้ส่งไป ลองให้ AI ตอบใหม่'};
+  if(new Set(ids).size!==ids.length)return {error:'คำตอบใช้ท่อนเดียวกันซ้ำ'};
+  const byId=new Map(lines().map(l=>[l.segment_id,l]));
+  return {ids,title:String(answer.title || '').trim(),summary:String(answer.summary || '').trim(),
+   note:`เก็บ ${ids.length} จาก ${allowed.size} ท่อน · ยาว ${clock(length(ids.map(id=>byId.get(id))))}`};
+ }
+ function checkRefineUi(){
+  const c=checkRefine();$('refineStatus').textContent=c.ids?c.note:c.error;$('refineStatus').dataset.state=c.ids?'ok':'error';
+  $('refineStatus').hidden=!$('refineStatus').textContent;$('refineApply').disabled=!c.ids || !editable();
+ }
+ $('refineAnswer').oninput=checkRefineUi;
+ $('refineCopy').onclick=copyRefine;
+ $('refineApply').onclick=event=>{
+  const story=refineStory(),c=checkRefine();if(!story || !c.ids){event.preventDefault();return;}
+  write(d=>{
+   const plan=parsePlan(d.plan),entry=plan?.stories[story.index];if(!entry)return;
+   entry.round1_ids=entry.round1_ids || entry.segment_ids.slice();entry.segment_ids=c.ids;
+   if(c.title)entry.title=c.title;if(c.summary)entry.summary=c.summary;d.plan=JSON.stringify(plan,null,2);
+  });
+ };
  function current(){const m=model();if(!m)return null;return m.stories.find(s=>s.id===read().edit_story) || m.stories[0] || null;}
  function renderEditor(){
   const story=current();$('editEmpty').hidden=!!story;$('editor').hidden=!story;

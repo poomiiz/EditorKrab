@@ -360,10 +360,15 @@ textarea{font-size:.75rem}
 .story-groups{display:grid;gap:var(--space-lg);width:100%;max-width:1100px;margin:0 auto}
 .story-group{border:1px solid var(--line-strong);border-radius:var(--radius);padding:var(--space-md);display:grid;gap:var(--space-sm)}
 .story-group h3{margin:0;font-size:.9375rem}
-.story-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--space-sm)}
-.story-card{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;white-space:normal;padding:var(--space-md);border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--raised);color:var(--txt);min-height:120px}
-.story-card:hover,.story-card:focus-visible{border-color:var(--acc)}
-.story-summary{font-size:.8125rem;color:var(--txt-sub);line-height:1.45}
+.story-grid{display:grid;gap:var(--space-xs)}
+.story-row{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-xs) var(--space-sm) var(--space-xs) var(--space-xs);border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--raised)}
+.story-row:hover{border-color:var(--line-strong)}
+.story-card{flex:1;min-width:0;display:grid;grid-template-columns:auto minmax(0,18em) minmax(0,1fr) auto;align-items:center;gap:var(--space-md);text-align:left;white-space:nowrap;padding:var(--space-xs) var(--space-sm);border:1px solid transparent;border-radius:var(--radius-sm);background:none;color:var(--txt);min-height:44px}
+.story-card:hover:not(:disabled),.story-card:focus-visible{border-color:var(--acc);background:var(--acc-soft)}
+.story-card strong,.story-summary{overflow:hidden;text-overflow:ellipsis}
+.story-summary{font-size:.8125rem;color:var(--txt-sub)}.story-meta{font-variant-numeric:tabular-nums}
+.refine-steps{display:grid;gap:var(--space-xs);margin:0;padding-left:1.25rem}.refine-steps button{margin-left:var(--space-sm)}
+.plan-dialog .plan-status{justify-self:start}
 .story-status[data-done=true]{color:var(--ok)}
 .editor{display:grid;gap:var(--space-md);width:100%;max-width:1200px;margin:0 auto}
 .editor-preview{display:grid;justify-items:center;gap:var(--space-xs)}
@@ -491,6 +496,7 @@ textarea{font-size:.75rem}
 <dialog id="planDialog" class="plan-dialog" aria-labelledby="planTitle"><form method="dialog"><h2 id="planTitle">วางคำตอบจาก AI</h2><p class="caption">คัดลอกคำตอบทั้งหมดจากแชท AI แล้ววางในช่องนี้</p>
 <label class="field plan-field"><span class="sr-only">คำตอบจาก AI</span><textarea id="plan" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label>
 <div class="row plan-dialog-actions"><button value="close">ปิด</button><button value="close" class="primary">ใช้คำตอบนี้</button></div></form></dialog>
+<dialog id="refineDialog" class="plan-dialog" aria-labelledby="refineTitle"><form method="dialog"><h2 id="refineTitle">ตัดต่อเรียบเรียง</h2><ol class="refine-steps caption"><li><span id="refineCopyNote">กำลังคัดลอก</span> <button type="button" id="refineCopy" data-icon="copy">คัดลอกอีกครั้ง</button></li><li>คัดลอกคำตอบทั้งหมดจากแชท แล้ววางในช่องนี้</li></ol><label class="field plan-field"><span class="sr-only">คำตอบจาก AI สำหรับเรื่องนี้</span><textarea id="refineAnswer" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><p id="refineStatus" class="badge plan-status" role="status" hidden></p><div class="row plan-dialog-actions"><button value="close">ปิด</button><button id="refineApply" value="close" class="primary" data-icon="check" disabled>ใช้คำตอบนี้</button></div></form></dialog>
 </div>
 <div class="stage-foot"><button class="back" data-go="1" data-icon="back">ย้อนกลับ</button><div class="actions"><button data-go="3">ถัดไป</button></div></div>
 </section>
