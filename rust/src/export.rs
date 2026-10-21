@@ -137,8 +137,10 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
         return Err("plan_missing".into());
     }
     let reply: Value = serde_json::from_str(raw).map_err(|_| "plan_invalid".to_string())?;
+    // a bare list is a plan whose {"stories": ...} wrapper the AI dropped; step 2 reads it the same way
     let stories = reply["stories"]
         .as_array()
+        .or_else(|| reply.as_array())
         .filter(|s| !s.is_empty())
         .ok_or("plan_has_no_stories")?;
     let spoken = spoken(document, jobs);

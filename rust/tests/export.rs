@@ -75,6 +75,15 @@ fn stories_follow_the_plan_order_across_files_with_corrections() {
 }
 
 #[test]
+fn a_bare_list_of_stories_is_a_plan_whose_wrapper_was_dropped() {
+    let doc = document(json!([{"title": "One", "segment_ids": ["a0", "a1"]}]));
+    let stories = plan(&doc, &jobs()).unwrap();
+    assert_eq!(stories.len(), 1);
+    assert_eq!(stories[0].pieces.len(), 2);
+    assert_eq!(plan(&document(json!([])), &jobs()).unwrap_err(), "plan_has_no_stories");
+}
+
+#[test]
 fn unknown_or_failed_segments_and_bad_plans_are_errors() {
     let bad = |p: Value| plan(&document(p), &jobs()).unwrap_err();
     assert_eq!(

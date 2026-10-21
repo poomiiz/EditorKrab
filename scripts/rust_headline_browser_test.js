@@ -26,7 +26,7 @@ async(page)=>{
  check(!await page.locator('[data-text-role=speech]').isVisible(),'subtitle leaked into headline stage');
  await page.locator('#headlineAi > summary').click();
  check(await page.locator('#headlinePacket').isDisabled(),'empty plan exported');
- await page.locator('[data-step="3"]').click();await page.locator('#plan').fill(JSON.stringify({stories:[{title:'เริ่มทำคอนเทนต์',text:'เริ่มจากสิ่งที่มี'}]}));await saved();
+ await page.locator('[data-step="3"]').click();await page.locator('#plan').fill(JSON.stringify({stories:[{title:'เริ่มทำคอนเทนต์',text:'เริ่มจากสิ่งที่มี',segment_ids:['s0']}]}));await saved();
  await page.locator('[data-step="5"]').click();await saved();
  await page.evaluate(()=>{const original=URL.createObjectURL;URL.createObjectURL=blob=>{window.headlineTestBlob=blob;return original(blob);};});
  const pending=page.waitForEvent('download');await page.locator('#headlinePacket').click();const download=await pending;await download.saveAs('output/headline-ai-test-packet.json');

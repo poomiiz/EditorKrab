@@ -2,7 +2,26 @@
 // story's subtitle on top of it, and a zoomable timeline where the AI's cuts can be kept or dropped line by line.
 const $=id=>document.getElementById(id);
 const clock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
-export function parsePlan(text){try{const plan=JSON.parse(text);return Array.isArray(plan?.stories)?plan:null;}catch(_){return null;}}
+// The AI's pasted answer, checked before it counts. A ```json fence, words around the JSON and a bare list of stories
+// (some AIs drop the {"stories": ...} wrapper) are fixed into the one shape export reads (`fixed`); anything else names
+// the first thing missing so the paste can be redone, never guessed at.
+export function checkPlan(text,lines){
+ const raw=String(text || '').trim();if(!raw)return {error:''};
+ const fence=raw.match(/```(?:json)?\s*([\s\S]*?)```/),body=(fence?fence[1]:raw).trim();
+ const from=body.search(/[[{]/),to=Math.max(body.lastIndexOf('}'),body.lastIndexOf(']')),json=from<0?body:body.slice(from,to+1);
+ let value;try{value=JSON.parse(json);}catch(_){return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};}
+ const plan=Array.isArray(value)?{stories:value}:value;
+ if(!Array.isArray(plan?.stories) || !plan.stories.length)return {error:'ไม่พบรายการเรื่องในคำตอบ ลองให้ AI ตอบใหม่ตามไฟล์ที่ส่ง'};
+ const known=new Set((lines || []).map(l=>l.segment_id));
+ for(const [i,s] of plan.stories.entries()){
+  const ids=s?.segment_ids;
+  if(!Array.isArray(ids) || !ids.length)return {error:`เรื่อง ${i+1} ไม่มีช่วงพูด (segment_ids)`};
+  const unknown=known.size?ids.filter(id=>!known.has(id)).length:0;
+  if(unknown)return {error:`เรื่อง ${i+1} อ้างช่วงพูดที่ไม่มีในงานนี้ ${unknown} ช่วง ใช้คำตอบของงานอื่นหรือเปล่า`};
+ }
+ return {plan,fixed:json!==raw || Array.isArray(value)};
+}
+export function parsePlan(text){return checkPlan(text).plan || null;}
 
 export function createStories({project,read,lines,write,go,editable}){
  let queue=[];
