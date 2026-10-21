@@ -322,3 +322,31 @@ fn box_padding_across_and_up_down() {
     let (ass, _) = subtitles(story, &doc);
     assert!(ass.contains(r"\xbord30\ybord8"), "{ass}");
 }
+
+#[test]
+fn capcut_style_text_settings_become_ass_tags() {
+    let mut doc = document(json!({"stories": [{"segment_ids": ["a1"]}]}));
+    let story = &plan(&doc, &jobs()).unwrap()[0];
+    let s = &mut doc["text_styles"]["speech"];
+    s["enter"] = json!("none");
+    s["bold"] = json!(false);
+    s["italic"] = json!(true);
+    s["underline"] = json!(true);
+    s["spacing"] = json!(6);
+    s["align"] = json!("left");
+    s["shadow"] = json!(4);
+    s["shadow_angle"] = json!(90);
+    s["glow_on"] = json!(true);
+    s["glow_color"] = json!("#00ff00");
+    s["glow_range"] = json!(20);
+    s["glow_strength"] = json!(100);
+    let (ass, _) = subtitles(story, &doc);
+    assert!(ass.contains(r"\an4\pos("), "{ass}");
+    assert!(ass.contains(r"\xshad0.0\yshad5.7\b0\i1\u1\fsp6"), "{ass}");
+    assert!(ass.contains(r"\1a&HFF&\shad0\bord20\3c&H00FF00&\3a&H00&\blur10"), "glow under the text: {ass}");
+    doc["text_styles"]["speech"]["case"] = json!("upper");
+    doc["text_styles"]["speech"]["box_on"] = json!(true);
+    doc["text_styles"]["speech"]["box_opacity"] = json!(50);
+    let (ass, _) = subtitles(story, &doc);
+    assert!(ass.contains(r"\3a&H80&"), "{ass}");
+}
