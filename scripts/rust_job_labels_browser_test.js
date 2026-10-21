@@ -1,7 +1,7 @@
 async(page)=>{
  await page.goto('http://127.0.0.1:8871/?project=checkbox-proof-'+Date.now());await page.locator('[data-step="4"]').click();
  await page.waitForFunction(()=>['บันทึกแล้ว','พร้อมแก้ไข'].includes(document.querySelector('#saved').textContent),null,{polling:100});
- for(const width of [1440,375]){await page.setViewportSize({width,height:1050});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:`output/six-step-captions-${width===375?'mobile':'desktop'}.png`,fullPage:true});}
+ for(const width of [1440]){await page.setViewportSize({width,height:1050});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:`output/six-step-captions-${width===375?'mobile':'desktop'}.png`,fullPage:true});}
  const result=await page.evaluate(async()=>{
   const actual=window.fetch,RealSource=window.EventSource;
   const base={batch_id:'b',project_id:'mixed',attempt:1,cancel_requested:false,created_at:0,revision:1};

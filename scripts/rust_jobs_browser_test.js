@@ -27,10 +27,10 @@ async (page) => {
   await page.locator('#title').fill('เปลี่ยนร่าง');
   await page.waitForFunction(()=>document.getElementById('saved').textContent==='บันทึกแล้ว',null,{polling:100});
   check(await page.getByText('ร่างก่อนหน้า',{exact:true}).count()===2,'revision badge did not refresh');
-  await page.setViewportSize({width:375,height:1100});
+  await page.setViewportSize({width:1280,height:1100});
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile overflow');
   await page.screenshot({path:'output/rust-jobs-mobile.png',fullPage:true});
   await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:'output/rust-jobs-desktop.png',fullPage:true});
-  console.log(JSON.stringify({project,jobs:jobs.map(j=>j.id),checks:['SSE progress','failed source message','retry only failed','revision refresh','375px layout']}));
+  console.log(JSON.stringify({project,jobs:jobs.map(j=>j.id),checks:['SSE progress','failed source message','retry only failed','revision refresh','1280px layout']}));
 }

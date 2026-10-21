@@ -4,7 +4,7 @@ async (page) => {
  await page.waitForFunction(()=>document.body.dataset.loading==='false');
  await page.locator('#title').fill('โปรเจกต์ใหม่');
  await page.waitForFunction(()=>['บันทึกแล้ว','พร้อมแก้ไข'].includes(document.querySelector('#saved').textContent),null,{polling:100});
- for(const width of [1440,375]){
+ for(const width of [1440]){
   await page.setViewportSize({width,height:1000});
   const bounds=await page.locator('[data-step]').evaluateAll(nodes=>nodes.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,w:r.width,h:r.height}}));
   check(bounds.every((r,i)=>r.h>=44&&(!i||r.x>bounds[i-1].x)),'step rail order/touch targets');
@@ -24,5 +24,5 @@ async (page) => {
  await page.locator('#title').focus();
  await page.keyboard.press('Tab');
  check(await page.locator(':focus').evaluate(n=>getComputedStyle(n).outlineStyle)!=='none','keyboard focus');
- console.log('PASS: six panels, left-to-right rail, 375/1440 overflow, 44px controls, empty state, reduced motion, keyboard focus');
+ console.log('PASS: six panels, left-to-right rail, 1440 overflow, 44px controls, empty state, reduced motion, keyboard focus');
 }

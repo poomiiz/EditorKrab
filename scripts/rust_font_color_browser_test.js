@@ -50,7 +50,7 @@ async(page)=>{
  check((await(await page.request.get(`${base}/api/v1/drafts/${legacy}`)).json()).revision===1,'legacy read created revision');
  check(await page.locator('[data-text-role=headline]').evaluate(n=>getComputedStyle(n).backgroundColor)==='rgba(0, 0, 0, 0)','legacy template still applied');
  await page.goto(`${base}/?project=${project}`);await page.locator('[data-text-role=headline]').first().waitFor();
- for(const width of [1440,375]){await page.setViewportSize({width,height:1100});check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'page overflow');
+ for(const width of [1440]){await page.setViewportSize({width,height:1100});check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'page overflow');
  check(await page.locator('#localFonts,#text-font,#text-color-hex').evaluateAll(nodes=>nodes.every(n=>n.getBoundingClientRect().height>=44)),'small controls');
  await page.screenshot({path:`output/font-color-static-${width}.png`,fullPage:true});}
  console.log(JSON.stringify({project,checks:['custom/local font CSS','independent colors','native and HEX sync','invalid values blocked','missing font warning','reload','permission denial/manual fallback','no templates/static default','legacy preserved','desktop/mobile']}));

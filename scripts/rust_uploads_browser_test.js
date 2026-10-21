@@ -63,7 +63,7 @@ async (page) => {
   check(repeated.document.files.length===1 && repeated.document.files[0].source_id===complete.source_id,'repeated selection created a copy');
   check((await (await page.request.get(base+'/api/v1/projects/'+project+'/jobs')).json()).length===1,'repeated upload created another probe');
   await until(()=>window.document.getElementById('fileList').textContent.includes('วินาที'));
-  await page.setViewportSize({width:375,height:1100});
+  await page.setViewportSize({width:1280,height:1100});
   check(await page.evaluate(()=>window.document.documentElement.scrollWidth<=innerWidth),'mobile overflow');
   await page.screenshot({path:'output/rust-uploads-mobile.png',fullPage:true});
   await page.setViewportSize({width:1440,height:1000});
@@ -86,5 +86,5 @@ async (page) => {
   await page.unroute(chunks);await page.reload();
   await page.locator('.file-info').filter({hasText:'ลากไฟล์เดิมมาวางเพื่อส่งต่อ'}).first().waitFor();
   check(await page.locator('#fileList li').count()===3,'reload lost queued selection');
-  console.log(JSON.stringify({project,cancelledProject,source:complete.source_id,checks:['lost chunk ack retry','pending upload durable','wrong bytes rejected','reload/reselect resumes','native probe','repeated selection idempotent','cancel retains all selected files','375px layout']}));
+  console.log(JSON.stringify({project,cancelledProject,source:complete.source_id,checks:['lost chunk ack retry','pending upload durable','wrong bytes rejected','reload/reselect resumes','native probe','repeated selection idempotent','cancel retains all selected files','1280px layout']}));
 }

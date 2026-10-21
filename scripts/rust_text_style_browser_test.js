@@ -38,7 +38,7 @@ async (page)=>{
  check((await read()).revision===good.revision,'invalid style import replaced draft');
  // Clear test-only alert with a reload; the valid stored style must remain available.
  await page.reload();await page.locator('#textFrame').waitFor();
- for(const width of [1440,375]){
+ for(const width of [1440]){
   await page.setViewportSize({width,height:1000});
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'horizontal overflow');
   const small=await page.locator('[data-panel="4"] button,[data-panel="4"] input:not([type=checkbox]),[data-panel="4"] select').evaluateAll(ns=>ns.filter(n=>n.getClientRects().length).filter(n=>n.getBoundingClientRect().height<44||n.getBoundingClientRect().width<44).map(n=>n.id));

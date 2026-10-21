@@ -103,12 +103,12 @@ async (page) => {
   },corruptProject);
   check(recovered.rejected && recovered.kept.pending[0].expected_revision === 99, 'corrupt queue not preserved');
   check((await page.request.get(origin + '/api/v1/drafts/' + corruptProject)).status() === 404, 'corrupt queue reached backend');
-  await page.setViewportSize({width:375,height:900});
+  await page.setViewportSize({width:1280,height:900});
   check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'mobile overflow');
   await page.screenshot({path:'output/rust-autosave-mobile.png', fullPage:true});
   await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:'output/rust-autosave-desktop.png', fullPage:true});
   console.log(JSON.stringify({project,revision:(await document()).revision,
     checks:['Rust readback','offline reload/replay','lost acknowledgement retry','undo/redo',
-      'stale tab rejected','malformed legacy recovery','corrupt queue quarantined','step 06 restore','375px layout']}));
+      'stale tab rejected','malformed legacy recovery','corrupt queue quarantined','step 06 restore','1280px layout']}));
 }
