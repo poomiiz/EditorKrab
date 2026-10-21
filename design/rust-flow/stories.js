@@ -524,12 +524,21 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function allReviewed(){const m=model();return !!m&&m.stories.length>0&&m.stories.every(s=>reviews()[s.id]);}
  // emphasis round: every story's kept lines go to an AI, which names the words worth emphasising per line
  function keptLines(){const m=model();if(!m)return [];const seen=new Set();return m.stories.flatMap(s=>s.kept.map(l=>({story:s,line:lines().find(x=>x.segment_id===l.segment_id) || l}))).filter(({line})=>!seen.has(line.segment_id)&&seen.add(line.segment_id));}
+ // the AI gets each kept line's text only (the engine's word chunks cut words apart, "เทิ|ลม", and the AI
+ // copied those fragments); it answers with whole words copied from the text, and few of them
  function emphasisText(){
-  const packet={schema_version:1,step:'emphasis',project_id:project,
-   stories:(model()?.stories || []).filter(s=>s.kept.length).map(s=>({title:s.title,lines:s.kept.map(k=>{const l=lines().find(x=>x.segment_id===k.segment_id) || k;return {id:l.segment_id,text:l.text,words:subWords(l).map(w=>w.text)};})})),
+  const packet={schema_version:2,step:'emphasis',project_id:project,
+   stories:(model()?.stories || []).filter(s=>s.kept.length).map(s=>({title:s.title,lines:s.kept.map(k=>{const l=lines().find(x=>x.segment_id===k.segment_id) || k;return {id:l.segment_id,text:l.text};})})),
    response_schema:{emphasis:{'<line id>':['คำที่เน้น']}}};
-  return 'เลือกคำเน้นสำหรับซับ: แต่ละท่อนเลือกได้ 0-2 คำที่สำคัญที่สุด (ชื่อแบรนด์ ตัวเลข คำที่ให้อารมณ์ หรือใจความหลัก) ท่อนที่ไม่มีอะไรเด่นไม่ต้องใส่ '
-   +'ใช้คำตาม words ของท่อนนั้นเท่านั้น ถ้าเป็นชื่อที่ยาวหลายคำ ให้เขียนคำที่ติดกันใน words ต่อกันเป็นคำตอบเดียว อ้างท่อนด้วย id ที่ให้\nตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,1);
+  return ['เลือก "คำเน้น" สำหรับซับคลิปสั้น คือคำที่จะขึ้นตัวใหญ่บนจอตอนคนพูดคำนั้น',
+   'กติกา:',
+   '1. เลือกเฉพาะท่อนที่มีใจความเด่นจริง ประมาณ 1 ใน 3 ของท่อนทั้งหมด ท่อนอื่นไม่ต้องใส่ในคำตอบ',
+   '2. ท่อนละ 1 คำ (มากสุด 2) แต่ละคำยาวไม่เกิน 12 ตัวอักษร',
+   '3. เลือกคำที่มีความหมายครบในตัว: ชื่อแบรนด์หรือชื่อเฉพาะ (เอาทั้งชื่อ ไม่ตัดครึ่ง) ตัวเลข ราคา คำที่ให้อารมณ์ หรือใจความหลักของท่อน',
+   '4. ห้ามเลือกคำเติมหรือคำเชื่อม เช่น แบบ คือ อ่ะ อืม เออ ที่ ว่า แล้ว ก็ มัน นี้ เนี้ย ใช่ ปะ',
+   '5. คัดลอกคำให้ตรงกับข้อความใน text ของท่อนนั้นทุกตัวอักษร ถ้า text สะกดผิดก็ใช้ตามนั้น ห้ามแก้ ห้ามแปล',
+   '6. อ้างท่อนด้วย id ที่ให้',
+   'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย',''].join('\n')+'\n'+JSON.stringify(packet,null,1);
  }
  function checkEmphasis(){
   const raw=$('emphasisAnswer').value.trim();if(!raw)return {error:''};
@@ -557,7 +566,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    if(joined.length){picked[id]=joined;words+=joined.length;}
   }
   if(!words)return {error:'คำตอบไม่ตรงกับท่อนหรือคำที่ส่งไป ลองให้ AI ตอบใหม่'};
-  return {picked,note:`เน้น ${words} คำ ใน ${Object.keys(picked).length} ท่อน`};
+  return {picked,note:`เน้นคำใน ${Object.keys(picked).length} ท่อน`};
  }
  function checkEmphasisUi(){const c=checkEmphasis();$('emphasisCheck').textContent=c.picked?c.note:c.error;$('emphasisCheck').dataset.state=c.picked?'ok':'error';$('emphasisCheck').hidden=!$('emphasisCheck').textContent;$('emphasisApply').disabled=!c.picked || !editable();}
  $('emphasisCopy').onclick=async()=>{
@@ -569,8 +578,10 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  $('emphasisAnswer').oninput=checkEmphasisUi;
  $('emphasisApply').onclick=event=>{
   const c=checkEmphasis();if(!c.picked){event.preventDefault();return;}
-  // the AI's picks replace the emphasis of the lines it answered for; other lines keep theirs
-  write(d=>{d.emphasis={...(d.emphasis || {}),...c.picked};});
+  // the answer covers every line that was sent: lines it left out lose their old emphasis (the AI now picks
+  // only the stand-out lines); lines that were not sent keep theirs
+  const sent=new Set(keptLines().map(({line})=>line.segment_id));
+  write(d=>{const all=Object.fromEntries(Object.entries(d.emphasis || {}).filter(([id])=>!sent.has(id)));d.emphasis={...all,...c.picked};});
   $('emphasisStatus').textContent=c.note;$('emphasisStatus').dataset.state='ok';$('emphasisStatus').hidden=false;
  };
  // leaving step 3: stop the preview and take its line off the subtitle frame
