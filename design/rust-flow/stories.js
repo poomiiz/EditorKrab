@@ -168,8 +168,11 @@ export function createStories({project,read,lines,write,go,editable,caption}){
  function current(){const m=model();if(!m)return null;return m.stories.find(s=>s.id===read().edit_story) || m.stories[0] || null;}
  function renderEditor(){
   const story=current();$('editEmpty').hidden=!!story;$('editor').hidden=!story;
-  if(!story){$('editTitle').textContent='ตัดต่อ';return;}
-  $('editTitle').textContent=`ตัดต่อ · ${story.index+1}. ${story.title}`;
+  const pick=$('editStory');pick.hidden=!story;
+  if(!story)return;
+  // only stories already arranged with the AI (round 2) are offered; the one open now always is
+  pick.replaceChildren(...model().stories.map(s=>{const o=document.createElement('option');o.value=s.id;o.selected=s.id===story.id;
+   o.disabled=!s.refined&&s.id!==story.id;o.textContent=`${s.index+1}. ${s.title}`+(s.refined?'':' (ยังไม่เรียบเรียง)');return o;}));
   const done=!!reviews()[story.id];$('editReviewed').textContent=done?'ตรวจแล้ว':'ตรวจเรื่องนี้แล้ว';$('editReviewed').classList.toggle('primary',!done);$('editReviewed').disabled=!editable();
   // the preview plays under the subtitle frame, so subtitles are placed and styled on the real picture
   const frame=$('textFrame');if(frame&&video.parentElement!==frame)frame.prepend(video);
@@ -291,6 +294,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   e.preventDefault();playPause();
  });
  $('editZoom').oninput=renderEditor;
+ $('editStory').onchange=()=>{const id=$('editStory').value;if(video&&!video.paused)video.pause();queue=[];write(d=>{d.edit_story=id;});};
  $('editShowCut').onchange=renderEditor;
  $('editReviewed').onclick=()=>{const story=current();if(!story)return;write(d=>{const next={...(d.story_reviews || {})};if(next[story.id])delete next[story.id];else next[story.id]=true;d.story_reviews=next;});};
  // make each video's preview as soon as it is in the project, so step 3 opens without waiting

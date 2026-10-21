@@ -423,7 +423,11 @@ textarea{font-size:.75rem}
 [data-icon=gpu]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='4' y='4' width='16' height='16' rx='2'/><rect x='9' y='9' width='6' height='6' rx='1'/><path d='M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2'/></svg>")}
 [data-icon=font]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M4 20 10 4h1l6 16'/><path d='M6.5 14h8'/></svg>")}
 .text-frame video.frame-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:-1}
-.editor-style .text-workspace{min-height:min(60vh,620px)}
+.stage[data-panel="3"] .stage-body{overflow:hidden}
+#editor:not([hidden]){flex:1;min-height:0;max-width:none;grid-template-rows:minmax(0,1fr) auto auto auto}
+.editor-style{min-height:0;display:flex}.editor-style .text-workspace{flex:1;min-height:0;height:100%}
+#editTitle{display:flex;align-items:center;gap:var(--space-sm)}#editTitle span::after{content:' ·'}
+.edit-story{font:inherit;font-weight:650;max-width:min(60vw,720px);min-height:36px;padding:2px 8px;background:var(--surface)}
 .select-all{display:flex;align-items:center;gap:6px;font-size:.8125rem;color:var(--txt-sub);margin-left:auto}
 #fileList li{grid-template-columns:24px 40px minmax(0,1fr) auto}#fileList li .file-pick{grid-row:1/3;width:18px;height:18px;margin:0;accent-color:var(--acc)}
 #fileList li .file-info{grid-column:3}#fileList li .source-remove{grid-column:4}
@@ -510,7 +514,7 @@ textarea{font-size:.75rem}
 <div class="stage-foot"><button class="back" data-go="1" data-icon="back">ย้อนกลับ</button><div class="actions"><button data-go="3">ถัดไป</button></div></div>
 </section>
 <section class="stage" data-panel="3" hidden aria-labelledby="editTitle">
-<div class="stage-head"><div><h1 id="editTitle">ตัดต่อ</h1><p>กล่องสีคือท่อนที่ใช้ เส้นประคือท่อนที่ตัดทิ้ง กดข้อความเพื่อฟัง กด ✕ / + เพื่อตัดทิ้งหรือเก็บ</p></div><button id="editReviewed" type="button" data-icon="check">ตรวจเรื่องนี้แล้ว</button></div>
+<div class="stage-head"><div><h1 id="editTitle"><span>ตัดต่อ</span><select id="editStory" class="edit-story" aria-label="เลือกเรื่องที่จะตัดต่อ" hidden></select></h1><p>กล่องสีคือท่อนที่ใช้ เส้นประคือท่อนที่ตัดทิ้ง กดข้อความเพื่อฟัง กด ✕ / + เพื่อตัดทิ้งหรือเก็บ</p></div><button id="editReviewed" type="button" data-icon="check">ตรวจเรื่องนี้แล้ว</button></div>
 <div class="stage-body">
 <p id="editEmpty" class="caption">วางคำตอบจาก AI ในขั้น 2 แล้วเลือกเรื่องที่จะตัดต่อ</p>
 <div id="editor" class="editor" hidden>
