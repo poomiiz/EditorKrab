@@ -440,6 +440,10 @@ textarea{font-size:.75rem}
 .role-row input{width:18px;height:18px;margin:0;accent-color:var(--acc);cursor:pointer}
 .role-pick{flex:1;justify-content:flex-start;text-align:left;border:0;background:none;min-height:42px}
 .role-row[data-selected=true]{border-color:var(--acc);background:var(--acc-soft)}
+/* the three subtitle kinds side by side: one row instead of three */
+.text-components:has(.role-row){grid-template-columns:repeat(3,minmax(0,1fr))}
+.text-components .role-row{padding-left:var(--space-sm);gap:4px}
+.text-components .role-pick{padding:4px;white-space:normal;line-height:1.25;font-size:.8125rem}
 
 /* step 2: send to AI, paste the answer back; numbered so the order reads at a glance */
 .ai-bar{list-style:none;padding:0;display:grid;gap:var(--space-sm);width:100%;max-width:1100px;margin:0 auto}
