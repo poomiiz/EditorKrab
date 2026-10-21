@@ -680,6 +680,20 @@ label[for="fx-blend"]::before{content:"🌗 "}
 @keyframes sample-words{0%{clip-path:inset(0 66% 0 0)}100%{clip-path:inset(0 0 0 0)}}
 @media(prefers-reduced-motion:reduce){.enter-sample{animation:none}}
 .fx-grid{grid-template-columns:7.5em minmax(0,1fr)}.fx-grid>label{white-space:nowrap}
+
+/* step 4: no word chips in the panel; tool sections are always open with a header bar; a wide panel lays
+   the tools out in two columns so everything shows at once */
+.stage[data-panel="4"] #lineWords{display:none !important}
+.text-inspector details>summary{cursor:default;list-style:none;font-weight:600;color:var(--txt);padding:6px 0 4px;border-bottom:1px solid var(--line);margin-bottom:var(--space-xs)}
+.text-inspector details>summary::-webkit-details-marker{display:none}
+.text-inspector details>summary::marker{content:''}
+.text-inspector{container-type:inline-size}
+@container (min-width:540px){
+ #textControls{grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:var(--space-lg);align-items:start}
+ #textControls>h2,#textControls>.field-warning,#textControls>.preview-hint{grid-column:1/-1}
+ #textControls>details.fx{grid-column:2;grid-row:2/span 8}
+ #textControls>:not(h2):not(.field-warning):not(.preview-hint):not(details.fx){grid-column:1}
+}
 </style>
 </head>
 <body data-loading="true">

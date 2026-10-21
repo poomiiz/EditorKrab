@@ -162,7 +162,17 @@ function renderTimeline(){
 }
 // the clip's shape (9:16 / 1:1 / 16:9) sizes every preview frame and the exported video
 const ratios={'9:16':'9/16','1:1':'1/1','16:9':'16/9'};
-function applyAspect(){const aspect=ratios[draft.output?.aspect]?draft.output.aspect:'9:16';$('frameAspect').value=aspect;$('editAspect').value=aspect;document.documentElement.style.setProperty('--frame-ratio',ratios[aspect]);}
+function fitPreview(){
+  for(const ws of document.querySelectorAll('#captionHost .text-workspace')){
+    const stage=ws.querySelector('.text-stage'),[w,h]=(draft?.output?.aspect || '9:16').split(':').map(Number);
+    if(!stage || !ws.clientHeight){ws.style.gridTemplateColumns='';continue;}
+    const want=Math.round((ws.clientHeight-16)*w/h+16);
+    ws.style.gridTemplateColumns=`minmax(0,${want}px) minmax(360px,1fr)`;
+  }
+}
+new ResizeObserver(fitPreview).observe(document.getElementById('captionHost'));
+for(const d of document.querySelectorAll('.text-inspector details')){d.open=true;d.querySelector('summary')?.addEventListener('click',e=>e.preventDefault());}
+function applyAspect(){const aspect=ratios[draft.output?.aspect]?draft.output.aspect:'9:16';$('frameAspect').value=aspect;$('editAspect').value=aspect;document.documentElement.style.setProperty('--frame-ratio',ratios[aspect]);setTimeout(fitPreview);}
 for(const id of ['frameAspect','editAspect'])$(id).onchange=()=>{if(!editingAllowed){applyAspect();return;}draft.output={...(draft.output || {}),aspect:$(id).value};save();applyAspect();requestAnimationFrame(()=>textEditor.render());};
 function render() {
   renderSteps();
@@ -270,7 +280,7 @@ for(const button of document.querySelectorAll('[data-role-pick]'))button.onclick
 $('planOpen').onclick=()=>{$('planDialog').showModal();$('plan').focus();};
 // step 4's right panel: text tools or the subtitle check
 for(const tab of document.querySelectorAll('.inspector-tabs [data-tab]'))tab.onclick=()=>{
- const panel=tab.closest('.text-inspector');panel.dataset.tab=tab.dataset.tab;panel.scrollTop=0;
+ const panel=tab.closest('.text-inspector');panel.dataset.tab=tab.dataset.tab;panel.scrollTop=0;if(tab.dataset.tab==='qc')textQc.run();
  for(const t of panel.querySelectorAll('.inspector-tabs [data-tab]'))t.setAttribute('aria-selected',String(t===tab));
 };
 $('planDialog').addEventListener('close',()=>{stories.renderCards();renderSteps();});

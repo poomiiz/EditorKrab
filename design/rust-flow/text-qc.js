@@ -11,7 +11,7 @@ export function createTextQc({texts,summary,list,listen,edit,go}){
   if(running){again=true;return;}
   running=true;lastKey=key;
   try{
-   go.hidden=items.length>0;summary.closest('.qc').hidden=!items.length;
+   go.hidden=items.length>0;
    if(!items.length){summary.textContent='ยังไม่มีซับ ถอดเสียงที่ขั้น 1 ก่อน';list.replaceChildren();return;}
    summary.textContent='กำลังตรวจ';
    // the server takes only these fields; subtitle lines also carry segment and source ids for steps 2 and 3
