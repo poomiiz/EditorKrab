@@ -766,6 +766,11 @@ label[for="fx-blend"]::before{content:"🌗 "}
  .tc-cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-xl)}
  .tc-col+.tc-col{border-left:1px solid var(--line);padding-left:var(--space-lg)}
 }
+
+/* font dropdown: floats over the panel, rows tall enough for any face, nothing clipped */
+.font-list{position:fixed;z-index:60;box-shadow:0 12px 32px oklch(0% 0 0 / .45);background:var(--surface)}
+.font-list button{padding:10px 12px;line-height:1.6;align-items:center;font-size:1.0625rem;min-height:44px;overflow:visible}
+.font-list button small{flex:none}
 </style>
 </head>
 <body data-loading="true">
