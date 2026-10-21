@@ -285,16 +285,39 @@ fn escape(text: &str) -> String {
 fn event(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
     let x = style["x"].as_f64().unwrap_or(50.0) / 100.0 * frame.0 as f64;
     let y = style["y"].as_f64().unwrap_or(50.0) / 100.0 * frame.1 as f64;
-    let size = (style["size"].as_f64().unwrap_or(64.0) * frame.0 as f64 / 1080.0).round() as u64;
+    let scale = frame.0 as f64 / 1080.0;
+    let size = (style["size"].as_f64().unwrap_or(64.0) * scale).round() as u64;
     format!(
-        "Dialogue: {layer},{},{},Text,,0,0,0,,{{\\an5\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}}}{}\n",
+        "Dialogue: {layer},{},{},{},,0,0,0,,{{\\an5\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}{}}}{}\n",
         clock(start),
         clock(end),
+        if style["box_on"].as_bool() == Some(true) { "Box" } else { "Text" },
         font(style["font"].as_str().unwrap_or("system")),
         size,
         colour(style["color"].as_str().unwrap_or("#ffffff")),
+        effects(style, scale, frame),
         escape(text)
     )
+}
+
+/// Outline, shadow, box and entrance as ASS override tags; sizes are reference px on a 1080-wide frame.
+fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
+    let px = |key: &str, default: f64| (style[key].as_f64().unwrap_or(default) * scale * 10.0).round() / 10.0;
+    let mut tags = String::new();
+    if style["box_on"].as_bool() == Some(true) {
+        // in the Box style the outline is the box: its colour, and its width is the padding round the text
+        tags += &format!("\\bord{}\\shad0\\3c{}", px("outline", 12.0).max(4.0), colour(style["box_color"].as_str().unwrap_or("#000000")));
+    } else {
+        tags += &format!("\\bord{}\\shad{}\\3c{}", px("outline", 4.0), px("shadow", 1.0), colour(style["outline_color"].as_str().unwrap_or("#000000")));
+    }
+    match style["enter"].as_str() {
+        Some("fade") => tags += "\\fad(250,0)",
+        Some("pop") => tags += "\\fscx70\\fscy70\\t(0,180,\\fscx100\\fscy100)",
+        // a clip that opens left to right across the frame, so the text is revealed as it passes
+        Some("wipe") => tags += &format!("\\clip(0,0,0,{h})\\t(0,400,\\clip(0,0,{w},{h}))", w = frame.0, h = frame.1),
+        _ => {}
+    }
+    tags
 }
 
 fn thai(c: char) -> bool {
@@ -364,7 +387,8 @@ pub fn subtitles(story: &Story, document: &Value) -> (String, Vec<String>) {
     let mut ass = format!(
         "[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n\
 [V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n\
-Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,1,5,60,60,0,1\n\n\
+Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,1,5,60,60,0,1\n\
+Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,3,12,0,5,60,60,0,1\n\n\
 [Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     );
     let total = story.duration_ms();

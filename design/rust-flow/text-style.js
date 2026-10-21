@@ -13,8 +13,13 @@ export function defaults(){
  return {headline:{text:'หัวข้อคลิป',font:'system',size:80,color:white,x:50,y:16},speech:{text:'ตัวอย่างข้อความพูด',font:'system',size:64,color:white,x:50,y:69},
   emphasis:{text:'คำเน้นสำคัญ',font:'system',size:84,color:orange,x:50,y:55},english:{text:'English subtitle',font:'system',size:56,color:white,x:50,y:78}};
 }
+// optional text effects; absent fields mean the export defaults (outline 4 black, shadow 1, no box, no entrance)
+export const effectDefaults={outline:4,outline_color:'#000000',shadow:1,box_on:false,box_color:'#000000',enter:'none'};
+const effectValid={outline:v=>Number.isInteger(v)&&v>=0&&v<=20,shadow:v=>Number.isInteger(v)&&v>=0&&v<=20,outline_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),
+ box_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),box_on:v=>typeof v==='boolean',enter:v=>['none','fade','pop','wipe'].includes(v)};
+const baseKeys=['text','font','size','color','x','y'];
 export function validTextStyle(v){
- return v && typeof v==='object' && !Array.isArray(v) && Object.keys(v).length===6 && typeof v.text==='string' && v.text.length<=80 && !/[\r\n]/.test(v.text) && validFont(v.font) &&
+ return v && typeof v==='object' && !Array.isArray(v) && Object.keys(v).every(k=>baseKeys.includes(k) || (Object.hasOwn(effectValid,k) && effectValid[k](v[k]))) && baseKeys.every(k=>Object.hasOwn(v,k)) && typeof v.text==='string' && v.text.length<=80 && !/[\r\n]/.test(v.text) && validFont(v.font) &&
  Number.isInteger(v.size) && v.size>=24 && v.size<=160 && typeof v.color==='string' && /^#[a-fA-F0-9]{6}$/.test(v.color) && Number.isFinite(v.x) && v.x>=5 && v.x<=95 && Number.isFinite(v.y) && v.y>=5 && v.y<=95;
 }
 export function validTextStyles(value){
@@ -118,6 +123,11 @@ export function createStyleEditor(read,write,layout,writeItems){
    node.firstElementChild.textContent=live.get(key) || v.text || '…';
    node.style.left=v.x+'%';node.style.top=v.y+'%';node.style.color=v.color;
    node.firstElementChild.style.fontFamily=fontCss(v.font);node.firstElementChild.style.fontSize=(v.size*frame.clientWidth/1080)+'px';
+   const e={...effectDefaults,...v},k=frame.clientWidth/1080,span=node.firstElementChild;
+   span.style.webkitTextStroke=!e.box_on&&e.outline?`${e.outline*2*k}px ${e.outline_color}`:'';span.style.paintOrder='stroke fill';
+   span.style.textShadow=!e.box_on&&e.shadow?`${e.shadow*k}px ${e.shadow*k}px 0 rgb(0 0 0 / .6)`:'';
+   span.style.background=e.box_on?e.box_color:'';span.style.padding=e.box_on?`${Math.max(4,e.outline || 12)*k}px`:'';
+   span.dataset.enter=e.enter;
    node.dataset.selected=String(key===selected);node.disabled=!enabled;
    if(key===selected)node.setAttribute('aria-current','true');else node.removeAttribute('aria-current');
   }
@@ -152,6 +162,7 @@ export function createStyleEditor(read,write,layout,writeItems){
   $('text-color-hex').value=current?.color ?? '';$('text-color-hex').disabled=!enabled || !current;
   $('localFonts').disabled=!enabled || !current || fontLoading;checkFont(current?.font);
   $('textRoleTitle').textContent=selected?label(selected):'เลือกข้อความบนจอ';
+  showEffects();
 
   paint();
  }
@@ -168,6 +179,19 @@ export function createStyleEditor(read,write,layout,writeItems){
    $('textFieldError').hidden=true;commit(next);$('text-color-hex').removeAttribute('aria-invalid');$('text-color-hex').value=next[selected].color;checkFont(next[selected].font);paint();
   });
  }
+ const effectInputs={outline:$('fx-outline'),outline_color:$('fx-outline-color'),shadow:$('fx-shadow'),box_on:$('fx-box'),box_color:$('fx-box-color'),enter:$('fx-enter')};
+ function showEffects(){
+  const current=values()[selected],e={...effectDefaults,...(current || {})};
+  for(const [key,input] of Object.entries(effectInputs)){if(input.type==='checkbox')input.checked=!!e[key];else input.value=e[key];input.disabled=!enabled || !current;}
+  effectInputs.outline_color.disabled=effectInputs.shadow.disabled=!enabled || !current || e.box_on;effectInputs.box_color.disabled=!enabled || !current || !e.box_on;
+ }
+ for(const [key,input] of Object.entries(effectInputs))input.addEventListener(input.type==='checkbox'||input.tagName==='SELECT'?'change':'input',()=>{
+  if(!enabled || !selected)return;
+  const value=input.type==='checkbox'?input.checked:input.type==='number'?input.valueAsNumber:input.value;
+  const next=structuredClone(values());next[selected][key]=value;
+  const {id,...style}=next[selected];if(!validTextStyle(style)){input.setAttribute('aria-invalid','true');return;}
+  input.removeAttribute('aria-invalid');commit(next);showEffects();paint();if(key==='enter')replay(selected);
+ });
  let fontLoading=false,fontRequest=0;
  const fontChecks=new Map();
  function checkFont(value){
@@ -223,5 +247,7 @@ export function createStyleEditor(read,write,layout,writeItems){
  $('removeHeadline').onclick=()=>{if(enabled && selected?.startsWith('hl:')){endDrag();writeItems(layout().items.filter(v=>'hl:'+v.id!==selected));render();}};
  const observer=new ResizeObserver(paint);observer.observe(frame);
  document.fonts.ready.then(paint);
-  return {render,select,live:(key,text)=>{if(text)live.set(key,text);else live.delete(key);paint();},selectHeadline:id=>select('hl:'+id),editing:value=>{if(!value)endDrag();enabled=value;render();}};
+  // a new line on the live preview replays the entrance effect
+  function replay(key){const span=nodes.get(key)?.firstElementChild;if(!span || span.dataset.enter==='none')return;span.classList.remove('entering');void span.offsetWidth;span.classList.add('entering');}
+  return {render,select,live:(key,text)=>{const changed=(live.get(key) || '')!==(text || '');if(text)live.set(key,text);else live.delete(key);paint();if(changed&&text)replay(key);},selectHeadline:id=>select('hl:'+id),editing:value=>{if(!value)endDrag();enabled=value;render();}};
 }

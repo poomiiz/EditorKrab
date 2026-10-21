@@ -139,9 +139,9 @@ fn subtitles_place_speech_in_output_time_and_headline_for_the_whole_clip() {
     let story = &plan(&doc, &jobs()).unwrap()[0];
     let (ass, skipped) = subtitles(story, &doc);
     assert!(ass.contains("PlayResX: 1080\nPlayResY: 1920"));
-    assert!(ass.contains("Dialogue: 0,0:00:00.00,0:00:01.00,Text,,0,0,0,,{\\an5\\pos(540,1325)\\fnLeelawadee UI\\fs64\\1c&H0B9EF5&}ตอนจบ"));
+    assert!(ass.contains("Dialogue: 0,0:00:00.00,0:00:01.00,Text,,0,0,0,,{\\an5\\pos(540,1325)\\fnLeelawadee UI\\fs64\\1c&H0B9EF5&\\bord4\\shad1\\3c&H000000&}ตอนจบ"));
     assert!(ass.contains("Dialogue: 0,0:00:01.00,0:00:03.50,Text"));
-    assert!(ass.contains("Dialogue: 1,0:00:00.00,0:00:03.50,Text,,0,0,0,,{\\an5\\pos(540,307)\\fnKanit\\fs80\\1c&HFFFFFF&}หัวข้อ (สำคัญ)"));
+    assert!(ass.contains("Dialogue: 1,0:00:00.00,0:00:03.50,Text,,0,0,0,,{\\an5\\pos(540,307)\\fnKanit\\fs80\\1c&HFFFFFF&\\bord4\\shad1\\3c&H000000&}หัวข้อ (สำคัญ)"));
     assert_eq!(skipped, ["english"]);
     let mut quiet = doc.clone();
     quiet["text_roles"] = json!([]);
@@ -180,6 +180,27 @@ fn the_picked_shape_and_crop_reach_ffmpeg_and_the_subtitles() {
     let (ass, _) = subtitles(story, &doc);
     assert!(ass.contains("PlayResX: 1920\nPlayResY: 1080"));
     assert!(ass.contains("\\fs114"), "64 px on a 1080-wide frame is 114 on 1920: {ass}");
+}
+
+#[test]
+fn text_effects_become_ass_tags_and_the_box_style() {
+    let mut doc = document(json!({"stories": [{"segment_ids": ["a1"]}]}));
+    let story = &plan(&doc, &jobs()).unwrap()[0];
+    let (plain, _) = subtitles(story, &doc);
+    assert!(plain.contains(",Text,,0,0,0,,{\\an5"), "no effect fields keep the old look: {plain}");
+    assert!(plain.contains("\\bord4\\shad1\\3c&H000000&"));
+    doc["text_styles"]["speech"]["outline"] = json!(8);
+    doc["text_styles"]["speech"]["outline_color"] = json!("#ff0000");
+    doc["text_styles"]["speech"]["enter"] = json!("pop");
+    let (ass, _) = subtitles(story, &doc);
+    assert!(ass.contains("\\bord8\\shad1\\3c&H0000FF&\\fscx70\\fscy70\\t(0,180,\\fscx100\\fscy100)"), "{ass}");
+    doc["text_styles"]["speech"]["box_on"] = json!(true);
+    doc["text_styles"]["speech"]["box_color"] = json!("#112233");
+    doc["text_styles"]["speech"]["enter"] = json!("wipe");
+    let (ass, _) = subtitles(story, &doc);
+    assert!(ass.contains("Style: Box,"));
+    assert!(ass.contains(",Box,,0,0,0,,"), "{ass}");
+    assert!(ass.contains("\\bord8\\shad0\\3c&H332211&\\clip(0,0,0,1920)\\t(0,400,\\clip(0,0,1080,1920))"), "{ass}");
 }
 
 #[test]

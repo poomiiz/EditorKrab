@@ -471,6 +471,17 @@ textarea{font-size:.75rem}
 .text-frame video.frame-video{object-fit:cover !important;cursor:grab}
 .text-frame[data-cropping=true] video.frame-video{cursor:grabbing}
 .frame-aspect select{min-height:28px;padding:2px 6px;font-size:.75rem;background:var(--surface)}
+
+/* text effects: compact two-column rows; the entrance replays on each new live line */
+.fx summary{font-size:.8125rem;color:var(--txt-sub)}
+.fx-grid{display:grid;grid-template-columns:4.5em minmax(0,1fr);gap:var(--space-xs) var(--space-sm);align-items:center;margin-top:var(--space-xs)}
+.fx-grid label{font-size:.8125rem;color:var(--txt-sub)}.fx-pair{display:flex;gap:var(--space-xs);align-items:center}.fx-pair input[type=number]{width:5em}
+.fx-grid input[type=color]{min-height:28px;width:44px;padding:2px}.fx-grid input[type=checkbox]{width:18px;height:18px;min-height:18px;accent-color:var(--acc)}
+.preview-text>span{border-radius:6px}
+@keyframes fx-fade{from{opacity:0}}@keyframes fx-pop{from{transform:scale(.7)}}@keyframes fx-wipe{from{clip-path:inset(0 100% 0 0)}}
+.preview-text>span.entering[data-enter=fade]{animation:fx-fade .25s ease-out}.preview-text>span.entering[data-enter=pop]{animation:fx-pop .18s cubic-bezier(.22,1,.36,1)}
+.preview-text>span.entering[data-enter=wipe]{animation:fx-wipe .4s linear}
+@media(prefers-reduced-motion:reduce){.preview-text>span.entering{animation:none}}
 </style>
 </head>
 <body data-loading="true">
@@ -564,7 +575,7 @@ textarea{font-size:.75rem}
 <p id="fontStatus" class="preview-hint" role="status"></p>
 <details class="font-more"><summary>ใช้ฟอนต์อื่นในเครื่อง</summary><button id="localFonts" type="button" data-icon="font">แสดงฟอนต์ในเครื่อง</button></details>
 <div class="parameter-row"><label class="field" for="text-size"><span>ขนาด</span><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"></label><div class="field"><label id="colorLabel" for="text-color">สี</label><input id="text-color" type="color" aria-labelledby="colorLabel"><details class="color-more"><summary>ใส่รหัสสี</summary><label class="field" for="text-color-hex"><span>รหัสสี เช่น #FFFFFF</span><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false"></label></details></div></div>
-<p id="textFieldError" class="field-warning" role="status" hidden></p></div>
+<details class="fx" open><summary>เอฟเฟกต์</summary><div class="fx-grid"><label for="fx-outline">ขอบ</label><span class="fx-pair"><input id="fx-outline" type="number" min="0" max="20" step="1" inputmode="numeric"><input id="fx-outline-color" type="color" aria-label="สีขอบ"></span><label for="fx-shadow">เงา</label><input id="fx-shadow" type="number" min="0" max="20" step="1" inputmode="numeric"><label for="fx-box">แถบหลัง</label><span class="fx-pair"><input id="fx-box" type="checkbox"><input id="fx-box-color" type="color" aria-label="สีแถบพื้นหลัง"></span><label for="fx-enter">ตอนขึ้น</label><select id="fx-enter"><option value="none">ไม่มี</option><option value="fade">จางเข้า</option><option value="pop">เด้ง</option><option value="wipe">กวาดเปิด</option></select></div></details><p id="textFieldError" class="field-warning" role="status" hidden></p></div>
 </aside></div></div>
 </div>
 <div class="stage-foot"><button class="back" data-go="3" data-icon="back">ย้อนกลับ</button><div class="actions"><button class="primary" data-go="5">ถัดไป</button></div></div>
