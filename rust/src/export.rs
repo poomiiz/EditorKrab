@@ -322,7 +322,7 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
         Some("fade") => tags += "\\fad(250,0)",
         Some("pop") => tags += "\\fscx70\\fscy70\\t(0,180,\\fscx100\\fscy100)",
         // a clip that opens left to right across the frame, so the text is revealed as it passes
-        // "words" is drawn by karaoke tags in the text itself
+        // "words" is drawn as one event per word (see karaoke)
         Some("wipe") => tags += &format!("\\clip(0,0,0,{h})\\t(0,400,\\clip(0,0,{w},{h}))", w = frame.0, h = frame.1),
         _ => {}
     }
@@ -409,7 +409,7 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
         let mut at = 0;
         for p in &story.pieces {
             for (start, end, text) in karaoke(p, limit) {
-                ass.push_str(&event_raw((width, height), 0, at + start, at + end, &style, &text));
+                ass.push_str(&event((width, height), 0, at + start, at + end, &style, &text));
             }
             at += p.end_ms - p.start_ms;
         }
@@ -442,12 +442,13 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
     (ass, skipped)
 }
 
-/// One piece's speech as display lines whose words appear as they are said: `\ko` karaoke keeps each word
-/// (and its outline) hidden until its start. Pieces without timed words fall back to whole lines.
+/// One piece's speech as display lines whose words appear as they are said: one event per word, each
+/// showing the line up to that word, so words not yet said take no space on screen (karaoke tags would
+/// still draw their shadow). Pieces without timed words fall back to whole lines.
 pub fn karaoke(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
     let plain = lines(piece, limit);
     if piece.words.is_empty() {
-        return plain.into_iter().map(|(a, b, t)| (a, b, escape(&t))).collect();
+        return plain;
     }
     let local = |ms: u64| ms.clamp(piece.start_ms, piece.end_ms) - piece.start_ms;
     let words: Vec<(u64, &str)> = piece
@@ -459,36 +460,32 @@ pub fn karaoke(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
     let mut out = Vec::new();
     let mut next = 0;
     for (start, end, text) in plain {
-        // the words of this display line, in order, as lines() grouped them
-        let mut line = String::new();
-        let mut cursor = start;
+        // the words of this display line, as lines() grouped them
         let mut built = String::new();
-        while next < words.len() && (built.is_empty() || {
-            let mut probe = built.clone();
-            join(&mut probe, words[next].1);
-            text.starts_with(probe.as_str())
-        }) {
-            let (at, word) = words[next];
+        let mut shown: Vec<(u64, String)> = Vec::new();
+        while next < words.len() {
             let mut joined = built.clone();
-            join(&mut joined, word);
-            let spoken = &joined[built.len()..];
-            if at > cursor {
-                line += &format!("{{\\k{}}}", (at - cursor) / 10);
-                cursor = at;
+            join(&mut joined, words[next].1);
+            if !built.is_empty() && !text.starts_with(joined.as_str()) {
+                break;
             }
-            let until = words.get(next + 1).map(|w| w.0).unwrap_or(end).clamp(cursor, end.max(cursor));
-            line += &format!("{{\\ko{}}}{}", (until - cursor) / 10, escape(spoken));
-            cursor = until;
+            shown.push((words[next].0.clamp(start, end), joined.clone()));
             built = joined;
             next += 1;
             if built == text {
                 break;
             }
         }
-        if line.is_empty() {
-            line = escape(&text);
+        if shown.is_empty() {
+            out.push((start, end, text));
+            continue;
         }
-        out.push((start, end, line));
+        for (i, (at, so_far)) in shown.iter().enumerate() {
+            let until = shown.get(i + 1).map(|w| w.0).unwrap_or(end);
+            if until > *at {
+                out.push((*at, until, so_far.clone()));
+            }
+        }
     }
     out
 }

@@ -45,7 +45,7 @@ export function checkPlan(text,lines){
 }
 export function parsePlan(text){return checkPlan(text).plan || null;}
 
-export function createStories({project,read,lines,write,go,editable,caption}){
+export function createStories({project,read,lines,write,go,editable,caption,emphasis=()=>{}}){
  let queue=[];
  const video=$('editVideo');
  const reviews=()=>read().story_reviews || {};
@@ -120,10 +120,11 @@ export function createStories({project,read,lines,write,go,editable,caption}){
  function refineText(story){
   const packet={schema_version:1,step:'refine_story',project_id:project,story_id:story.id,title:story.title,summary:story.summary,
    lines:offered(story).map(l=>({id:l.segment_id,start_ms:l.start_ms,end_ms:l.end_ms,text:l.text})),
-   response_schema:{story_id:story.id,title:'หัวข้อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[]}};
+   response_schema:{story_id:story.id,title:'หัวข้อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[],emphasis:{'<segment id>':['คำที่เน้น']}}};
   return 'เรียบเรียงเรื่องนี้ให้เป็นคลิปที่ดูแล้วรู้เรื่องในตัวเอง เลือกเฉพาะท่อนที่ดีที่สุด ตัดท่อนที่พูดซ้ำ พูดติดขัด หรือออกนอกเรื่อง '
    +'เรียงลำดับใหม่ได้ถ้าเล่าแล้วดีขึ้น เปิดเรื่องให้น่าสนใจและรักษาตอนจบให้ครบ อ้างท่อนด้วย id ใน lines เท่านั้น ห้ามสร้างท่อนหรือเวลาใหม่ '
-   +'segment_ids คือท่อนที่เก็บ เรียงตามลำดับที่จะเล่น ปรับ title และ summary ให้ตรงกับเรื่องที่เรียบเรียงแล้ว\n'
+   +'segment_ids คือท่อนที่เก็บ เรียงตามลำดับที่จะเล่น ปรับ title และ summary ให้ตรงกับเรื่องที่เรียบเรียงแล้ว '
+   +'emphasis คือคำเน้น เลือก 1-2 คำที่สำคัญที่สุดเฉพาะท่อนที่ควรเน้น คัดลอกคำตามที่อยู่ใน text ของท่อนนั้น\n'
    +'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,1);
  }
  const refineStory=()=>model()?.stories.find(s=>s.id===refining) || null;
@@ -147,7 +148,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   if(ids.some(id=>!allowed.has(id)))return {error:'คำตอบอ้างท่อนที่ไม่ได้ส่งไป ลองให้ AI ตอบใหม่'};
   if(new Set(ids).size!==ids.length)return {error:'คำตอบใช้ท่อนเดียวกันซ้ำ'};
   const byId=new Map(lines().map(l=>[l.segment_id,l]));
-  return {ids,title:String(answer.title || '').trim(),summary:String(answer.summary || '').trim(),
+  return {ids,emphasis:answer.emphasis,title:String(answer.title || '').trim(),summary:String(answer.summary || '').trim(),
    note:`เก็บ ${ids.length} จาก ${allowed.size} ท่อน · ยาว ${clock(length(ids.map(id=>byId.get(id))))}`};
  }
  function checkRefineUi(){
@@ -162,6 +163,12 @@ export function createStories({project,read,lines,write,go,editable,caption}){
    const plan=parsePlan(d.plan),entry=plan?.stories[story.index];if(!entry)return;
    entry.round1_ids=entry.round1_ids || entry.segment_ids.slice();entry.segment_ids=c.ids;
    if(c.title)entry.title=c.title;if(c.summary)entry.summary=c.summary;d.plan=JSON.stringify(plan,null,2);
+   // emphasis words from the answer: a picked string marks the line's words it contains
+   if(c.emphasis&&typeof c.emphasis==='object'){const all={...(d.emphasis || {})},byId=new Map(lines().map(l=>[l.segment_id,l]));
+    for(const [id,picks] of Object.entries(c.emphasis)){const line=byId.get(id);if(!line?.words?.length || !c.ids.includes(id) || !Array.isArray(picks))continue;
+     const starts=line.words.filter(w=>picks.some(p=>typeof p==='string'&&p.trim()&&(p.includes(w.text.trim())&&w.text.trim().length>1 || w.text.includes(p.trim())))).map(w=>w.start_ms);
+     if(starts.length)all[id]=[...new Set(starts)].sort((a,b)=>a-b);}
+    d.emphasis=all;}
    if(d.story_reviews?.[story.id]){d.story_reviews={...d.story_reviews};delete d.story_reviews[story.id];}
   });
  };
@@ -210,6 +217,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   const head=document.createElement('div');head.className='edit-head';head.id='editHead';lane.append(head);
   const track=$('editTrack'),scroll=track.scrollLeft;track.replaceChildren(lane);track.scrollLeft=scroll;
   editView={story,showCut,boxes,zoom};
+  showWords(wordLine?lines().find(l=>l.segment_id===wordLine.segment_id):null);
   lane.onclick=e=>{
    if(e.target!==lane&&!e.target.classList.contains('edit-mark'))return;
    const at=(e.clientX-lane.getBoundingClientRect().left)/zoom*1000;
@@ -219,7 +227,26 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   };
   $('editClock').textContent=`ใช้ ${story.kept.length} บรรทัด · ${pieces(story)} ท่อน · ยาว ${clock(length(story.kept))}`;
  }
- let editView=null,refocus=null,cropSource=null;
+ let editView=null,refocus=null,cropSource=null,wordLine=null;
+ // Thai runs on without spaces; a space only between two non-Thai words
+ const thai=c=>c>='\u0E00'&&c<='\u0E7F';
+ function joinWords(list,sep){return list.reduce((out,w)=>{w=String(w).trim();if(!w)return out;if(sep!==undefined)return out?out+sep+w:w;return out&&!thai(out.at(-1))&&!thai(w[0])?out+' '+w:out+w;},'');}
+ // the words row: the line under the playhead (or the one clicked); each word toggles as emphasis
+ function showWords(line){
+  wordLine=line || null;const host=$('editWords');if(!host)return;
+  if(!line){host.replaceChildren();return;}
+  const picked=new Set(read().emphasis?.[line.segment_id] || []),label=document.createElement('span');label.className='caption';
+  label.textContent=line.words?.length?'คลิกคำเพื่อเน้น:':'ท่อนนี้แก้ข้อความแล้ว ไม่มีเวลารายคำให้เลือกเน้น';
+  host.replaceChildren(label,...(line.words || []).map(w=>{const b=document.createElement('button');b.type='button';b.className='edit-word';b.textContent=w.text;
+   b.setAttribute('aria-pressed',String(picked.has(w.start_ms)));b.disabled=!editable();b.onclick=()=>toggleEmphasis(line,w);return b;}));
+ }
+ function toggleEmphasis(line,word){
+  write(d=>{
+   const all={...(d.emphasis || {})},list=new Set(all[line.segment_id] || []);
+   if(list.has(word.start_ms))list.delete(word.start_ms);else list.add(word.start_ms);
+   if(list.size)all[line.segment_id]=[...list].sort((a,b)=>a-b);else delete all[line.segment_id];d.emphasis=all;
+  });
+ }
  // crop: where the clip-shaped window sits on the video, 0..1 across the slack each way (0.5 = centred)
  const cropOf=id=>{const c=read().crops?.[id] || {};const f=v=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):0.5;return {x:f(c.x),y:f(c.y)};};
  function showCrop(at=cropOf(cropSource)){video.style.objectPosition=`${at.x*100}% ${at.y*100}%`;}
@@ -248,13 +275,14 @@ export function createStories({project,read,lines,write,go,editable,caption}){
  // with the cut lines shown, the preview is the video as filmed: from `ms` it plays on to the end, nothing skipped
  function playRaw(ms,play){
   queue=[{start_ms:ms,end_ms:Math.max(ms+1,(video.duration || 0)*1000 || Infinity)}];video.currentTime=ms/1000;
+  showWords(lines().find(l=>l.source_id===cropSource&&ms>=l.start_ms&&ms<l.end_ms));
   if(play)video.play().catch(()=>{});else{if(!video.paused)video.pause();step();}
  }
  // the playhead goes to `ms` inside the kept line `id`; play continues the story from there, paused shows that frame
  function seekTo(story,ms,id,play){
   const from=story.kept.findIndex(k=>k.segment_id===id);if(from<0)return;
   queue=story.kept.slice(from);video.currentTime=ms/1000;
-  caption(story.kept[from].text);
+  caption(story.kept[from].text);showWords(story.kept[from]);
   if(play){video.play().catch(()=>{});}else{if(!video.paused)video.pause();cancelAnimationFrame(ticking);ticking=0;}
   const head=$('editHead');if(head&&editView){const box=editView.boxes.find(b=>b.kept?.segment_id===id);
    const x=editView.showCut?ms:box?box.at+ms-box.kept.start_ms:-1;head.hidden=x<0;if(x>=0)head.style.left=(x/1000*editView.zoom)+'px';}
@@ -315,7 +343,12 @@ export function createStories({project,read,lines,write,go,editable,caption}){
    if(!next)video.pause();else if(next.start_ms>now+40 || next.start_ms<line.start_ms)video.currentTime=next.start_ms/1000;
   }
   const story=current(),said=story&&(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept).find(l=>now>=l.start_ms&&now<l.end_ms);
-  caption(said?.text || '');
+  const words=said?.words || [],wordByWord=(read().text_styles?.speech?.enter ?? 'words')==='words'&&words.length;
+  // while a line plays, an empty box stays empty (a no-break space) instead of falling back to the sample text
+  caption(!said?'':(wordByWord?joinWords(words.filter(w=>w.start_ms<=now).map(w=>w.text)):said.text) || '\u00a0');
+  const picked=new Set(read().emphasis?.[said?.segment_id] || []);
+  emphasis(said?joinWords(words.filter(w=>picked.has(w.start_ms)&&w.start_ms<=now).map(w=>w.text),' ') || '\u00a0':'');
+  if(said&&said.segment_id!==wordLine?.segment_id&&!video.paused)showWords(said);
   const head=$('editHead');
   if(head&&editView){
    let x=now;
@@ -354,6 +387,6 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/preview`,{headers:{Range:'bytes=0-0'}}).catch(()=>warmed.delete(f.source_id));}}
  function allReviewed(){const m=model();return !!m&&m.stories.length>0&&m.stories.every(s=>reviews()[s.id]);}
  // leaving step 3: stop the preview and take its line off the subtitle frame
- function stop(){queue=[];if(!video.paused)video.pause();caption('');}
+ function stop(){queue=[];if(!video.paused)video.pause();caption('');emphasis('');}
  return {renderCards,renderEditor,allReviewed,warm,stop};
 }

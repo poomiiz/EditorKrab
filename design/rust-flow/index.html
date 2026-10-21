@@ -483,6 +483,12 @@ textarea{font-size:.75rem}
 .preview-text>span.entering[data-enter=wipe]{animation:fx-wipe .4s linear}
 @media(prefers-reduced-motion:reduce){.preview-text>span.entering{animation:none}}
 .editor-style .text-inspector{gap:var(--space-sm)}
+
+/* step 3 words row: the playing line's words; picked ones are emphasis */
+.edit-words{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-height:32px}
+.edit-words .caption{margin-right:var(--space-xs)}
+.edit-word{min-height:28px;padding:2px 8px;font-size:.8125rem;border-radius:999px}
+.edit-word[aria-pressed=true]{border-color:var(--warn);background:color-mix(in oklch,var(--warn) 22%,transparent);color:var(--txt)}
 </style>
 </head>
 <body data-loading="true">
@@ -555,7 +561,7 @@ textarea{font-size:.75rem}
 <div id="editor" class="editor" hidden>
 <div id="editStyleHost" class="editor-style"></div><video id="editVideo" class="frame-video" playsinline preload="metadata" title="ลากภาพเพื่อเลื่อนตำแหน่งครอป"></video><p id="editVideoNote" class="caption" role="status"></p>
 <div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><span class="caption">คลิกเส้นเวลาเพื่อเลือกจุดเล่น · ลากท่อนเพื่อสลับ · เว้นวรรคเล่น/หยุด</span><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
-<div id="editTrack" class="edit-track"></div>
+<div id="editWords" class="edit-words" aria-label="คำในท่อนนี้ คลิกคำเพื่อเน้น"></div><div id="editTrack" class="edit-track"></div>
 </div>
 </div>
 <div class="stage-foot"><button class="back" data-go="2" data-icon="back">กลับไปหน้าเรื่อง</button><div class="actions"><button class="primary" data-go="4">ถัดไป</button></div></div>
@@ -576,7 +582,7 @@ textarea{font-size:.75rem}
 <p id="fontStatus" class="preview-hint" role="status"></p>
 <details class="font-more"><summary>ใช้ฟอนต์อื่นในเครื่อง</summary><button id="localFonts" type="button" data-icon="font">แสดงฟอนต์ในเครื่อง</button></details>
 <div class="parameter-row"><label class="field" for="text-size"><span>ขนาด</span><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"></label><div class="field"><label id="colorLabel" for="text-color">สี</label><input id="text-color" type="color" aria-labelledby="colorLabel"><details class="color-more"><summary>ใส่รหัสสี</summary><label class="field" for="text-color-hex"><span>รหัสสี เช่น #FFFFFF</span><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false"></label></details></div></div>
-<details class="fx"><summary>เอฟเฟกต์ (ขอบ เงา แถบหลัง ตอนขึ้น)</summary><div class="fx-grid"><label for="fx-outline">ขอบ</label><span class="fx-pair"><input id="fx-outline" type="number" min="0" max="20" step="1" inputmode="numeric"><input id="fx-outline-color" type="color" aria-label="สีขอบ"></span><label for="fx-shadow">เงา</label><input id="fx-shadow" type="number" min="0" max="20" step="1" inputmode="numeric"><label for="fx-box">แถบหลัง</label><span class="fx-pair"><input id="fx-box" type="checkbox"><input id="fx-box-color" type="color" aria-label="สีแถบพื้นหลัง"></span><label for="fx-enter">ตอนขึ้น</label><select id="fx-enter"><option value="none">ไม่มี</option><option value="fade">จางเข้า</option><option value="pop">เด้ง</option><option value="wipe">กวาดเปิด</option></select></div></details><p id="textFieldError" class="field-warning" role="status" hidden></p></div>
+<details class="fx"><summary>เอฟเฟกต์ (ขอบ เงา แถบหลัง ตอนขึ้น)</summary><div class="fx-grid"><label for="fx-outline">ขอบ</label><span class="fx-pair"><input id="fx-outline" type="number" min="0" max="20" step="1" inputmode="numeric"><input id="fx-outline-color" type="color" aria-label="สีขอบ"></span><label for="fx-shadow">เงา</label><input id="fx-shadow" type="number" min="0" max="20" step="1" inputmode="numeric"><label for="fx-box">แถบหลัง</label><span class="fx-pair"><input id="fx-box" type="checkbox"><input id="fx-box-color" type="color" aria-label="สีแถบพื้นหลัง"></span><label for="fx-enter">ตอนขึ้น</label><select id="fx-enter"><option value="none">ไม่มี</option><option value="fade">จางเข้า</option><option value="pop">เด้ง</option><option value="wipe">กวาดเปิด</option><option value="words">คำต่อคำ</option></select></div></details><p id="textFieldError" class="field-warning" role="status" hidden></p></div>
 </aside></div></div>
 </div>
 <div class="stage-foot"><button class="back" data-go="3" data-icon="back">ย้อนกลับ</button><div class="actions"><button class="primary" data-go="5">ถัดไป</button></div></div>

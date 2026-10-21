@@ -226,14 +226,16 @@ fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
         segment: "a1".into(),
     };
     let lines = editorkrab::export::karaoke(&piece, 40);
-    assert_eq!(lines.len(), 1);
-    // 0.2 s before the first word, then each word held until the next one starts
-    assert_eq!(lines[0].2, r"{\k20}{\ko80}หนึ่ง{\ko100}สอง{\ko100}สาม");
+    // nothing before the first word is said; then the line grows a word at a time
+    assert_eq!(
+        lines,
+        vec![(200, 1000, "หนึ่ง".to_owned()), (1000, 2000, "หนึ่งสอง".to_owned()), (2000, 3000, "หนึ่งสองสาม".to_owned())]
+    );
     let story = editorkrab::export::Story { id: "s".into(), title: String::new(), sources: vec!["a.mp4".into()], pieces: vec![piece] };
     let doc = json!({"text_roles": ["speech", "emphasis"], "emphasis": {"a1": [2000]}});
     assert_eq!(editorkrab::export::emphasis_lines(&story, &doc), vec![(1000, 3000, "สอง".to_owned())]);
     let (ass, skipped) = subtitles(&story, &doc);
-    assert!(ass.contains(r"{\k20}{\ko80}หนึ่ง"), "{ass}");
+    assert!(ass.contains("0:00:00.20,0:00:01.00,Text") && ass.contains("}หนึ่งสอง\n"), "{ass}");
     assert!(ass.contains("0:00:01.00,0:00:03.00,Text") && ass.contains("}สอง\n"), "{ass}");
     assert!(skipped.is_empty(), "emphasis is drawn now: {skipped:?}");
 }
