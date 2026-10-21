@@ -287,7 +287,21 @@ fn escape(text: &str) -> String {
 }
 /// One positioned text event; size and position use the same 1080-wide frame as the step 4/5 preview.
 fn event(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
-    event_raw(frame, layer, start, end, style, &escape(text))
+    // letter case from step 4 (TT / tt / Tt); Thai has no case and passes through
+    let text = match style["case"].as_str() {
+        Some("upper") => text.to_uppercase(),
+        Some("lower") => text.to_lowercase(),
+        Some("title") => text
+            .split(' ')
+            .map(|w| {
+                let mut c = w.chars();
+                c.next().map_or(String::new(), |f| f.to_uppercase().collect::<String>() + &c.as_str().to_lowercase())
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => text.to_owned(),
+    };
+    event_raw(frame, layer, start, end, style, &escape(&text))
 }
 /// `text` is already escaped ASS (it may hold override tags such as karaoke).
 fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
@@ -295,9 +309,15 @@ fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, 
     let y = style["y"].as_f64().unwrap_or(50.0) / 100.0 * frame.1 as f64;
     let scale = frame.0 as f64 / 1080.0;
     let size = (style["size"].as_f64().unwrap_or(64.0) * scale).round() as u64;
+    // left / right alignment anchors that side of the text at the position, as the preview does
+    let an = match style["align"].as_str() {
+        Some("left") => 4,
+        Some("right") => 6,
+        _ => 5,
+    };
     let line = |layer: u8, extra: &str| {
         format!(
-            "Dialogue: {layer},{},{},{},,0,0,0,,{{\\an5\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}{}{extra}}}{}\n",
+            "Dialogue: {layer},{},{},{},,0,0,0,,{{\\an{an}\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}{}{extra}}}{}\n",
             clock(start),
             clock(end),
             if style["box_on"].as_bool() == Some(true) { "Box" } else { "Text" },
@@ -310,10 +330,25 @@ fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, 
     };
     let blur = (style["shadow_blur"].as_f64().unwrap_or(0.0) * scale * 10.0).round() / 10.0;
     let shadowed = style["box_on"].as_bool() != Some(true) && style["shadow"].as_f64().unwrap_or(1.0) > 0.0;
+    // glow: a wide, soft outline of the glow colour under the text (no fill, no shadow)
+    let mut out = String::new();
+    if style["glow_on"].as_bool() == Some(true) && style["box_on"].as_bool() != Some(true) {
+        let range = (style["glow_range"].as_f64().unwrap_or(20.0) * scale * 10.0).round() / 10.0;
+        let strength = style["glow_strength"].as_f64().unwrap_or(60.0).clamp(0.0, 100.0);
+        out += &line(
+            layer * 2,
+            &format!(
+                "\\1a&HFF&\\shad0\\bord{range}\\3c{}\\3a&H{:02X}&\\blur{}",
+                colour(style["glow_color"].as_str().unwrap_or("#ffffff")),
+                (255.0 * (1.0 - strength / 100.0)).round() as u8,
+                (range / 2.0).max(1.0)
+            ),
+        );
+    }
     if shadowed && blur > 0.0 {
-        line(layer * 2, &format!("\\1a&HFF&\\3a&HFF&\\blur{blur}")) + &line(layer * 2 + 1, "\\shad0")
+        out + &line(layer * 2, &format!("\\1a&HFF&\\3a&HFF&\\blur{blur}")) + &line(layer * 2 + 1, "\\shad0")
     } else {
-        line(layer * 2 + 1, "")
+        out + &line(layer * 2 + 1, "")
     }
 }
 
@@ -329,6 +364,9 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
             let pad = |key: &str| style[key].as_f64().map_or(px("outline", 12.0).max(4.0), |v| (v * scale * 10.0).round() / 10.0);
             tags += &format!("\\xbord{}\\ybord{}", pad("box_pad_x"), pad("box_pad_y"));
         }
+        if let Some(opacity) = style["box_opacity"].as_f64() {
+            tags += &format!("\\3a&H{:02X}&", (255.0 * (1.0 - opacity.clamp(0.0, 100.0) / 100.0)).round() as u8);
+        }
     } else {
         tags += &format!(
             "\\bord{}\\shad{}\\3c{}\\4c{}",
@@ -341,6 +379,25 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
         if let Some(opacity) = style["shadow_opacity"].as_f64() {
             tags += &format!("\\4a&H{:02X}&", (255.0 * (1.0 - opacity.clamp(0.0, 100.0) / 100.0)).round() as u8);
         }
+        // a shadow cast at an angle: the distance is the old diagonal offset, so 45° matches \shad
+        if let Some(angle) = style["shadow_angle"].as_f64() {
+            let d = px("shadow", 1.0) * std::f64::consts::SQRT_2;
+            let a = angle.to_radians();
+            tags += &format!("\\xshad{:.1}\\yshad{:.1}", d * a.cos(), d * a.sin());
+        }
+    }
+    // weight, slant, underline and letter spacing
+    if style["bold"].as_bool() == Some(false) {
+        tags += "\\b0";
+    }
+    if style["italic"].as_bool() == Some(true) {
+        tags += "\\i1";
+    }
+    if style["underline"].as_bool() == Some(true) {
+        tags += "\\u1";
+    }
+    if let Some(spacing) = style["spacing"].as_f64() {
+        tags += &format!("\\fsp{}", (spacing * scale * 10.0).round() / 10.0);
     }
     match style["enter"].as_str() {
         Some("fade") => tags += "\\fad(250,0)",

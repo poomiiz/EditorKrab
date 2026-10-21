@@ -36,6 +36,35 @@ struct Text {
     shadow_opacity: Option<u8>,
     #[serde(default)]
     blend: Option<String>,
+    // CapCut-style text settings (21 Oct 2026)
+    #[serde(default)]
+    #[allow(dead_code)]
+    bold: Option<bool>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    italic: Option<bool>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    underline: Option<bool>,
+    #[serde(default)]
+    case: Option<String>,
+    #[serde(default)]
+    spacing: Option<i16>,
+    #[serde(default)]
+    align: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    glow_on: Option<bool>,
+    #[serde(default)]
+    glow_color: Option<String>,
+    #[serde(default)]
+    glow_strength: Option<u8>,
+    #[serde(default)]
+    glow_range: Option<u8>,
+    #[serde(default)]
+    shadow_angle: Option<i16>,
+    #[serde(default)]
+    box_opacity: Option<u8>,
 }
 fn hex(v: &str) -> bool {
     v.len() == 7 && v.starts_with('#') && v[1..].bytes().all(|b| b.is_ascii_hexdigit())
@@ -85,6 +114,14 @@ fn valid_text(v: &Text) -> bool {
         && v.shadow_color.as_deref().is_none_or(hex)
         && v.shadow_opacity.is_none_or(|n| n <= 100)
         && v.blend.as_deref().is_none_or(|b| BLENDS.contains(&b))
+        && v.case.as_deref().is_none_or(|c| ["none", "upper", "lower", "title"].contains(&c))
+        && v.spacing.is_none_or(|n| (-20..=100).contains(&n))
+        && v.align.as_deref().is_none_or(|a| ["left", "center", "right"].contains(&a))
+        && v.glow_color.as_deref().is_none_or(hex)
+        && v.glow_strength.is_none_or(|n| n <= 100)
+        && v.glow_range.is_none_or(|n| n <= 60)
+        && v.shadow_angle.is_none_or(|n| (-180..=180).contains(&n))
+        && v.box_opacity.is_none_or(|n| n <= 100)
 }
 /// How a text layer mixes with the video under it.
 pub const BLENDS: [&str; 4] = ["normal", "add", "screen", "multiply"];
