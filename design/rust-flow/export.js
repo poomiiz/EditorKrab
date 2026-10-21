@@ -49,5 +49,5 @@ export function createExport({project,saved,planReady}){
   finally{busy=false;paint();}
  };
  poll();
- return {refresh:paint};
+ return {refresh:paint,done:()=>status.state==='done'};
 }

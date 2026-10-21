@@ -152,7 +152,7 @@ textarea{width:100%;min-height:120px;resize:none;font:.8125rem/1.7 Consolas,"Lee
 .text-stage{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--sunken);padding:var(--space-md) var(--space-lg)}
 .preview-caption{display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm);font-size:.75rem;color:var(--mut);margin-bottom:var(--space-sm)}
 .frame-surround{flex:1;min-height:0;display:flex;justify-content:center;align-items:center}
-.text-frame{position:relative;isolation:isolate;aspect-ratio:9/16;height:100%;max-height:100%;width:auto;max-width:100%;background:var(--raised);overflow:hidden;border-radius:6px;box-shadow:0 0 0 1px var(--line)}
+.text-frame{position:relative;isolation:isolate;aspect-ratio:var(--frame-ratio,9/16);height:auto;width:min(100cqw,100cqh * var(--frame-ratio,9/16));max-height:100%;max-width:100%;background:var(--raised);overflow:hidden;border-radius:6px;box-shadow:0 0 0 1px var(--line)}
 .frame-label{position:absolute;inset:35% 0 auto;text-align:center;color:var(--mut);font-size:.8125rem;pointer-events:none}
 .preview-text{position:absolute;transform:translate(-50%,-50%);display:grid;place-items:center;min-width:44px;min-height:44px;border:1px solid transparent;background:transparent;border-radius:var(--radius-sm);padding:var(--space-xs);line-height:1.3;font-weight:650;max-width:none;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none}
 .preview-text>span{white-space:nowrap}
@@ -160,6 +160,9 @@ textarea{width:100%;min-height:120px;resize:none;font:.8125rem/1.7 Consolas,"Lee
 .preview-text:hover:not(:disabled){border-color:var(--line-strong);background:transparent}
 .preview-text:active:not(:disabled){transform:translate(-50%,-50%)}
 .preview-text[data-selected=true]{border-color:var(--acc)}
+/* boxes hug their text and the size grip is small, so one selected text does not cover the next */
+.preview-text{min-width:0;min-height:0;padding:2px 6px}
+#textResize{min-width:24px;width:24px;height:24px;min-height:24px}
 .preview-text[data-overflow=true]{border-color:var(--danger)}
 .preview-text:disabled{color:inherit;opacity:1}
 .align-guide{position:absolute;z-index:2;pointer-events:none}.align-x{left:50%;top:0;bottom:0;border-left:1px solid var(--acc)}.align-y{top:50%;left:0;right:0;border-top:1px solid var(--acc)}
@@ -360,10 +363,17 @@ textarea{font-size:.75rem}
 .story-groups{display:grid;gap:var(--space-lg);width:100%;max-width:1100px;margin:0 auto}
 .story-group{border:1px solid var(--line-strong);border-radius:var(--radius);padding:var(--space-md);display:grid;gap:var(--space-sm)}
 .story-group h3{margin:0;font-size:.9375rem}
-.story-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--space-sm)}
-.story-card{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;white-space:normal;padding:var(--space-md);border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--raised);color:var(--txt);min-height:120px}
-.story-card:hover,.story-card:focus-visible{border-color:var(--acc)}
-.story-summary{font-size:.8125rem;color:var(--txt-sub);line-height:1.45}
+.story-grid{display:grid;gap:var(--space-xs)}
+.story-row{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-xs) var(--space-sm) var(--space-xs) var(--space-xs);border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--raised)}
+.story-row:hover{border-color:var(--line-strong)}
+.story-row[data-refined=true]{border-color:var(--ok);background:color-mix(in oklch,var(--ok) 10%,var(--raised))}
+.story-marks{display:flex;gap:var(--space-xs)}.story-refined{color:var(--ok);border-color:var(--ok)}
+.story-card{flex:1;min-width:0;display:grid;grid-template-columns:auto minmax(0,18em) minmax(0,1fr) auto;align-items:center;gap:var(--space-md);text-align:left;white-space:nowrap;padding:var(--space-xs) var(--space-sm);border:1px solid transparent;border-radius:var(--radius-sm);background:none;color:var(--txt);min-height:44px}
+.story-card:hover:not(:disabled),.story-card:focus-visible{border-color:var(--acc);background:var(--acc-soft)}
+.story-card strong,.story-summary{overflow:hidden;text-overflow:ellipsis}
+.story-summary{font-size:.8125rem;color:var(--txt-sub)}.story-meta{font-variant-numeric:tabular-nums}
+.refine-steps{display:grid;gap:var(--space-xs);margin:0;padding-left:1.25rem}.refine-steps button{margin-left:var(--space-sm)}
+.plan-dialog .plan-status{justify-self:start}
 .story-status[data-done=true]{color:var(--ok)}
 .editor{display:grid;gap:var(--space-md);width:100%;max-width:1200px;margin:0 auto}
 .editor-preview{display:grid;justify-items:center;gap:var(--space-xs)}
@@ -372,7 +382,7 @@ textarea{font-size:.75rem}
 .editor-caption{position:absolute;left:6%;right:6%;bottom:14%;margin:0;text-align:center;font-weight:700;font-size:1rem;line-height:1.35;color:#fff;text-shadow:0 0 3px #000,0 0 6px #000}
 .editor-controls{gap:var(--space-md);align-items:center}.editor-zoom{margin-left:auto;display:flex;align-items:center;gap:var(--space-xs)}
 .edit-track{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--sunken)}
-.edit-lane{position:relative;height:96px}
+.edit-lane{position:relative;height:96px;cursor:text}
 .edit-mark{position:absolute;top:4px;transform:translateX(2px);white-space:nowrap}.edit-mark::before{content:"";position:absolute;left:-2px;top:0;height:86px;border-left:1px solid var(--line)}
 .edit-seg{position:absolute;top:26px;height:60px;display:flex;flex-direction:column;border:1px solid var(--acc);border-radius:6px;background:var(--acc-soft);overflow:hidden}
 .edit-seg[data-keep=false]{border-style:dashed;border-color:var(--line-strong);background:none;opacity:.6}
@@ -380,6 +390,13 @@ textarea{font-size:.75rem}
 .edit-text:focus-visible{outline:2px solid var(--focus)}
 .edit-toggle::before{width:12px;height:12px}
 .edit-toggle{align-self:flex-end;min-height:0;height:18px;width:18px;padding:0;font-size:.6875rem;line-height:1;border-radius:4px}
+.edit-grip{position:absolute;top:0;bottom:0;width:8px;min-height:0;padding:0;border:0;border-radius:0;background:var(--acc);opacity:.35;cursor:ew-resize;touch-action:none}
+.edit-grip[data-edge=start_ms]{left:0}.edit-grip[data-edge=end_ms]{right:0}
+.edit-grip:hover,.edit-grip:focus-visible{opacity:1}
+.edit-seg{padding-inline:8px}
+.edit-seg[draggable=true]{cursor:grab}.edit-seg.dragging{opacity:.4}
+.edit-seg[data-drop=before]{box-shadow:inset 3px 0 0 var(--txt)}.edit-seg[data-drop=after]{box-shadow:inset -3px 0 0 var(--txt)}
+[data-icon=pause]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='6' y='4' width='4' height='16' rx='1'/><rect x='14' y='4' width='4' height='16' rx='1'/></svg>")}
 .edit-head{position:absolute;top:0;bottom:0;width:2px;background:var(--txt);pointer-events:none;left:0}
 
 /* icons: a mask in currentColor, so JS can rewrite a button's text and the icon stays */
@@ -409,7 +426,11 @@ textarea{font-size:.75rem}
 [data-icon=gpu]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='4' y='4' width='16' height='16' rx='2'/><rect x='9' y='9' width='6' height='6' rx='1'/><path d='M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2'/></svg>")}
 [data-icon=font]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M4 20 10 4h1l6 16'/><path d='M6.5 14h8'/></svg>")}
 .text-frame video.frame-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:-1}
-.editor-style .text-workspace{min-height:min(60vh,620px)}
+.stage[data-panel="3"] .stage-body{overflow:hidden}
+#editor:not([hidden]){flex:1;min-height:0;max-width:none;grid-template-rows:minmax(0,1fr) auto auto auto}
+.editor-style{min-height:0;display:flex}.editor-style .text-workspace{flex:1;min-height:0;height:100%}
+#editTitle{display:flex;align-items:center;gap:var(--space-sm)}#editTitle span::after{content:' ·'}
+.edit-story{font:inherit;font-weight:650;max-width:min(60vw,720px);min-height:36px;padding:2px 8px;background:var(--surface)}
 .select-all{display:flex;align-items:center;gap:6px;font-size:.8125rem;color:var(--txt-sub);margin-left:auto}
 #fileList li{grid-template-columns:24px 40px minmax(0,1fr) auto}#fileList li .file-pick{grid-row:1/3;width:18px;height:18px;margin:0;accent-color:var(--acc)}
 #fileList li .file-info{grid-column:3}#fileList li .source-remove{grid-column:4}
@@ -422,6 +443,10 @@ textarea{font-size:.75rem}
 .role-row input{width:18px;height:18px;margin:0;accent-color:var(--acc);cursor:pointer}
 .role-pick{flex:1;justify-content:flex-start;text-align:left;border:0;background:none;min-height:42px}
 .role-row[data-selected=true]{border-color:var(--acc);background:var(--acc-soft)}
+/* the three subtitle kinds side by side: one row instead of three */
+.text-components:has(.role-row){grid-template-columns:repeat(3,minmax(0,1fr))}
+.text-components .role-row{padding-left:var(--space-sm);gap:4px}
+.text-components .role-pick{padding:4px;white-space:normal;line-height:1.25;font-size:.8125rem}
 
 /* step 2: send to AI, paste the answer back; numbered so the order reads at a glance */
 .ai-bar{list-style:none;padding:0;display:grid;gap:var(--space-sm);width:100%;max-width:1100px;margin:0 auto}
@@ -430,20 +455,299 @@ textarea{font-size:.75rem}
 .ai-text{display:grid;gap:2px;min-width:0}.ai-text h2{font-size:.9375rem}.ai-text .plan-status{margin-top:var(--space-xs);justify-self:start}
 
 [data-icon=paste]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect width='8' height='4' x='8' y='2' rx='1'/><path d='M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2'/></svg>")}
+
+/* the text panel fits without scrolling: labels sit beside their fields, tighter spacing */
+.text-inspector{gap:var(--space-md);padding:var(--space-md) var(--space-lg)}
+.text-components .role-pick{white-space:nowrap}
+.text-controls{gap:var(--space-sm);padding-top:var(--space-sm)}
+.text-controls>.field,.parameter-row>.field{display:grid;grid-template-columns:4.5em minmax(0,1fr);align-items:center;gap:var(--space-sm)}
+.parameter-row{grid-template-columns:1fr 1fr;gap:var(--space-sm)}
+.parameter-row>.field{grid-template-columns:auto minmax(0,1fr)}
+.parameter-row .color-more{grid-column:1/-1}
+.text-controls .preview-hint:empty{display:none}
+
+/* shape and crop: the frame follows the picked shape; the video fills it and is slid to the crop */
+.frame-surround{container-type:size}
+.text-frame video.frame-video{object-fit:cover !important;cursor:grab}
+.text-frame[data-cropping=true] video.frame-video{cursor:grabbing}
+.frame-aspect select{min-height:28px;padding:2px 6px;font-size:.75rem;background:var(--surface)}
+
+/* text effects: compact two-column rows; the entrance replays on each new live line */
+.fx summary{font-size:.8125rem;color:var(--txt-sub)}
+.fx-grid{display:grid;grid-template-columns:4.5em minmax(0,1fr);gap:var(--space-xs) var(--space-sm);align-items:center;margin-top:var(--space-xs)}
+.fx-grid label{font-size:.8125rem;color:var(--txt-sub)}.fx-pair{display:flex;gap:var(--space-xs);align-items:center}.fx-pair input[type=number]{width:5em}
+.fx-grid input[type=color]{min-height:28px;width:44px;padding:2px}.fx-grid input[type=checkbox]{width:18px;height:18px;min-height:18px;accent-color:var(--acc)}
+.preview-text>span{border-radius:6px}
+@keyframes fx-fade{from{opacity:0}}@keyframes fx-pop{from{transform:scale(.7)}}@keyframes fx-wipe{from{clip-path:inset(0 100% 0 0)}}
+.preview-text>span.entering[data-enter=fade]{animation:fx-fade .25s ease-out}.preview-text>span.entering[data-enter=pop]{animation:fx-pop .18s cubic-bezier(.22,1,.36,1)}
+.preview-text>span.entering[data-enter=wipe]{animation:fx-wipe .4s linear}
+@media(prefers-reduced-motion:reduce){.preview-text>span.entering{animation:none}}
+.editor-style .text-inspector{gap:var(--space-sm)}
+
+
+/* step 2 after an answer is read: one line, send again or paste again, stories below */
+.ai-bar[data-done=true]{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-sm)}
+.ai-bar[data-done=true]>li{grid-template-columns:minmax(0,1fr) auto;padding:var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md);gap:var(--space-sm)}
+.ai-bar[data-done=true] .ai-num,.ai-bar[data-done=true] .ai-text>.caption{display:none}
+.ai-bar[data-done=true] .ai-text{grid-auto-flow:column;justify-content:start;align-items:center;gap:var(--space-sm)}
+.ai-bar[data-done=true] .ai-text h2{font-size:.8125rem;font-weight:500;color:var(--txt-sub)}
+.ai-bar[data-done=true] .ai-text .plan-status{margin-top:0}
+.story-status[hidden]{display:none}
+.story-marks{min-width:6.5em}
+
+/* step 3 timeline in two tracks: spoken lines on top, emphasis words under them */
+.edit-lane{height:128px}
+.edit-mark::before{height:118px}
+.edit-seg{height:56px}
+/* step 3 preview: no caption row or hint, the shape picker floats on the stage, tighter padding */
+.editor-style .text-stage{position:relative;padding:var(--space-sm)}
+.editor-style .preview-caption{position:absolute;top:var(--space-sm);right:var(--space-sm);z-index:3;margin:0}
+.editor-style .preview-caption>span:first-child,.editor-style #textDragHint{display:none}
+#editor:not([hidden]){gap:var(--space-sm)}
+
+/* step 3 is the video: frame + timeline; step 4 is the text: check | workspace, with the playing story's timeline below */
+.edit-stage{min-height:0;display:flex;background:var(--sunken);border-radius:var(--radius-sm);padding:var(--space-sm)}
+.edit-stage .frame-surround{flex:1}
+.edit-frame{background:#000}
+.edit-aspect select{min-height:28px;padding:2px 6px;font-size:.75rem;background:var(--surface)}
+.stage[data-panel="4"] .stage-body{display:grid !important;grid-template-columns:min(30%,380px) minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
+.stage[data-panel="4"] .qc{grid-column:1;grid-row:1}
+.stage[data-panel="4"] #captionHost{grid-column:2;grid-row:1}
+.caption-dock{grid-column:1/-1;grid-row:2;display:grid;gap:var(--space-xs);padding:var(--space-sm) var(--space-md);border-top:1px solid var(--line);min-width:0}
+.caption-dock[hidden]{display:none}
+.caption-ai{gap:var(--space-sm);flex-wrap:wrap}.caption-ai .caption{flex:1;min-width:16em}
+#captionTransport{display:grid;gap:var(--space-xs);min-width:0}
+#editor .edit-lane{height:96px}#editor .edit-mark::before{height:86px}
+#captionTransport .edit-grip,#captionTransport .edit-toggle,#captionTransport .edit-show-cut,#captionTransport .edit-aspect{display:none}
+
+/* step 1: a card per video with what came of it; narrower tool panels */
+#fileList{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--space-md);align-items:start}
+#fileList li.file-card{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-xs) var(--space-sm);padding:0 0 var(--space-md);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);overflow:hidden}
+#fileList li.file-card+li{border-top:1px solid var(--line)}
+#fileList li.file-card:hover{background:var(--raised)}
+.file-cover{grid-column:1/-1;position:relative;aspect-ratio:16/9;background:var(--sunken);display:grid;place-items:center;overflow:hidden}
+.file-cover video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.file-cover .file-icon{grid-row:auto;height:auto;padding:4px 8px;background:transparent}
+.file-card .file-pick{position:absolute;top:8px;left:8px;z-index:1;width:20px;height:20px;min-height:20px;accent-color:var(--acc)}
+.file-card .source-remove{position:absolute;top:4px;right:4px;z-index:1;background:oklch(0% 0 0 / .45);color:#fff;border-radius:999px;min-width:32px;min-height:32px}
+.file-card .file-name,.file-card .file-info,.file-card .file-stages,.file-card .file-progress,.file-card .file-percent{grid-column:1/-1;margin:0 var(--space-md)}
+.file-card .file-name{margin-top:var(--space-sm)}
+.file-stages{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:4px}
+.file-stages li{font-size:.6875rem;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--mut)}
+.file-stages li[data-part=true]{border-color:var(--warn);color:var(--warn)}
+.file-stages li[data-done=true]{border-color:var(--ok);color:var(--ok)}
+.file-progress{height:6px;border-radius:999px;background:var(--sunken);overflow:hidden}.file-progress span{display:block;height:100%;background:var(--ok)}
+.file-percent{font-size:.75rem;color:var(--txt-sub);font-variant-numeric:tabular-nums}
+:root{--side:250px}
+.stage[data-panel="4"] .stage-body{grid-template-columns:min(24%,300px) minmax(0,1fr) !important}
+
+/* step 4: CapCut-like layers (video, speech, emphasis, English) with their show/hide at the track heads;
+   the check and the text tools share the right panel as tabs; the "on screen" ticks live on the track heads */
+.stage[data-panel="4"] .stage-body{grid-template-columns:minmax(0,1fr) !important}
+.stage[data-panel="4"] #captionHost{grid-column:1}
+.stage[data-panel="4"] #textComponents{display:none}
+.inspector-tabs{display:none;gap:2px;border-bottom:1px solid var(--line)}
+.stage[data-panel="4"] .inspector-tabs{display:flex}
+.inspector-tabs button{flex:1;min-height:32px;border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--txt-sub);font-size:.8125rem}
+.inspector-tabs button[aria-selected=true]{border-bottom-color:var(--acc);color:var(--txt);font-weight:600}
+.text-inspector .qc{display:none;border:0;padding:0;flex:1;min-height:0;background:none}
+.stage[data-panel="4"] .text-inspector[data-tab=qc] .qc{display:flex}
+.stage[data-panel="4"] .text-inspector[data-tab=qc]>:not(.inspector-tabs):not(.qc){display:none !important}
+.line-words{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.stage:not([data-panel="4"]) .line-words{display:none}
+.line-words .caption{flex-basis:100%}
+.line-word{min-height:26px;padding:0 8px;font-size:.75rem;border-radius:999px}
+.line-word[aria-pressed=true]{border-color:var(--warn);background:color-mix(in oklch,var(--warn) 28%,transparent);color:var(--txt);font-weight:600}
+#captionTransport{grid-template-columns:104px minmax(0,1fr);column-gap:0}
+#captionTransport>.editor-controls{grid-column:1/-1;grid-row:1}#captionTransport>#layerHeads,#captionTransport>#editTrack{grid-row:2}
+#captionTransport>#editTrack{grid-column:2;border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+.layer-heads{grid-column:1;position:relative;border:1px solid var(--line);border-right:0;border-radius:var(--radius-sm) 0 0 var(--radius-sm);background:var(--panel)}
+.layer-head{position:absolute;left:0;right:0;display:flex;align-items:center;gap:6px;padding:0 8px;font-size:.75rem;color:var(--txt-sub);border-top:1px solid var(--line)}
+.layer-head input{width:16px;height:16px;min-height:16px;margin:0;accent-color:var(--acc)}
+.layer-head button{all:unset;cursor:pointer}.layer-head button:hover{color:var(--txt)}
+#captionTransport .edit-lane{height:166px}
+#captionTransport .edit-mark::before{height:156px}
+#captionTransport .edit-seg{top:52px;height:34px;border-color:var(--line-strong);background:var(--raised)}
+#captionTransport .edit-seg[data-line-selected=true]{border-color:var(--acc);background:var(--acc-soft)}
+#captionTransport .edit-text{-webkit-line-clamp:1;line-height:30px;padding:0 6px}
+.edit-vid{position:absolute;top:26px;height:20px;border-radius:4px;background:color-mix(in oklch,var(--acc) 35%,var(--raised));pointer-events:none}
+.edit-emph{position:absolute;top:92px;height:30px;padding:0 6px;border:1px solid var(--warn);border-radius:6px;background:color-mix(in oklch,var(--warn) 28%,var(--surface));color:var(--txt);font-size:.75rem;font-weight:600;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:0;z-index:1}
+.edit-layer-off .edit-emph,.edit-layer-off-speech .edit-seg{opacity:.35}
+
+/* the story picker stays in the title on steps 3 and 4; step 4's preview drops its caption row like step 3 */
+#captionsTitle{display:flex;align-items:center;gap:var(--space-sm)}#captionsTitle>span::after{content:' ·'}
+.caption-ai{justify-content:flex-end}.caption-ai-label{font-size:.8125rem;color:var(--txt-sub);margin-right:auto}
+.stage[data-panel="4"] .text-stage{position:relative;padding:var(--space-sm)}
+.stage[data-panel="4"] .preview-caption{position:absolute;top:var(--space-sm);right:var(--space-sm);z-index:3;margin:0}
+.stage[data-panel="4"] .preview-caption>span:first-child,.stage[data-panel="4"] #textDragHint{display:none}
+
+/* step 4: the preview gets the room; AI buttons sit in the play row, layers are slimmer */
+.stage[data-panel="4"] .caption-dock{padding:var(--space-xs) var(--space-md)}
+#captionTransport .caption-ai{display:flex;gap:var(--space-xs);margin-left:auto}
+#captionTransport .caption-ai button{min-height:32px;padding:0 10px;font-size:.8125rem}
+#captionTransport .editor-zoom{margin-left:var(--space-sm)}
+#editor .caption-ai{display:none}
+#captionTransport .editor-controls{gap:var(--space-sm)}
+#captionTransport .edit-lane{height:112px}
+#captionTransport .edit-mark::before{height:104px}
+.edit-vid{top:24px;height:12px}
+#captionTransport .edit-seg{top:39px;height:24px}
+#captionTransport .edit-text{line-height:22px;font-size:.75rem}
+.edit-emph{top:65px;height:22px;line-height:20px}
+
+/* one top row (name, steps, save, menu) and a thin stage row; everything else goes to the work area */
+.app{grid-template-rows:auto minmax(0,1fr)}
+.topbar-inner{gap:var(--space-md);min-height:44px;padding:0 var(--space-lg)}
+.topbar .brand{white-space:nowrap}
+.project-field{max-width:220px;flex:0 1 220px}
+.project-field input{min-height:32px;padding-block:2px}
+.topbar .steps{flex:1;min-width:0;padding:0;border:0;justify-content:center;background:transparent}
+.topbar .steps button{min-height:44px;padding:0 var(--space-sm);font-size:.8125rem}
+.topbar .steps button+button::before{width:16px;margin-right:var(--space-sm)}
+.topbar-actions.doc-tools{margin-left:0}
+/* the work is named on step 1 only */
+.topbar:has([data-step="1"]:not([aria-current])) .project-field{display:none}
+.stage>.stage-head{padding:var(--space-xs) var(--space-lg);min-height:0;border-bottom:1px solid var(--line)}
+.stage>.stage-head h1{font-size:1rem;line-height:1.3}
+.stage>.stage-head select.edit-story{min-height:30px;padding-block:2px}
+.stage>.stage-foot{padding:var(--space-xs) var(--space-lg) var(--space-xs) var(--space-sm);border-bottom:1px solid var(--line)}
+.stage>.stage-foot button{min-height:32px;min-width:0;padding-inline:var(--space-md)}
+
+/* short notes pop up at the bottom and go away by themselves, so nothing around them jumps */
+.toast{position:fixed !important;left:50%;bottom:24px;transform:translateX(-50%);z-index:1000;margin:0 !important;max-width:min(560px,90vw);padding:8px 16px;border:1px solid var(--line-strong);border-radius:999px;background:var(--raised);color:var(--txt);font-size:.875rem;box-shadow:0 8px 24px oklch(0% 0 0 / .35);white-space:normal;pointer-events:none}
+.toast[hidden]{display:none !important}
+
+/* step 4's tool panel: wider, and an icon in front of every tool so it reads at a glance */
+.stage[data-panel="4"] .text-workspace{grid-template-columns:minmax(0,1fr) 360px}
+.inspector-tabs [data-tab=style]::before{content:"✏️ "}
+.inspector-tabs [data-tab=qc]::before{content:"✅ "}
+#textRoleTitle::before{content:"🅰️ "}
+label[for="text-text"]>span::before{content:"💬 "}
+label[for="text-font"]>span::before{content:"🔤 "}
+label[for="text-size"]>span::before{content:"📏 "}
+#colorLabel::before{content:"🎨 "}
+label[for="text-color-hex"]>span::before{content:"#️⃣ "}
+details:has(#localFonts)>summary::after{content:" 💻"}
+details:has(#text-color-hex)>summary::after{content:" #️⃣"}
+details:has(#fx-outline)>summary::after{content:" ✨"}
+label[for="fx-outline"]::before{content:"🔲 "}
+label[for="fx-shadow"]::before{content:"🌑 "}
+label[for="fx-box"]::before{content:"🟦 "}
+label[for="fx-enter"]::before{content:"🎬 "}
+#textQcTitle::before{content:"✅ "}
+.line-words .caption::before{content:"⭐ "}
+
+/* the check in the side panel: one column, badge and time on one line, the text at full width */
+.text-inspector .qc-finding{grid-template-columns:auto minmax(0,1fr);gap:4px var(--space-sm);align-items:center}
+.text-inspector .qc-finding .badge{grid-row:auto}
+.text-inspector .qc-finding>:not(.badge):not(.qc-head){grid-column:1/-1}
+.text-inspector .qc-shown{font-size:.9375rem}
+
+/* Unit 0 review: panels grow with the screen, labels fit on one line, nothing jumps */
+.stage[data-panel="4"] .text-workspace,.stage[data-panel="5"] .text-workspace{grid-template-columns:minmax(0,1fr) clamp(360px,26vw,500px)}
+.text-controls>.field{grid-template-columns:7.5em minmax(0,1fr)}
+.stage[data-panel="4"] label[for="text-text"]{display:none}
+.stage[data-panel="2"] .stage-body{padding-top:var(--space-md)}
+.story-marks{min-width:12em}
+#editVideoNote{min-height:1.4em}
+
+/* step 4 check: no title (the tab says it), counts as coloured dots, each finding boxed in its colour */
+.text-inspector #textQcTitle{display:none}
+.text-inspector #textQcSummary{font-size:1rem;color:var(--txt);letter-spacing:.02em}
+.text-inspector .qc-finding .badge{display:none}
+.text-inspector .qc-finding{grid-template-columns:minmax(0,1fr);border:1px solid var(--line);border-left-width:4px;border-radius:var(--radius-sm);padding:var(--space-sm) var(--space-md)}
+.text-inspector .qc-finding>*{grid-column:1/-1}
+.text-inspector .qc-finding[data-severity=critical]{border-color:var(--danger);background:color-mix(in oklch,var(--danger) 12%,transparent)}
+.text-inspector .qc-finding[data-severity=moderate]{border-color:var(--warn);background:color-mix(in oklch,var(--warn) 12%,transparent)}
+.text-inspector .qc-finding[data-severity=minor]{border-color:var(--ok);background:color-mix(in oklch,var(--ok) 12%,transparent)}
+#captionTransport .frame-aspect select{min-height:32px;padding:2px 8px;font-size:.8125rem}
+
+/* shadow blur and colour, blend mode, and entrance picked from looping samples instead of a list */
+label[for="fx-shadow-blur"]::before{content:"🌫️ "}
+label[for="fx-blend"]::before{content:"🌗 "}
+.fx-grid .enter-tiles{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.enter-tile{display:grid;justify-items:center;gap:2px;min-height:0;padding:6px 2px;border-radius:var(--radius-sm)}
+.enter-tile[aria-pressed=true]{border-color:var(--acc);background:var(--acc-soft)}
+.enter-tile small{font-size:.6875rem;color:var(--txt-sub)}
+.enter-sample{display:block;height:24px;line-height:24px;font-weight:700;font-size:1rem;color:var(--txt)}
+.enter-sample[data-sample=fade]{animation:sample-fade 1.6s ease-out infinite}
+.enter-sample[data-sample=pop]{animation:sample-pop 1.6s cubic-bezier(.22,1,.36,1) infinite}
+.enter-sample[data-sample=wipe]{animation:sample-wipe 1.6s linear infinite}
+.enter-sample[data-sample=words]{animation:sample-words 1.6s steps(3,end) infinite}
+@keyframes sample-fade{0%{opacity:0}40%,100%{opacity:1}}
+@keyframes sample-pop{0%{transform:scale(.6)}25%,100%{transform:scale(1)}}
+@keyframes sample-wipe{0%{clip-path:inset(0 100% 0 0)}50%,100%{clip-path:inset(0 0 0 0)}}
+@keyframes sample-words{0%{clip-path:inset(0 66% 0 0)}100%{clip-path:inset(0 0 0 0)}}
+@media(prefers-reduced-motion:reduce){.enter-sample{animation:none}}
+.fx-grid{grid-template-columns:7.5em minmax(0,1fr)}.fx-grid>label{white-space:nowrap}
+
+/* step 4: no word chips in the panel; tool sections are always open with a header bar; a wide panel lays
+   the tools out in two columns so everything shows at once */
+.stage[data-panel="4"] #lineWords{display:none !important}
+.text-inspector details>summary{cursor:default;list-style:none;font-weight:600;color:var(--txt);padding:6px 0 4px;border-bottom:1px solid var(--line);margin-bottom:var(--space-xs)}
+.text-inspector details>summary::-webkit-details-marker{display:none}
+.text-inspector details>summary::marker{content:''}
+.text-inspector{container-type:inline-size}
+@container (min-width:540px){
+ #textControls{grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:var(--space-lg);align-items:start}
+ #textControls>h2,#textControls>.field-warning,#textControls>.preview-hint{grid-column:1/-1}
+ #textControls>details.fx{grid-column:2;grid-row:2/span 8}
+ #textControls>:not(h2):not(.field-warning):not(.preview-hint):not(details.fx){grid-column:1}
+}
+
+/* shadow: size, blur, colour and opacity in one row, each with a small label above */
+.fx-shadow-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.fx-mini{display:grid;gap:2px;min-width:0}.fx-mini small{font-size:.6875rem;color:var(--txt-sub)}
+.fx-mini input{width:100%;min-width:0}.fx-mini input[type=color]{width:100%;height:32px}
+
+/* text tools: label column + control column on every row; fonts listed in their own face */
+.tool-row{display:grid;grid-template-columns:6.5em minmax(0,1fr);align-items:center;gap:var(--space-sm)}
+.tool-row>label{font-size:.8125rem;color:var(--txt-sub);white-space:nowrap}
+.font-pick{display:flex;gap:var(--space-xs);min-width:0}.font-pick input{flex:1;min-width:0}
+.font-pick button{white-space:nowrap;min-height:36px;padding-inline:10px;font-size:.8125rem}
+.font-list{display:grid;max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--sunken)}
+.font-list button{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;gap:var(--space-sm);padding:8px 12px;cursor:pointer;font-size:1rem;color:var(--txt);border-bottom:1px solid var(--line)}
+.font-list button small{font:400 .6875rem/1.4 system-ui,sans-serif;color:var(--mut)}
+.font-list button:hover,.font-list button:focus-visible{background:var(--raised)}
+.font-list button[aria-selected=true]{background:var(--acc-soft);box-shadow:inset 0 0 0 1px var(--acc)}
+.size-colour{display:grid;grid-template-columns:5.5em auto 44px minmax(5.5em,1fr);gap:var(--space-xs);align-items:center}
+.size-colour>label{font-size:.8125rem;color:var(--txt-sub);white-space:nowrap;padding-left:var(--space-xs)}
+.size-colour input[type=color]{width:44px;height:36px;padding:2px}
+.text-inspector summary::before{display:none}
+
+/* wide panel: the effects float on the right beside the font, size and colour rows */
+#textControls>details.fx{order:10}
+@container (min-width:540px){
+ #textControls{display:block}
+ #textControls>*+*{margin-top:var(--space-sm)}
+ #textControls>details.fx{float:right;width:calc(50% - var(--space-md));margin:0 0 0 var(--space-lg)}
+}
+
+/* nothing overflows: the font button wraps under a full-width field, colour is swatch + code, the shadow's
+   four boxes take the full effects width under their label, and number boxes drop their spinners */
+.font-pick{flex-wrap:wrap}.font-pick input{flex:1 1 100%}
+.colour-pick{display:grid;grid-template-columns:44px minmax(0,1fr);gap:var(--space-xs)}
+.colour-pick input[type=color]{width:44px;height:36px;padding:2px}
+.tool-row>*{min-width:0}
+.fx-grid>label[for="fx-shadow"]{grid-column:1/-1}
+.fx-grid .fx-shadow-row{grid-column:1/-1}
+.text-inspector input[type=number]{-moz-appearance:textfield;appearance:textfield}
+.text-inspector input[type=number]::-webkit-inner-spin-button,.text-inspector input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.fx-grid>*{min-width:0}
 </style>
 </head>
 <body data-loading="true">
 <a class="skip" href="#workspace">ข้ามไปพื้นที่ทำงาน</a>
+<p id="toast" class="badge toast" role="status" hidden></p>
 <div class="app">
 <header class="topbar"><div class="topbar-inner">
 <strong class="brand"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9 5 3-5 3Z"/></svg>EditorKrab</strong>
 <div class="project-field"><label for="title" class="sr-only">ชื่องาน</label><input id="title" maxlength="120" placeholder="ตั้งชื่องานนี้" autocomplete="off"></div>
-<div class="topbar-actions doc-tools"><span id="saved" class="badge" role="status" aria-live="polite">กำลังอ่านร่าง</span><div class="row history"><button id="undo" class="icon" aria-label="เลิกทำ" title="เลิกทำ" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button><button id="redo" class="icon" aria-label="ทำซ้ำ" title="ทำซ้ำ" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button></div></div>
-<div class="topbar-actions"><button id="fork" hidden>บันทึกเป็นงานใหม่</button><details class="more"><summary aria-label="เมนูงาน" title="เปิดงาน / สำรองงาน"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></summary><div class="more-menu"><button id="open" aria-label="เปิดงานที่บันทึกไว้" data-icon="folder">เปิดงาน</button><button id="backup" data-icon="download">ดาวน์โหลดสำรอง</button></div></details><button id="theme" aria-label="สลับโหมดมืดหรือสว่าง"><svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg><svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button><input id="openFile" type="file" accept=".json" hidden></div>
-</div></header>
 <nav class="steps" aria-label="ขั้นตอนทำคลิป">
 <button data-step="1"><span class="step-number">01</span><small>ใส่วิดีโอ</small></button><button data-step="2"><span class="step-number">02</span><small>สรุปเนื้อหา</small></button><button data-step="3"><span class="step-number">03</span><small>ตัดต่อ</small></button><button data-step="4"><span class="step-number">04</span><small>ตรวจซับ</small></button><button data-step="5"><span class="step-number">05</span><small>หัวคลิป</small></button><button data-step="6"><span class="step-number">06</span><small>รับคลิป</small></button>
-</nav>
+</nav><div class="topbar-actions doc-tools"><span id="saved" class="badge" role="status" aria-live="polite">กำลังอ่านร่าง</span><div class="row history"><button id="undo" class="icon" aria-label="เลิกทำ" title="เลิกทำ" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button><button id="redo" class="icon" aria-label="ทำซ้ำ" title="ทำซ้ำ" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button></div></div>
+<div class="topbar-actions"><button id="fork" hidden>บันทึกเป็นงานใหม่</button><details class="more"><summary aria-label="เมนูงาน" title="เปิดงาน / สำรองงาน"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></summary><div class="more-menu"><button id="open" aria-label="เปิดงานที่บันทึกไว้" data-icon="folder">เปิดงาน</button><button id="backup" data-icon="download">ดาวน์โหลดสำรอง</button></div></details><button id="theme" aria-label="สลับโหมดมืดหรือสว่าง"><svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg><svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button><input id="openFile" type="file" accept=".json" hidden></div>
+</div></header>
 <main>
 <div class="boot-state" role="status"><span>กำลังเปิดร่าง</span><div class="skeleton-line"></div><div class="skeleton-line"></div></div>
 <div class="workspace" id="workspace" tabindex="-1">
@@ -491,39 +795,42 @@ textarea{font-size:.75rem}
 <dialog id="planDialog" class="plan-dialog" aria-labelledby="planTitle"><form method="dialog"><h2 id="planTitle">วางคำตอบจาก AI</h2><p class="caption">คัดลอกคำตอบทั้งหมดจากแชท AI แล้ววางในช่องนี้</p>
 <label class="field plan-field"><span class="sr-only">คำตอบจาก AI</span><textarea id="plan" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label>
 <div class="row plan-dialog-actions"><button value="close">ปิด</button><button value="close" class="primary">ใช้คำตอบนี้</button></div></form></dialog>
+<dialog id="emphasisDialog" class="plan-dialog" aria-labelledby="emphasisTitle"><form method="dialog"><h2 id="emphasisTitle">วางคำตอบคำเน้นจาก AI</h2><p class="caption">คัดลอกคำตอบทั้งหมดจากแชท AI แล้ววางในช่องนี้</p><label class="field plan-field"><span class="sr-only">คำตอบคำเน้นจาก AI</span><textarea id="emphasisAnswer" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><p id="emphasisCheck" class="badge plan-status" role="status" hidden></p><div class="row plan-dialog-actions"><button value="close">ปิด</button><button id="emphasisApply" value="close" class="primary" data-icon="check" disabled>ใช้คำตอบนี้</button></div></form></dialog>
+<dialog id="refineDialog" class="plan-dialog" aria-labelledby="refineTitle"><form method="dialog"><h2 id="refineTitle">ตัดต่อเรียบเรียง</h2><ol class="refine-steps caption"><li><span id="refineCopyNote">กำลังคัดลอก</span> <button type="button" id="refineCopy" data-icon="copy">คัดลอกอีกครั้ง</button></li><li>คัดลอกคำตอบทั้งหมดจากแชท แล้ววางในช่องนี้</li></ol><label class="field plan-field"><span class="sr-only">คำตอบจาก AI สำหรับเรื่องนี้</span><textarea id="refineAnswer" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><p id="refineStatus" class="badge plan-status" role="status" hidden></p><div class="row plan-dialog-actions"><button value="close">ปิด</button><button id="refineApply" value="close" class="primary" data-icon="check" disabled>ใช้คำตอบนี้</button></div></form></dialog>
 </div>
 <div class="stage-foot"><button class="back" data-go="1" data-icon="back">ย้อนกลับ</button><div class="actions"><button data-go="3">ถัดไป</button></div></div>
 </section>
 <section class="stage" data-panel="3" hidden aria-labelledby="editTitle">
-<div class="stage-head"><div><h1 id="editTitle">ตัดต่อ</h1><p>กล่องสีคือท่อนที่ใช้ เส้นประคือท่อนที่ตัดทิ้ง กดข้อความเพื่อฟัง กด ✕ / + เพื่อตัดทิ้งหรือเก็บ</p></div><button id="editReviewed" type="button" data-icon="check">ตรวจเรื่องนี้แล้ว</button></div>
+<div class="stage-head"><div><h1 id="editTitle"><span>ตัดต่อ</span><select id="editStory" class="edit-story" aria-label="เลือกเรื่องที่จะตัดต่อ" hidden></select></h1><p>กล่องสีคือท่อนที่ใช้ เส้นประคือท่อนที่ตัดทิ้ง กดข้อความเพื่อฟัง กด ✕ / + เพื่อตัดทิ้งหรือเก็บ</p></div><button id="editReviewed" type="button" data-icon="check">ตรวจเรื่องนี้แล้ว</button></div>
 <div class="stage-body">
 <p id="editEmpty" class="caption">วางคำตอบจาก AI ในขั้น 2 แล้วเลือกเรื่องที่จะตัดต่อ</p>
 <div id="editor" class="editor" hidden>
-<div id="editStyleHost" class="editor-style"></div><video id="editVideo" class="frame-video" playsinline preload="metadata"></video><p id="editVideoNote" class="caption" role="status"></p>
-<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="60" value="12"></label></div>
+<div class="edit-stage"><div class="frame-surround"><div id="editFrame" class="text-frame edit-frame"></div></div></div><video id="editVideo" class="frame-video" playsinline preload="metadata" title="ลากภาพเพื่อเลื่อนตำแหน่งครอป"></video><p id="editVideoNote" class="caption" role="status"></p>
+<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play" title="เว้นวรรค เล่น/หยุด · ← → ทีละเฟรม (Shift ทีละวินาที) · Q ตัดต้นท่อนถึงหัวเล่น · W ตัดท้ายท่อนถึงหัวเล่น · Delete ตัดท่อนนี้ทิ้ง">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><label class="edit-aspect"><span class="sr-only">ขนาดคลิป</span><select id="editAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
 <div id="editTrack" class="edit-track"></div>
 </div>
 </div>
 <div class="stage-foot"><button class="back" data-go="2" data-icon="back">กลับไปหน้าเรื่อง</button><div class="actions"><button class="primary" data-go="4">ถัดไป</button></div></div>
 </section>
 <section class="stage" data-panel="4" hidden aria-labelledby="captionsTitle">
-<div class="stage-head"><div><h1 id="captionsTitle">ซับ</h1><p>เลือกสิ่งที่จะขึ้นจอ แล้วลากวางตำแหน่ง</p></div></div>
+<div class="stage-head"><div><h1 id="captionsTitle"><span>ซับ</span></h1><p>เลือกสิ่งที่จะขึ้นจอ แล้วลากวางตำแหน่ง</p></div></div>
 <div class="stage-body">
-<section class="qc" aria-labelledby="textQcTitle"><h2 id="textQcTitle">ตรวจซับ</h2><p id="textQcSummary" class="caption" role="status"></p><button id="textQcGo" data-go="1" hidden>ไปขั้น 1</button><ol id="textQcList" class="qc-list"></ol></section>
-<div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
-<div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><span class="badge">9:16</span></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
-<aside class="text-inspector" aria-label="ปรับข้อความ">
-<fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำสำคัญ</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">คำแปลอังกฤษ</button></div></fieldset>
+
+<div id="captionDock" class="caption-dock"><div class="row caption-ai"><button id="emphasisCopy" type="button" data-icon="copy" title="คัดลอกท่อนที่ใช้ทุกเรื่องไปให้ AI เลือกคำเน้น">AI เลือกคำเน้น</button><button id="emphasisOpen" type="button" data-icon="paste" title="วางคำตอบจาก AI">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status toast" role="status" hidden></p></div><div id="captionTransport"><div id="layerHeads" class="layer-heads"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
+<div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><label class="frame-aspect"><span class="sr-only">ขนาดคลิป</span><select id="frameAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
+<aside class="text-inspector" aria-label="ปรับข้อความ"><div class="inspector-tabs" role="tablist"><button type="button" role="tab" data-tab="style" aria-selected="true">ปรับข้อความ</button><button type="button" role="tab" data-tab="qc" aria-selected="false">ตรวจซับ</button></div><div id="lineWords" class="line-words" hidden></div>
+<fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำเน้น</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">อังกฤษ</button></div></fieldset>
 <div id="headlineActions" class="row" hidden><button id="addHeadline" class="primary" data-icon="plus">เพิ่มข้อความ</button><button id="removeHeadline" data-icon="trash">ลบข้อความนี้</button></div>
 <p id="textSelectionHint" class="selection-hint">ติ๊กอย่างน้อย 1 อย่าง</p>
-<div id="textControls" class="text-controls" hidden><h2 id="textRoleTitle">ข้อความพูด</h2>
+<div id="textControls" class="text-controls" hidden><h2 id="textRoleTitle">ข้อความพูด</h2><details class="fx"><summary>เอฟเฟกต์ (ขอบ เงา แถบหลัง ตอนขึ้น)</summary><div class="fx-grid"><label for="fx-outline">ขอบ</label><span class="fx-pair"><input id="fx-outline" type="number" min="0" max="20" step="1" inputmode="numeric"><input id="fx-outline-color" type="color" aria-label="สีขอบ"></span><label for="fx-shadow">เงา</label><span class="fx-shadow-row"><span class="fx-mini"><small>ขนาด</small><input id="fx-shadow" type="number" min="0" max="20" step="1" inputmode="numeric"></span><span class="fx-mini"><small>เบลอ</small><input id="fx-shadow-blur" type="number" min="0" max="20" step="1" inputmode="numeric" aria-label="เบลอเงา"></span><span class="fx-mini"><small>สี</small><input id="fx-shadow-color" type="color" aria-label="สีเงา"></span><span class="fx-mini"><small>ทึบ %</small><input id="fx-shadow-opacity" type="number" min="0" max="100" step="5" inputmode="numeric" aria-label="ความทึบของเงา"></span></span><label for="fx-blend">โหมดผสม</label><select id="fx-blend"><option value="normal">ปกติ</option><option value="add">Add (สว่างขึ้น)</option><option value="screen">Screen (สว่างนุ่ม)</option><option value="multiply">Multiply (เข้มขึ้น)</option></select><label for="fx-box">แถบหลัง</label><span class="fx-pair"><input id="fx-box" type="checkbox"><input id="fx-box-color" type="color" aria-label="สีแถบพื้นหลัง"></span><label>ตอนขึ้น</label><div class="enter-tiles" role="group" aria-label="ตอนขึ้น"><button type="button" class="enter-tile" data-enter-pick="none" aria-pressed="false"><span class="enter-sample" data-sample="none">Aa</span><small>ไม่มี</small></button><button type="button" class="enter-tile" data-enter-pick="fade" aria-pressed="false"><span class="enter-sample" data-sample="fade">Aa</span><small>จางเข้า</small></button><button type="button" class="enter-tile" data-enter-pick="pop" aria-pressed="false"><span class="enter-sample" data-sample="pop">Aa</span><small>เด้ง</small></button><button type="button" class="enter-tile" data-enter-pick="wipe" aria-pressed="false"><span class="enter-sample" data-sample="wipe">Aa</span><small>กวาดเปิด</small></button><button type="button" class="enter-tile" data-enter-pick="words" aria-pressed="false"><span class="enter-sample" data-sample="words">ก ข ค</span><small>คำต่อคำ</small></button></div><select id="fx-enter" hidden><option value="none">ไม่มี</option><option value="fade">จางเข้า</option><option value="pop">เด้ง</option><option value="wipe">กวาดเปิด</option><option value="words">คำต่อคำ</option></select></div></details>
 <label class="field" for="text-text"><span id="sampleLabel">ข้อความตัวอย่าง</span><input id="text-text" maxlength="80" autocomplete="off"></label>
-<label class="field" for="text-font"><span>ฟอนต์</span><input id="text-font" list="textFonts" maxlength="128" autocomplete="off" aria-describedby="fontStatus"><datalist id="textFonts"><option value="ฟอนต์ระบบ"></option><option value="Tahoma"></option><option value="Leelawadee UI"></option></datalist></label>
+<div class="tool-row"><label for="text-font">🔤 ฟอนต์</label><div class="font-pick"><input id="text-font" list="textFonts" maxlength="128" autocomplete="off" aria-describedby="fontStatus" aria-controls="fontList"><datalist id="textFonts"><option value="ฟอนต์ระบบ"></option><option value="Tahoma"></option><option value="Leelawadee UI"></option></datalist><button id="localFonts" type="button" data-icon="font" title="อ่านรายชื่อฟอนต์ที่ติดตั้งในเครื่องนี้">ฟอนต์ในเครื่อง</button></div></div>
+<div id="fontList" class="font-list" role="listbox" aria-label="ฟอนต์ในเครื่อง" hidden></div>
 <p id="fontStatus" class="preview-hint" role="status"></p>
-<details class="font-more"><summary>ใช้ฟอนต์อื่นในเครื่อง</summary><button id="localFonts" type="button" data-icon="font">แสดงฟอนต์ในเครื่อง</button></details>
-<div class="parameter-row"><label class="field" for="text-size"><span>ขนาด</span><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"></label><div class="field"><label id="colorLabel" for="text-color">สี</label><input id="text-color" type="color" aria-labelledby="colorLabel"><details class="color-more"><summary>ใส่รหัสสี</summary><label class="field" for="text-color-hex"><span>รหัสสี เช่น #FFFFFF</span><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false"></label></details></div></div>
+<div class="tool-row"><label for="text-size">📏 ขนาด</label><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"></div>
+<div class="tool-row"><label id="colorLabel" for="text-color">สี</label><div class="colour-pick"><input id="text-color" type="color" aria-labelledby="colorLabel"><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false" aria-label="รหัสสี เช่น #FFFFFF" placeholder="#FFFFFF"></div></div>
 <p id="textFieldError" class="field-warning" role="status" hidden></p></div>
-</aside></div></div>
+<section class="qc" aria-labelledby="textQcTitle"><h2 id="textQcTitle">ตรวจซับ</h2><p id="textQcSummary" class="caption" role="status"></p><button id="textQcGo" data-go="1" hidden>ไปขั้น 1</button><ol id="textQcList" class="qc-list"></ol></section></aside></div></div>
 </div>
 <div class="stage-foot"><button class="back" data-go="3" data-icon="back">ย้อนกลับ</button><div class="actions"><button class="primary" data-go="5">ถัดไป</button></div></div>
 </section>
@@ -532,7 +839,7 @@ textarea{font-size:.75rem}
 <div class="stage-body">
 <div id="headlineHost"></div>
 </div>
-<details id="headlineAi" class="headline-optional"><summary>ให้ AI ช่วยคิดหัวคลิป</summary><div class="headline-exchange"><label class="field" for="headlineReply"><span>คำตอบจาก AI</span><textarea id="headlineReply" maxlength="32000" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><p id="headlineStatus" class="plan-status" role="status"></p><button id="applyHeadline" data-icon="check">ใช้คำตอบนี้</button></div>
+<details id="headlineAi" class="headline-optional"><summary>ให้ AI ช่วยคิดหัวคลิป</summary><div class="headline-exchange"><label class="field" for="headlineReply"><span>คำตอบจาก AI</span><textarea id="headlineReply" maxlength="32000" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><p id="headlineStatus" class="plan-status toast" role="status" hidden></p><button id="applyHeadline" data-icon="check">ใช้คำตอบนี้</button></div>
 <div class="headline-packet"><p id="headlinePrerequisite"></p><button id="headlinePacket" data-icon="download">ดาวน์โหลดไฟล์ให้ AI</button></div>
  </details>
 <div class="stage-foot"><button class="back" data-go="4" data-icon="back">ย้อนกลับ</button><div class="actions"><button data-go="6">ถัดไป</button></div></div>

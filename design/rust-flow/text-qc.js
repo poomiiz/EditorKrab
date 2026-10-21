@@ -11,10 +11,11 @@ export function createTextQc({texts,summary,list,listen,edit,go}){
   if(running){again=true;return;}
   running=true;lastKey=key;
   try{
-   go.hidden=items.length>0;summary.closest('.qc').hidden=!items.length;
+   go.hidden=items.length>0;
    if(!items.length){summary.textContent='ยังไม่มีซับ ถอดเสียงที่ขั้น 1 ก่อน';list.replaceChildren();return;}
    summary.textContent='กำลังตรวจ';
-   const response=await fetch('/api/v1/text-qc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
+   // the server takes only these fields; subtitle lines also carry segment and source ids for steps 2 and 3
+   const response=await fetch('/api/v1/text-qc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:items.map(({kind,id,text,start_ms,end_ms,source})=>({kind,id,text,start_ms,end_ms,source}))})});
    const value=await response.json();if(!response.ok)throw Error(value.error || 'text_qc_failed');
    paint(items,value.findings);
   }catch(error){lastKey='';summary.textContent='ตรวจข้อความไม่ได้ ('+error.message+')';}
@@ -24,8 +25,8 @@ export function createTextQc({texts,summary,list,listen,edit,go}){
   // One row per text that needs a look, worst first in time order; texts without findings pass silently.
   const groups=new Map();
   for(const f of findings){const key=f.id ?? `${f.kind}@${f.start_ms}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f);}
-  const count=level=>findings.filter(f=>f.severity===level).length;
-  summary.textContent=groups.size?`ตรวจ ${items.length} ข้อความ ต้องฟัง ${groups.size} จุด (ร้ายแรง ${count('critical')} / ปานกลาง ${count('moderate')} / เล็กน้อย ${count('minor')}) ที่เหลือผ่าน`:`ตรวจ ${items.length} ข้อความ ผ่านทั้งหมด`;
+  const count=level=>[...groups.values()].filter(g=>order.find(l=>g.some(f=>f.severity===l))===level).length;
+  summary.textContent=groups.size?`🔴 ${count('critical')}   🟡 ${count('moderate')}   🟢 ${count('minor')}`:'✅ ผ่านทั้งหมด';summary.title=`ตรวจ ${items.length} ข้อความ · แดง ร้ายแรง · เหลือง ปานกลาง · เขียว เล็กน้อย`;
   list.replaceChildren(...[...groups.values()].map(group=>{
    const first=group[0],worst=order.find(level=>group.some(f=>f.severity===level));
    const row=document.createElement('li');row.className='qc-finding';row.dataset.severity=worst;

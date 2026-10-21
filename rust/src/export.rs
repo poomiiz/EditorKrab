@@ -9,6 +9,29 @@ use std::path::{Path, PathBuf};
 pub const WIDTH: u32 = 1080;
 pub const HEIGHT: u32 = 1920;
 
+/// The finished clip's size for the shape picked in step 3: 9:16 unless 1:1 or 16:9 was chosen.
+pub fn frame(document: &Value) -> (u32, u32) {
+    match document["output"]["aspect"].as_str() {
+        Some("1:1") => (1080, 1080),
+        Some("16:9") => (1920, 1080),
+        _ => (WIDTH, HEIGHT),
+    }
+}
+
+/// Where a video's crop window sits, 0..1 across the slack left and right (x) and above and below (y);
+/// the window is the largest one of the clip's shape. Keyed by the draft's source_id, centred when unset.
+pub fn crop(document: &Value, path: &Path) -> (f64, f64) {
+    let id = document["files"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|f| f["path"].as_str().map(Path::new) == Some(path))
+        .and_then(|f| f["source_id"].as_str());
+    let c = id.map(|id| &document["crops"][id]).unwrap_or(&Value::Null);
+    let at = |v: &Value| v.as_f64().filter(|v| v.is_finite()).unwrap_or(0.5).clamp(0.0, 1.0);
+    (at(&c["x"]), at(&c["y"]))
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Piece {
     /// Index into `Story::sources`.
@@ -18,6 +41,12 @@ pub struct Piece {
     pub text: String,
     /// Timed dictionary words (source time); empty when the engine gave none.
     pub words: Vec<(String, u64, u64)>,
+    /// The line had timed words before trimming: none left means nothing is said, not "spread the text".
+    #[serde(default)]
+    pub timed: bool,
+    /// The transcript line (segment id) this piece plays.
+    #[serde(default)]
+    pub segment: String,
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Story {
@@ -130,6 +159,17 @@ pub fn transcript(document: &Value, jobs: &[Job]) -> Vec<(PathBuf, Vec<Line>)> {
     files
 }
 
+/// A line's trimmed span: the same limits as the step 3 editor, so a bad value cannot reach ffmpeg.
+fn trim(t: &Value, start: u64, end: u64) -> (u64, u64) {
+    const REACH: u64 = 2000;
+    const SHORTEST: u64 = 200;
+    let round = |v: u64| (v + 50) / 100 * 100;
+    let from = t["start_ms"].as_u64().map(round).unwrap_or(start);
+    let from = from.clamp(start.saturating_sub(REACH), end.saturating_sub(SHORTEST).max(start.saturating_sub(REACH)));
+    let to = t["end_ms"].as_u64().map(round).unwrap_or(end);
+    (from, to.clamp(from + SHORTEST, (end + REACH).max(from + SHORTEST)))
+}
+
 /// The stories to render, in plan order. Any unknown segment is an error, never a silent skip.
 pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
     let raw = document["plan"].as_str().unwrap_or("").trim();
@@ -167,14 +207,35 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
                     sources.len() - 1
                 }
             };
+            // step 3 can move a line's in/out points (up to 2 s past it); only words inside the new span are shown
+            let (start_ms, end_ms) = trim(&story["trims"][id], s.start_ms, s.end_ms);
             pieces.push(Piece {
                 source,
-                start_ms: s.start_ms,
-                end_ms: s.end_ms,
+                start_ms,
+                end_ms,
                 text: s.text.clone(),
-                words: s.words.clone(),
+                segment: id.to_owned(),
+                timed: !s.words.is_empty(),
+                words: s
+                    .words
+                    .iter()
+                    .filter(|(_, from, to)| (from + to) / 2 >= start_ms && (from + to) / 2 < end_ms)
+                    .cloned()
+                    .collect(),
             });
         }
+        // a trim that runs into the next kept line of the same video would play that stretch twice
+        for i in 1..pieces.len() {
+            let (prev, cur) = (&pieces[i - 1], &pieces[i]);
+            if prev.source == cur.source && cur.start_ms >= prev.start_ms && cur.start_ms < prev.end_ms {
+                let end = prev.end_ms;
+                let cur = &mut pieces[i];
+                cur.start_ms = end.min(cur.end_ms.saturating_sub(1));
+                cur.words.retain(|(_, from, to)| (from + to) / 2 >= end);
+            }
+        }
+        // a line the trim before it swallowed (nearly) whole is gone, not a 1 ms clip
+        pieces.retain(|p| p.end_ms >= p.start_ms + 200);
         if pieces.is_empty() {
             return Err(format!("story_empty:{}", n + 1));
         }
@@ -225,18 +286,66 @@ fn escape(text: &str) -> String {
         .replace(['\r', '\n'], " ")
 }
 /// One positioned text event; size and position use the same 1080-wide frame as the step 4/5 preview.
-fn event(layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
-    let x = style["x"].as_f64().unwrap_or(50.0) / 100.0 * WIDTH as f64;
-    let y = style["y"].as_f64().unwrap_or(50.0) / 100.0 * HEIGHT as f64;
-    format!(
-        "Dialogue: {layer},{},{},Text,,0,0,0,,{{\\an5\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}}}{}\n",
-        clock(start),
-        clock(end),
-        font(style["font"].as_str().unwrap_or("system")),
-        style["size"].as_u64().unwrap_or(64),
-        colour(style["color"].as_str().unwrap_or("#ffffff")),
-        escape(text)
-    )
+fn event(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
+    event_raw(frame, layer, start, end, style, &escape(text))
+}
+/// `text` is already escaped ASS (it may hold override tags such as karaoke).
+fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
+    let x = style["x"].as_f64().unwrap_or(50.0) / 100.0 * frame.0 as f64;
+    let y = style["y"].as_f64().unwrap_or(50.0) / 100.0 * frame.1 as f64;
+    let scale = frame.0 as f64 / 1080.0;
+    let size = (style["size"].as_f64().unwrap_or(64.0) * scale).round() as u64;
+    let line = |layer: u8, extra: &str| {
+        format!(
+            "Dialogue: {layer},{},{},{},,0,0,0,,{{\\an5\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}{}{extra}}}{}\n",
+            clock(start),
+            clock(end),
+            if style["box_on"].as_bool() == Some(true) { "Box" } else { "Text" },
+            font(style["font"].as_str().unwrap_or("system")),
+            size,
+            colour(style["color"].as_str().unwrap_or("#ffffff")),
+            effects(style, scale, frame),
+            text
+        )
+    };
+    let blur = (style["shadow_blur"].as_f64().unwrap_or(0.0) * scale * 10.0).round() / 10.0;
+    let shadowed = style["box_on"].as_bool() != Some(true) && style["shadow"].as_f64().unwrap_or(1.0) > 0.0;
+    if shadowed && blur > 0.0 {
+        line(layer * 2, &format!("\\1a&HFF&\\3a&HFF&\\blur{blur}")) + &line(layer * 2 + 1, "\\shad0")
+    } else {
+        line(layer * 2 + 1, "")
+    }
+}
+
+/// Outline, shadow, box and entrance as ASS override tags; sizes are reference px on a 1080-wide frame.
+fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
+    let px = |key: &str, default: f64| (style[key].as_f64().unwrap_or(default) * scale * 10.0).round() / 10.0;
+    let mut tags = String::new();
+    if style["box_on"].as_bool() == Some(true) {
+        // in the Box style the outline is the box: its colour, and its width is the padding round the text
+        tags += &format!("\\bord{}\\shad0\\3c{}", px("outline", 12.0).max(4.0), colour(style["box_color"].as_str().unwrap_or("#000000")));
+    } else {
+        tags += &format!(
+            "\\bord{}\\shad{}\\3c{}\\4c{}",
+            px("outline", 4.0),
+            px("shadow", 1.0),
+            colour(style["outline_color"].as_str().unwrap_or("#000000")),
+            colour(style["shadow_color"].as_str().unwrap_or("#000000"))
+        );
+        // shadow opacity in percent; ASS alpha counts the other way (00 solid, FF clear)
+        if let Some(opacity) = style["shadow_opacity"].as_f64() {
+            tags += &format!("\\4a&H{:02X}&", (255.0 * (1.0 - opacity.clamp(0.0, 100.0) / 100.0)).round() as u8);
+        }
+    }
+    match style["enter"].as_str() {
+        Some("fade") => tags += "\\fad(250,0)",
+        Some("pop") => tags += "\\fscx70\\fscy70\\t(0,180,\\fscx100\\fscy100)",
+        // a clip that opens left to right across the frame, so the text is revealed as it passes
+        // "words" is drawn as one event per word (see karaoke)
+        Some("wipe") => tags += &format!("\\clip(0,0,0,{h})\\t(0,400,\\clip(0,0,{w},{h}))", w = frame.0, h = frame.1),
+        _ => {}
+    }
+    tags
 }
 
 fn thai(c: char) -> bool {
@@ -262,6 +371,9 @@ pub fn lines(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
     let length = piece.end_ms - piece.start_ms;
     let local = |ms: u64| ms.clamp(piece.start_ms, piece.end_ms) - piece.start_ms;
     let mut out: Vec<(u64, u64, String)> = Vec::new();
+    if piece.words.is_empty() && piece.timed {
+        return out;
+    }
     if piece.words.is_empty() {
         let chars: Vec<char> = piece.text.chars().collect();
         let count = units(&piece.text).div_ceil(limit).max(1);
@@ -299,20 +411,71 @@ pub fn lines(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
 /// What step 4/5 shows on screen, as ASS: headline items for the whole clip, speech lines in time.
 /// Returns the subtitle file and the text roles that were asked for but have nothing to draw yet.
 pub fn subtitles(story: &Story, document: &Value) -> (String, Vec<String>) {
+    subtitles_in(story, document, "normal")
+}
+/// A role's blend mode; headlines always draw normally.
+fn blend_of(style: &Value) -> &str {
+    style["blend"].as_str().filter(|b| crate::styles::BLENDS.contains(b)).unwrap_or("normal")
+}
+/// The non-normal blend modes the speech and emphasis layers use, each needing its own subtitle file.
+pub fn blend_modes(document: &Value) -> Vec<String> {
+    let mut modes: Vec<String> = ["speech", "emphasis"]
+        .iter()
+        .map(|role| blend_of(&document["text_styles"][role]).to_owned())
+        .filter(|m| m != "normal")
+        .collect();
+    modes.sort();
+    modes.dedup();
+    modes
+}
+/// The subtitle file of the roles drawn with `mode`.
+pub fn subtitles_in(story: &Story, document: &Value, mode: &str) -> (String, Vec<String>) {
+    let (width, height) = frame(document);
     let mut ass = format!(
-        "[Script Info]\nScriptType: v4.00+\nPlayResX: {WIDTH}\nPlayResY: {HEIGHT}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n\
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n\
 [V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n\
-Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,1,5,60,60,0,1\n\n\
+Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,1,5,60,60,0,1\n\
+Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,3,12,0,5,60,60,0,1\n\n\
 [Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     );
     let total = story.duration_ms();
-    let (speech, skipped) = speech_lines(story, document);
+    let spoken = speech_story(story, document);
+    let (speech, mut skipped) = speech_lines(&spoken, document);
     let style = speech_style(document);
-    for (start, end, text) in &speech {
-        ass.push_str(&event(0, *start, *end, &style, text));
+    // a speech layer with another blend mode is drawn in that mode's own file
+    let speech = if blend_of(&style) == mode { speech } else { Vec::new() };
+    if speech.is_empty() {
+    } else if style["enter"].as_str().unwrap_or("words") == "words" {
+        let size = style["size"].as_f64().unwrap_or(64.0);
+        let limit = (0.86 * WIDTH as f64 / (size * 0.55)).max(4.0) as usize;
+        let mut at = 0;
+        for p in &spoken.pieces {
+            for (start, end, text) in karaoke(p, limit) {
+                ass.push_str(&event((width, height), 0, at + start, at + end, &style, &text));
+            }
+            at += p.end_ms - p.start_ms;
+        }
+    } else {
+        for (start, end, text) in &speech {
+            ass.push_str(&event((width, height), 0, *start, *end, &style, text));
+        }
     }
-    for item in headlines(document) {
+    let emphasis = emphasis_lines(story, document);
+    if !emphasis.is_empty() {
+        skipped.retain(|role| role != "emphasis");
+        let style = match &document["text_styles"]["emphasis"] {
+            s @ Value::Object(_) => s.clone(),
+            _ => serde_json::json!({"font":"system","size":84,"color":"#f59e0b","x":50,"y":55}),
+        };
+        if blend_of(&style) == mode {
+            for (start, end, text) in &emphasis {
+                ass.push_str(&event((width, height), 0, *start, *end, &style, text));
+            }
+        }
+    }
+    for item in headlines(document).into_iter().filter(|_| mode == "normal") {
         ass.push_str(&event(
+            (width, height),
             1,
             0,
             total,
@@ -321,6 +484,163 @@ Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,
         ));
     }
     (ass, skipped)
+}
+
+/// One piece's speech as display lines whose words appear as they are said: one event per word, each
+/// showing the line up to that word, so words not yet said take no space on screen (karaoke tags would
+/// still draw their shadow). Pieces without timed words fall back to whole lines.
+pub fn karaoke(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
+    let plain = lines(piece, limit);
+    if piece.words.is_empty() {
+        return plain;
+    }
+    let local = |ms: u64| ms.clamp(piece.start_ms, piece.end_ms) - piece.start_ms;
+    let words: Vec<(u64, &str)> = piece
+        .words
+        .iter()
+        .map(|(w, from, _)| (local(*from), w.trim()))
+        .filter(|(_, w)| !w.is_empty())
+        .collect();
+    let mut out = Vec::new();
+    let mut next = 0;
+    for (start, end, text) in plain {
+        // the words of this display line, as lines() grouped them
+        let mut built = String::new();
+        let mut shown: Vec<(u64, String)> = Vec::new();
+        while next < words.len() {
+            let mut joined = built.clone();
+            join(&mut joined, words[next].1);
+            if !built.is_empty() && !text.starts_with(joined.as_str()) {
+                break;
+            }
+            shown.push((words[next].0.clamp(start, end), joined.clone()));
+            built = joined;
+            next += 1;
+            if built == text {
+                break;
+            }
+        }
+        if shown.is_empty() {
+            out.push((start, end, text));
+            continue;
+        }
+        for (i, (at, so_far)) in shown.iter().enumerate() {
+            let until = shown.get(i + 1).map(|w| w.0).unwrap_or(end);
+            if until > *at {
+                out.push((*at, until, so_far.clone()));
+            }
+        }
+    }
+    out
+}
+
+/// Emphasis words picked in step 3 (by each word's start time on its transcript line), on screen in output
+/// time from the first picked word to the end of its piece.
+pub fn emphasis_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)> {
+    let ticked = document["text_roles"]
+        .as_array()
+        .is_some_and(|r| r.iter().any(|v| v == "emphasis"));
+    let mut out = Vec::new();
+    if !ticked {
+        return out;
+    }
+    let mut at = 0;
+    for p in &story.pieces {
+        let words = picks(p, document);
+        if let Some(first) = words.first() {
+            // neighbouring words read as one phrase: no space between them unless both sides are Latin
+            let latin = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
+            let mut text = String::new();
+            for (i, w) in words.iter().enumerate() {
+                if i > 0 {
+                    let prev = &words[i - 1];
+                    let tight = w.0 <= prev.2 + 1 && !(latin(prev.1.chars().last()) && latin(w.1.chars().next()));
+                    if !tight {
+                        text.push(' ');
+                    }
+                }
+                text.push_str(&w.1);
+            }
+            let start = first.0.clamp(p.start_ms, p.end_ms) - p.start_ms;
+            out.push((at + start, at + p.end_ms - p.start_ms, text));
+        }
+        at += p.end_ms - p.start_ms;
+    }
+    out
+}
+
+/// A piece's emphasis picks as (start, text, end), in time order. A pick is {text, start_ms, end_ms}
+/// (step 4) or a bare start time of a timed word (older drafts).
+fn picks(p: &Piece, document: &Value) -> Vec<(u64, String, u64)> {
+    let mut words: Vec<(u64, String, u64)> = document["emphasis"][&p.segment]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| match v.as_u64() {
+            Some(at) => p.words.iter().find(|w| w.1 == at).map(|w| (w.1, w.0.trim().to_owned(), w.2)),
+            None => {
+                let at = v["start_ms"].as_u64()?;
+                Some((at, v["text"].as_str()?.trim().to_owned(), v["end_ms"].as_u64().unwrap_or(at)))
+            }
+        })
+        .filter(|(at, text, _)| !text.is_empty() && *at < p.end_ms && *at + 1 > p.start_ms)
+        .collect();
+    words.sort();
+    words
+}
+/// The piece with its emphasised words taken out of the speech, so a word is not on screen twice
+/// (P'Ohm 21 Oct 2026). Each pick is cut where its letters are said closest to its time; a timed
+/// word left empty is dropped. Matches the step 4 preview (`speechText` in stories.js).
+fn without_picks(p: &Piece, document: &Value) -> Piece {
+    let picked = picks(p, document);
+    if picked.is_empty() || p.words.is_empty() {
+        return p.clone();
+    }
+    // every letter with its timed word and the moment it is said, shared by length within the word
+    let mut letters: Vec<(usize, char, u64)> = Vec::new();
+    for (n, (text, from, to)) in p.words.iter().enumerate() {
+        let text = text.trim();
+        let count = text.chars().count().max(1) as u64;
+        for (k, c) in text.chars().enumerate() {
+            letters.push((n, c, from + (to.saturating_sub(*from)) * k as u64 / count));
+        }
+    }
+    let mut keep = vec![true; letters.len()];
+    for (start, text, _) in &picked {
+        let want: Vec<char> = text.chars().filter(|c| !c.is_whitespace()).collect();
+        if want.is_empty() || want.len() > letters.len() {
+            continue;
+        }
+        let best = (0..=letters.len() - want.len())
+            .filter(|&i| letters[i..i + want.len()].iter().zip(&want).all(|(l, w)| l.1 == *w))
+            .min_by_key(|&i| letters[i].2.abs_diff(*start));
+        if let Some(i) = best {
+            keep[i..i + want.len()].fill(false);
+        }
+    }
+    let words: Vec<(String, u64, u64)> = p
+        .words
+        .iter()
+        .enumerate()
+        .map(|(n, (_, from, to))| {
+            let text: String = letters.iter().zip(&keep).filter(|(l, k)| l.0 == n && **k).map(|(l, _)| l.1).collect();
+            (text, *from, *to)
+        })
+        .filter(|(text, _, _)| !text.is_empty())
+        .collect();
+    let mut text = String::new();
+    for (w, _, _) in &words {
+        join(&mut text, w);
+    }
+    Piece { words, text, ..p.clone() }
+}
+/// The story whose speech leaves out the emphasised words, when emphasis is on screen.
+fn speech_story(story: &Story, document: &Value) -> Story {
+    let ticked = document["text_roles"].as_array().is_some_and(|r| r.iter().any(|v| v == "emphasis"));
+    if !ticked {
+        return story.clone();
+    }
+    Story { pieces: story.pieces.iter().map(|p| without_picks(p, document)).collect(), ..story.clone() }
 }
 
 /// Step 4's speech style; a draft that never opened its style panel uses that panel's defaults.
@@ -370,7 +690,9 @@ pub fn headlines(document: &Value) -> Vec<Value> {
 }
 
 /// ffmpeg arguments, run with the work folder as the current directory (holds `subs.ass`).
-pub fn ffmpeg_args(story: &Story, output: &Path) -> Vec<String> {
+pub fn ffmpeg_args(story: &Story, document: &Value, output: &Path) -> Vec<String> {
+    let (width, height) = frame(document);
+    let shape = width as f64 / height as f64;
     let mut args: Vec<String> = [
         "-hide_banner",
         "-nostdin",
@@ -388,9 +710,12 @@ pub fn ffmpeg_args(story: &Story, output: &Path) -> Vec<String> {
     let mut graph = String::new();
     for (n, p) in story.pieces.iter().enumerate() {
         let (a, b) = (p.start_ms as f64 / 1000.0, p.end_ms as f64 / 1000.0);
+        // the largest window of the clip's shape, slid to where step 3 put it, then scaled to the frame
+        let (cx, cy) = crop(document, &story.sources[p.source]);
         graph.push_str(&format!(
-            "[{s}:v]trim=start={a:.3}:end={b:.3},setpts=PTS-STARTPTS,scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=decrease,\
-pad={WIDTH}:{HEIGHT}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[v{n}];\
+            "[{s}:v]trim=start={a:.3}:end={b:.3},setpts=PTS-STARTPTS,\
+crop=w='min(iw,ih*{shape:.6})':h='min(ih,iw/{shape:.6})':x='(iw-ow)*{cx:.4}':y='(ih-oh)*{cy:.4}',\
+scale={width}:{height},setsar=1,fps=30,format=yuv420p[v{n}];\
 [{s}:a]atrim=start={a:.3}:end={b:.3},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,afade=t=in:d=0.008,\
 afade=t=out:st={fade:.3}:d=0.008[a{n}];",
             s = p.source,
@@ -400,10 +725,19 @@ afade=t=out:st={fade:.3}:d=0.008[a{n}];",
     for n in 0..story.pieces.len() {
         graph.push_str(&format!("[v{n}][a{n}]"));
     }
-    graph.push_str(&format!(
-        "concat=n={}:v=1:a=1[cv][ca];[cv]ass=subs.ass[vout]",
-        story.pieces.len()
-    ));
+    graph.push_str(&format!("concat=n={}:v=1:a=1[cv][ca];[cv]ass=subs.ass", story.pieces.len()));
+    for (n, mode) in blend_modes(document).iter().enumerate() {
+        let (paper, how) = match mode.as_str() {
+            "multiply" => ("white", "multiply"),
+            "screen" => ("black", "screen"),
+            _ => ("black", "addition"),
+        };
+        graph.push_str(&format!(
+            "[m{n}];[m{n}]split[p{n}][q{n}];[q{n}]drawbox=x=0:y=0:w=iw:h=ih:c={paper}:t=fill,ass=subs_{mode}.ass,format=gbrp[l{n}];\
+[p{n}]format=gbrp[g{n}];[g{n}][l{n}]blend=all_mode={how},format=yuv420p"
+        ));
+    }
+    graph.push_str("[vout]");
     args.extend(
         [
             "-filter_complex",

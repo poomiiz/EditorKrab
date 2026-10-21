@@ -7,6 +7,18 @@ import {createExport} from './export.js';
 import {createStories,checkPlan} from './stories.js';
 import {createStyleEditor,validTextStyles,validHeadlineItems,defaults} from './text-style.js';
 const $ = id => document.getElementById(id);
+// dialogs live in the body: one opened from another step's hidden page would be invisible yet still block the page
+for (const dialog of document.querySelectorAll('dialog')) document.body.append(dialog);
+// a note shows when its text is set or it is unhidden, then hides itself after 3 seconds
+for (const note of document.querySelectorAll('.toast')) {
+  let last = '', timer = 0;
+  new MutationObserver(() => {
+    const text = note.textContent;
+    if (text !== last) { last = text; note.hidden = !text; }
+    clearTimeout(timer);
+    if (!note.hidden && text) timer = setTimeout(() => { note.hidden = true; }, 3000);
+  }).observe(note, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+}
 const key = 'editorkrab-rust-flow-prototype-v1';
 let draft = {flow_version:2,headline_items:[],step: 1, title: '', language: 'auto', files: [], plan: '', style: 'bold16'};
 let unsaved = false;
@@ -34,7 +46,7 @@ try { localStorage.setItem('editorkrab-last-project', projectId); } catch (_) { 
 const speech=createTranscription({project:projectId,read:()=>draft,
  state:()=>({editing:editingAllowed,saved:!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved,revision:session?.record?.revision || 0}),
  writeEdit:edit=>{if(!editingAllowed)return;const entries=(draft.transcript_edits || []).filter(v=>v.job_id!==edit.job_id||v.segment_id!==edit.segment_id);if(edit.text!==edit.original_text)entries.push(edit);if(!validTranscriptEdits(entries))return;draft.transcript_edits=entries;save();},
- changed:()=>queueMicrotask(()=>{renderSteps();renderTimeline();stories.renderCards();if(activeStep(draft)===3)stories.renderEditor();}),
+ changed:()=>queueMicrotask(()=>{renderSteps();renderTimeline();stories.renderCards();if([3,4].includes(activeStep(draft)))stories.renderEditor();}),
  // pressing transcribe moves on to step 2, where the transcript fills in while the person prepares the AI step
  started:()=>{if(activeStep(draft)===1)document.querySelector('[data-step="2"]').click();}});
 
@@ -112,7 +124,7 @@ function renderSteps() {
     next.classList.toggle('primary',ready);
     let note=foot.querySelector('.foot-hint');
     if(!note){note=document.createElement('span');note.className='foot-hint caption';foot.querySelector('.actions').before(note);}
-    note.textContent=ready ? '' : hint;
+    note.textContent=hint;note.style.visibility=ready ? 'hidden' : '';
   }
 }
 const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('textQcList'),listen:id=>speech.listen(id),
@@ -125,7 +137,7 @@ const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('t
   if(finding.kind!=='headline'){speech.edit(finding.id,text);return;}
   const id=finding.id.slice('headline:'.length);draft.headline_items=headlineItems().map(h=>h.id===id?{...h,text}:h);save();textEditor.render();renderHeadline();
  }});
-const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,caption:text=>textEditor.live('speech',text),
+const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,caption:text=>textEditor.live('speech',text),emphasis:text=>textEditor.live('emphasis',text),
  write:change=>{if(!editingAllowed)return;change(draft);save();render();},
  go:step=>document.querySelector(`[data-step="${step}"]`).click()});
 const shortClock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
@@ -148,16 +160,33 @@ function renderTimeline(){
   if(!complete){const wait=document.createElement('div');wait.className='timeline-seg timeline-wait';wait.textContent=lines.length?'กำลังถอดเสียงส่วนที่เหลือ…':'ยังไม่มีข้อความ ถอดเสียงในขั้น 1';boxes.push(wait);}
   track.replaceChildren(...boxes);
 }
+// the clip's shape (9:16 / 1:1 / 16:9) sizes every preview frame and the exported video
+const ratios={'9:16':'9/16','1:1':'1/1','16:9':'16/9'};
+function fitPreview(){
+  for(const ws of document.querySelectorAll('#captionHost .text-workspace')){
+    // the preview area is always a 16:9 box (P'Ohm 21 Oct): a 9:16 clip sits in it, the panel keeps its width
+    const stage=ws.querySelector('.text-stage'),[w,h]=[16,9];
+    if(!stage || !ws.clientHeight){ws.style.gridTemplateColumns='';continue;}
+    const want=Math.round((ws.clientHeight-16)*w/h+16);
+    ws.style.gridTemplateColumns=`minmax(0,${want}px) minmax(360px,1fr)`;
+  }
+}
+new ResizeObserver(fitPreview).observe(document.getElementById('captionHost'));
+for(const d of document.querySelectorAll('.text-inspector details')){d.open=true;d.querySelector('summary')?.addEventListener('click',e=>e.preventDefault());}
+function applyAspect(){const aspect=ratios[draft.output?.aspect]?draft.output.aspect:'9:16';$('frameAspect').value=aspect;$('editAspect').value=aspect;document.documentElement.style.setProperty('--frame-ratio',ratios[aspect]);setTimeout(fitPreview);}
+for(const id of ['frameAspect','editAspect'])$(id).onchange=()=>{if(!editingAllowed){applyAspect();return;}draft.output={...(draft.output || {}),aspect:$(id).value};save();applyAspect();requestAnimationFrame(()=>textEditor.render());};
 function render() {
   renderSteps();
+  applyAspect();
   for (const p of document.querySelectorAll('[data-panel]')) p.hidden = Number(p.dataset.panel) !== activeStep(draft);
   // Placing subtitles runs the text check; only flagged lines ask to be heard.
+  if (![3,4].includes(activeStep(draft))) stories.stop();
   if (activeStep(draft)===4) textQc.run();
   renderFiles();
   textEditor.render();
   for (const id of ['title', 'language', 'plan']) $(id).value = draft[id];
   $('headlineReply').value=draft.headline_reply || '';
-  renderHeadline();speech.refresh(true);renderTimeline();stories.renderCards();stories.warm();if(activeStep(draft)===3)stories.renderEditor();
+  renderHeadline();speech.refresh(true);renderTimeline();stories.renderCards();stories.warm();if([3,4].includes(activeStep(draft)))stories.renderEditor();
   validate();
 }
 for(const button of document.querySelectorAll('[data-go]'))button.onclick=()=>{document.querySelector(`[data-step="${button.dataset.go}"]`).click();$('workspace').focus();$('workspace').scrollIntoView({block:'start'});};
@@ -171,6 +200,7 @@ function validate() {
   const gaps=check.unused || [],spare=gaps.reduce((n,g)=>n+g.count,0),clock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
   $('planStatus').textContent=!check.plan ? check.error : `อ่านได้ ${check.plan.stories.length} เรื่อง`+(spare ? ` · ยังไม่ใช้ ${spare} ท่อน เช่น ${clock(gaps[0].start_ms)}-${clock(gaps[0].end_ms)}` : '');
   $('planStatus').dataset.state=!check.plan ? 'error' : spare ? 'warn' : 'ok';
+  document.querySelector('.ai-bar').dataset.done=String(!!check.plan);
   // once an answer is read, sending again is no longer the next thing to do
   $('transcriptCopy').classList.toggle('primary',!check.plan);
 }
@@ -179,6 +209,12 @@ const picked=new Set();
 const fileKey=file=>file.source_id || file.upload_id || file.path || file.name;
 $('selectAll').onchange=()=>{picked.clear();if($('selectAll').checked)for(const f of draft.files)picked.add(fileKey(f));renderFiles();};
 $('removeSelected').onclick=()=>{if(!editingAllowed||!picked.size)return;draft.files=draft.files.filter(f=>!picked.has(fileKey(f)));picked.clear();save();render();};
+// a video's progress: transcribed, split into stories, each story arranged and reviewed, clips made (20% each)
+function progressOf(file){
+  const s=stories.summary().get(file.source_id) || {stories:0,refined:0,reviewed:0},part=n=>s.stories?n/s.stories:0;
+  const stages=[['ถอดเสียง',file.source_id&&speech.fileDone(file)?1:0],['แบ่งเรื่อง',s.stories?1:0],['เรียบเรียง',part(s.refined)],['ตรวจ',part(s.reviewed)],['สร้างคลิป',s.stories&&exporter?.done()?1:0]];
+  return {stories:s.stories,stages,percent:Math.round(stages.reduce((n,[,v])=>n+v,0)/stages.length*100)};
+}
 function renderFiles() {
   let duration=0,ready=0;
   for(const key of [...picked])if(!draft.files.some(f=>fileKey(f)===key))picked.delete(key);
@@ -189,8 +225,15 @@ function renderFiles() {
     const name=document.createElement('span');name.className='file-name';name.textContent=file.name;name.title=file.name;
     const pick=document.createElement('input');pick.type='checkbox';pick.className='file-pick';pick.checked=picked.has(fileKey(file));pick.disabled=!editingAllowed;
     pick.setAttribute('aria-label',`เลือก ${file.name}`);pick.onchange=()=>{if(pick.checked)picked.add(fileKey(file));else picked.delete(fileKey(file));renderFiles();};
-    li.append(pick,icon,name);
     const probe=probes.get(file.source_id);
+    // a card per video: cover frame, then what came of it so far
+    li.className='file-card';
+    const cover=document.createElement('div');cover.className='file-cover';cover.append(icon);
+    if(file.source_id&&probe?.status==='succeeded'&&probe.result.streams.some(s=>s.codec_type==='video')){
+     const still=document.createElement('video');still.muted=true;still.preload='metadata';still.setAttribute('aria-hidden','true');
+     still.src=`/api/v1/projects/${encodeURIComponent(projectId)}/sources/${encodeURIComponent(file.source_id)}/preview#t=2`;cover.append(still);
+    }
+    li.append(cover,pick,name);
     li.dataset.state=probe?.status || 'pending';
     const info=document.createElement('p');info.className='file-info';
     if (probe?.status==='succeeded') {
@@ -203,6 +246,11 @@ function renderFiles() {
     else info.textContent=file.source_id ? 'กำลังตรวจข้อมูล' : file.upload_id ? 'ลากไฟล์เดิมมาวางเพื่อส่งต่อ' : 'ยังไม่พบวิดีโอต้นฉบับ';
     info.textContent=`${(file.size/1048576).toFixed(1)} MB · ${info.textContent}`;
     li.append(info);
+    const facts=progressOf(file),stages=document.createElement('ol');stages.className='file-stages';stages.setAttribute('aria-label','ทำถึงขั้นไหน');
+    for(const [label,value] of facts.stages){const dot=document.createElement('li');dot.dataset.done=String(value>=1);dot.dataset.part=String(value>0&&value<1);dot.title=`${label}${value>0&&value<1?' (บางเรื่อง)':''}`;dot.textContent=label;stages.append(dot);}
+    const bar=document.createElement('div');bar.className='file-progress';bar.innerHTML='<span></span>';bar.firstChild.style.width=facts.percent+'%';
+    const percent=document.createElement('p');percent.className='file-percent';percent.textContent=(facts.stories?`${facts.stories} เรื่อง · `:'')+`เสร็จ ${facts.percent}%`;
+    li.append(stages,bar,percent);
     const remove=document.createElement('button');remove.className='source-remove icon-only';remove.dataset.icon='x';remove.title='เอาออก';remove.disabled=!editingAllowed;
     remove.setAttribute('aria-label',`เอา ${file.name} ออกจากรายการ`);
     remove.onclick=()=>{if (!editingAllowed) return;draft.files.splice(index,1);save();renderFiles();};
@@ -215,13 +263,14 @@ function renderFiles() {
   document.querySelector('[data-panel="1"]').toggleAttribute('data-has-files',draft.files.length>0);
   $('fileCount').textContent=`${draft.files.length} ไฟล์`;
   const totalSeconds=Math.round(duration),minutes=Math.floor(totalSeconds/60),seconds=totalSeconds%60;
-  $('fileTotal').textContent=ready ? `รวม ${minutes}:${String(seconds).padStart(2,'0')}` : '';
+  const all=draft.files.map(progressOf),storyTotal=all.reduce((n,f)=>n+f.stories,0),average=all.length?Math.round(all.reduce((n,f)=>n+f.percent,0)/all.length):0;
+  $('fileTotal').textContent=(ready ? `รวม ${minutes}:${String(seconds).padStart(2,'0')} · ` : '')+(storyTotal?`${storyTotal} เรื่อง · `:'')+`เสร็จ ${average}%`;
   renderSteps();speech.refresh();
 }
 for (const b of document.querySelectorAll('[data-step]')) b.onclick = () => { upgradeFlow();draft.step = Number(b.dataset.step); rememberStep(); render(); };
 for (const id of ['title', 'language', 'plan']) $(id).addEventListener('input', () => { draft[id] = $(id).value;
   // a pasted answer the check could repair is stored repaired, so step 3 and export read the same stories
-  if (id === 'plan') { const check=planCheck(); if (check.fixed) $(id).value = draft.plan = JSON.stringify(check.plan, null, 2); }
+  if (id === 'plan') { const check=planCheck(); if (check.fixed) $(id).value = draft.plan = JSON.stringify(check.plan, null, 2); if (check.plan) { draft.story_reviews = {}; delete draft.edit_story; } }
   save(); if (id === 'plan') {validate();renderHeadline();renderSteps();stories.renderCards();} });
 // a subtitle kind's name selects it for styling (and turns it on); its checkbox only shows or hides it
 for(const button of document.querySelectorAll('[data-role-pick]'))button.onclick=()=>{
@@ -230,6 +279,11 @@ for(const button of document.querySelectorAll('[data-role-pick]'))button.onclick
  textEditor.select(role);
 };
 $('planOpen').onclick=()=>{$('planDialog').showModal();$('plan').focus();};
+// step 4's right panel: text tools or the subtitle check
+for(const tab of document.querySelectorAll('.inspector-tabs [data-tab]'))tab.onclick=()=>{
+ const panel=tab.closest('.text-inspector');panel.dataset.tab=tab.dataset.tab;panel.scrollTop=0;if(tab.dataset.tab==='qc')textQc.run();
+ for(const t of panel.querySelectorAll('.inspector-tabs [data-tab]'))t.setAttribute('aria-selected',String(t===tab));
+};
 $('planDialog').addEventListener('close',()=>{stories.renderCards();renderSteps();});
 for(const input of document.querySelectorAll('[data-role-option]'))input.onchange=()=>{
  if(!editingAllowed)return;draft.text_roles=[...document.querySelectorAll('[data-role-option]:checked')].map(n=>n.dataset.roleOption);save();textEditor.render();renderSteps();
@@ -332,9 +386,9 @@ async function addFiles(files) {
   }
 }
 $('cancelUpload').onclick=()=>activeUpload?.abort();
-async function pickNative(kind) {
+async function pickNative(kind,hint) {
   if (!editingAllowed) return;
-  editing(false);$('sourceStatus').textContent='กำลังเลือกวิดีโอ';error('');
+  editing(false);$('sourceStatus').textContent=hint || 'กำลังเลือกวิดีโอ';error('');
   try {
     const response=await fetch('/api/v1/sources/pick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind})});
     const selected=await response.json();
@@ -358,7 +412,15 @@ $('pick').onclick = () => pickNative('files'); $('folder').onclick = () => pickN
 for (const id of ['files', 'folders']) $(id).onchange = e => addFiles(e.target.files);
 $('drop').ondragover = e => { e.preventDefault(); $('drop').classList.add('over'); };
 $('drop').ondragleave = () => $('drop').classList.remove('over');
-$('drop').ondrop = e => { e.preventDefault(); $('drop').classList.remove('over'); addFiles(e.dataTransfer.files); };
+// a dropped file reaches the page without its location, so taking it would copy it into the app;
+// open the system picker instead, so the video is used where it already is
+$('drop').ondrop = e => {
+  e.preventDefault(); $('drop').classList.remove('over');
+  const items=[...e.dataTransfer.items].map(i=>i.webkitGetAsEntry?.()).filter(Boolean),names=[...e.dataTransfer.files].map(f=>f.name);
+  if (!items.length && !names.length) return;
+  const folder=items.some(i=>i.isDirectory);
+  pickNative(folder ? 'folder' : 'files',`เลือก${folder ? 'โฟลเดอร์' : ' '+names.slice(0,3).join(', ')+(names.length>3 ? ' …' : '')} อีกครั้งในหน้าต่างที่เปิด แอปจะใช้ไฟล์จากที่เดิม ไม่ก๊อปเข้าแอป`);
+};
 function downloadDraft() {
   const url = URL.createObjectURL(new Blob([JSON.stringify({schema_version:1,project_id:projectId,document:draft}, null, 2)], {type: 'application/json'}));
   const a = document.createElement('a'); a.href = url; a.download = 'editorkrab-ui-draft.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);

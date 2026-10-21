@@ -201,11 +201,11 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  $('transcriptCopy').onclick=()=>sendPacket(async packet=>{
   try{await navigator.clipboard.writeText(forAi(packet));}
   catch(_){throw Error('คัดลอกไม่ได้ ใช้ปุ่มดาวน์โหลดไฟล์แทน');}
-  $('transcriptCopy').textContent='คัดลอกแล้ว';setTimeout(()=>{$('transcriptCopy').textContent='คัดลอกให้ AI';},2000);
+  $('toast').textContent='คัดลอกแล้ว วางในแชท AI ได้เลย';$('toast').hidden=false;
  });
  queueMicrotask(loadSettings);queueMicrotask(()=>gpuCall('/api/v1/transcription/gpu'));
  // Every subtitle line as it will show (hand edit if any), timed on its own source file.
- function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name})));}
+ function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name,words:correction(job,segment)?[]:(segment.words || [])})));}
  function find(id){for(const file of eligible())for(const row of segments(file))if(row.job.id+'|'+row.segment.id===id)return {file,...row};throw Error('line_not_found');}
  // For checking lines from the subtitle step: hear one line, or replace its text (kept as a hand edit and learned).
  function listen(id){const {file,segment}=find(id);return play(file,segment);}
@@ -215,5 +215,7 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   if((correction(job,segment)?.text ?? segment.text)!==text)throw Error('edit_not_saved');
   learn(segment.text,before,text);rowsKey='';paintRows(true);
  }
- return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit};
+ // one video's speech is all transcribed
+ function fileDone(file){const list=chunks(file);return list.length>0&&list.every(j=>j?.status==='succeeded');}
+ return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit,fileDone};
 }
