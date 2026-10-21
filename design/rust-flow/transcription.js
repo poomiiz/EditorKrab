@@ -75,7 +75,7 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   $('transcriptRows').replaceChildren(...list.map(({job,segment})=>{
    const li=document.createElement('li'),line=document.createElement('div');line.className='row';
    const time=document.createElement('span');time.className='transcript-time caption';time.textContent=`${clock(segment.start_ms)}–${clock(segment.end_ms)}`;
-   const listen=document.createElement('button');listen.type='button';listen.textContent='ฟังช่วงนี้';listen.onclick=()=>play(file,segment);line.append(time,listen);
+   const listen=document.createElement('button');listen.type='button';listen.className='icon-only';listen.dataset.icon='play';listen.title='ฟังช่วงนี้';listen.setAttribute('aria-label','ฟังช่วงนี้');listen.onclick=()=>play(file,segment);line.append(time,listen);
    const label=document.createElement('label'),title=document.createElement('span');title.className='caption';title.textContent='คำพูดช่วงนี้';
    const field=document.createElement('textarea');field.maxLength=2000;field.value=correction(job,segment)?.text ?? segment.text;field.disabled=!state().editing || segment.text.length>2000;
    field.dataset.segmentId=segment.id;field.oninput=()=>{if(!state().editing)return;writeEdit({job_id:job.id,segment_id:segment.id,source_sha256:job.result.source.sha256,original_text:segment.text,text:field.value});};

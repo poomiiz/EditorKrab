@@ -86,7 +86,7 @@ export function createStories({project,read,lines,write,go,editable}){
    const kept=keep.has(line.segment_id),box=document.createElement('div');box.className='edit-seg';box.dataset.keep=kept;
    box.style.left=(line.start_ms/1000*zoom)+'px';box.style.width=Math.max(6,(line.end_ms-line.start_ms)/1000*zoom-2)+'px';box.title=line.text;
    const text=document.createElement('button');text.type='button';text.className='edit-text';text.textContent=line.text;text.onclick=()=>{queue=[line];start();};
-   const toggle=document.createElement('button');toggle.type='button';toggle.className='edit-toggle';toggle.textContent=kept?'✕':'+';
+   const toggle=document.createElement('button');toggle.type='button';toggle.className='edit-toggle';toggle.dataset.icon=kept?'x':'plus';
    toggle.title=kept?'ตัดท่อนนี้ทิ้ง':'เก็บท่อนนี้';toggle.setAttribute('aria-label',toggle.title);toggle.disabled=!editable()||(kept&&story.kept.length===1);
    toggle.onclick=()=>flip(story,line);
    box.append(toggle,text);lane.append(box);

@@ -191,7 +191,7 @@ function renderFiles() {
     else info.textContent=file.source_id ? 'กำลังตรวจข้อมูล' : file.upload_id ? 'ลากไฟล์เดิมมาวางเพื่อส่งต่อ' : 'ยังไม่พบวิดีโอต้นฉบับ';
     info.textContent=`${(file.size/1048576).toFixed(1)} MB · ${info.textContent}`;
     li.append(info);
-    const remove=document.createElement('button');remove.className='source-remove';remove.textContent='เอาออก';remove.disabled=!editingAllowed;
+    const remove=document.createElement('button');remove.className='source-remove icon-only';remove.dataset.icon='x';remove.title='เอาออก';remove.disabled=!editingAllowed;
     remove.setAttribute('aria-label',`เอา ${file.name} ออกจากรายการ`);
     remove.onclick=()=>{if (!editingAllowed) return;draft.files.splice(index,1);save();renderFiles();};
     li.append(remove);return li;
