@@ -338,9 +338,9 @@ async function addFiles(files) {
   }
 }
 $('cancelUpload').onclick=()=>activeUpload?.abort();
-async function pickNative(kind) {
+async function pickNative(kind,hint) {
   if (!editingAllowed) return;
-  editing(false);$('sourceStatus').textContent='กำลังเลือกวิดีโอ';error('');
+  editing(false);$('sourceStatus').textContent=hint || 'กำลังเลือกวิดีโอ';error('');
   try {
     const response=await fetch('/api/v1/sources/pick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind})});
     const selected=await response.json();
@@ -364,7 +364,15 @@ $('pick').onclick = () => pickNative('files'); $('folder').onclick = () => pickN
 for (const id of ['files', 'folders']) $(id).onchange = e => addFiles(e.target.files);
 $('drop').ondragover = e => { e.preventDefault(); $('drop').classList.add('over'); };
 $('drop').ondragleave = () => $('drop').classList.remove('over');
-$('drop').ondrop = e => { e.preventDefault(); $('drop').classList.remove('over'); addFiles(e.dataTransfer.files); };
+// a dropped file reaches the page without its location, so taking it would copy it into the app;
+// open the system picker instead, so the video is used where it already is
+$('drop').ondrop = e => {
+  e.preventDefault(); $('drop').classList.remove('over');
+  const items=[...e.dataTransfer.items].map(i=>i.webkitGetAsEntry?.()).filter(Boolean),names=[...e.dataTransfer.files].map(f=>f.name);
+  if (!items.length && !names.length) return;
+  const folder=items.some(i=>i.isDirectory);
+  pickNative(folder ? 'folder' : 'files',`เลือก${folder ? 'โฟลเดอร์' : ' '+names.slice(0,3).join(', ')+(names.length>3 ? ' …' : '')} อีกครั้งในหน้าต่างที่เปิด แอปจะใช้ไฟล์จากที่เดิม ไม่ก๊อปเข้าแอป`);
+};
 function downloadDraft() {
   const url = URL.createObjectURL(new Blob([JSON.stringify({schema_version:1,project_id:projectId,document:draft}, null, 2)], {type: 'application/json'}));
   const a = document.createElement('a'); a.href = url; a.download = 'editorkrab-ui-draft.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
