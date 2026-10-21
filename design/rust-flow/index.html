@@ -389,6 +389,9 @@ textarea{font-size:.75rem}
 .edit-grip[data-edge=start_ms]{left:0}.edit-grip[data-edge=end_ms]{right:0}
 .edit-grip:hover,.edit-grip:focus-visible{opacity:1}
 .edit-seg{padding-inline:8px}
+.edit-seg[draggable=true]{cursor:grab}.edit-seg.dragging{opacity:.4}
+.edit-seg[data-drop=before]{box-shadow:inset 3px 0 0 var(--txt)}.edit-seg[data-drop=after]{box-shadow:inset -3px 0 0 var(--txt)}
+[data-icon=pause]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='6' y='4' width='4' height='16' rx='1'/><rect x='14' y='4' width='4' height='16' rx='1'/></svg>")}
 .edit-head{position:absolute;top:0;bottom:0;width:2px;background:var(--txt);pointer-events:none;left:0}
 
 /* icons: a mask in currentColor, so JS can rewrite a button's text and the icon stays */
@@ -510,7 +513,7 @@ textarea{font-size:.75rem}
 <p id="editEmpty" class="caption">วางคำตอบจาก AI ในขั้น 2 แล้วเลือกเรื่องที่จะตัดต่อ</p>
 <div id="editor" class="editor" hidden>
 <div id="editStyleHost" class="editor-style"></div><video id="editVideo" class="frame-video" playsinline preload="metadata"></video><p id="editVideoNote" class="caption" role="status"></p>
-<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
+<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><span class="caption">ลากท่อนเพื่อสลับลำดับ · เว้นวรรคเพื่อเล่น/หยุด</span><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
 <div id="editTrack" class="edit-track"></div>
 </div>
 </div>

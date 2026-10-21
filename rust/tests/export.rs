@@ -1,4 +1,4 @@
-use editorkrab::export::{ffmpeg_args, file_name, plan, subtitles, unused_path};
+use editorkrab::export::{Piece, ffmpeg_args, file_name, lines, plan, subtitles, unused_path};
 use editorkrab::jobs::Job;
 use serde_json::{Value, json};
 use std::path::Path;
@@ -90,6 +90,19 @@ fn trims_move_a_lines_in_and_out_points_within_limits() {
     let doc = document(json!({"stories": [{"segment_ids": ["a0", "a1"], "trims": {"a0": {"end_ms": a1 + 500}}}]}));
     let pieces = &plan(&doc, &jobs()).unwrap()[0].pieces;
     assert_eq!(pieces[1].start_ms, pieces[0].end_ms, "an overlap is not played twice");
+    // a trim that covers the next kept line whole leaves no sliver of it
+    let a1_end = both[0].pieces[1].end_ms;
+    let doc = document(json!({"stories": [{"segment_ids": ["a0", "a1"], "trims": {"a0": {"end_ms": a1_end}}}]}));
+    let pieces = &plan(&doc, &jobs()).unwrap()[0].pieces;
+    assert!(pieces.iter().all(|p| p.end_ms >= p.start_ms + 200), "no piece shorter than 0.2 s: {pieces:?}");
+}
+
+#[test]
+fn a_line_trimmed_past_all_its_words_shows_no_subtitle() {
+    let piece = Piece { source: 0, start_ms: 0, end_ms: 800, text: "หนึ่ง สอง".into(), words: vec![], timed: true };
+    assert!(lines(&piece, 20).is_empty());
+    let untimed = Piece { timed: false, ..piece };
+    assert!(!lines(&untimed, 20).is_empty(), "a line the engine never timed still spreads its text");
 }
 
 #[test]

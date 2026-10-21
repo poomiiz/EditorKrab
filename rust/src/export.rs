@@ -18,6 +18,9 @@ pub struct Piece {
     pub text: String,
     /// Timed dictionary words (source time); empty when the engine gave none.
     pub words: Vec<(String, u64, u64)>,
+    /// The line had timed words before trimming: none left means nothing is said, not "spread the text".
+    #[serde(default)]
+    pub timed: bool,
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Story {
@@ -185,6 +188,7 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
                 start_ms,
                 end_ms,
                 text: s.text.clone(),
+                timed: !s.words.is_empty(),
                 words: s
                     .words
                     .iter()
@@ -203,6 +207,8 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
                 cur.words.retain(|(_, from, to)| (from + to) / 2 >= end);
             }
         }
+        // a line the trim before it swallowed (nearly) whole is gone, not a 1 ms clip
+        pieces.retain(|p| p.end_ms >= p.start_ms + 200);
         if pieces.is_empty() {
             return Err(format!("story_empty:{}", n + 1));
         }
@@ -290,6 +296,9 @@ pub fn lines(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
     let length = piece.end_ms - piece.start_ms;
     let local = |ms: u64| ms.clamp(piece.start_ms, piece.end_ms) - piece.start_ms;
     let mut out: Vec<(u64, u64, String)> = Vec::new();
+    if piece.words.is_empty() && piece.timed {
+        return out;
+    }
     if piece.words.is_empty() {
         let chars: Vec<char> = piece.text.chars().collect();
         let count = units(&piece.text).div_ceil(limit).max(1);

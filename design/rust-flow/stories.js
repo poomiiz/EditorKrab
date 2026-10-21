@@ -11,6 +11,12 @@ function readJson(raw){
  const from=body.search(/[[{]/),to=Math.max(body.lastIndexOf('}'),body.lastIndexOf(']')),json=from<0?body:body.slice(from,to+1);
  try{return {value:JSON.parse(json),json};}catch(_){return {};}
 }
+// chat AIs rename fields (Gemini answered story_id and no title); take the usual synonyms, else the summary's opening
+export function storyFields(s,index){
+ const summary=String(s?.summary || s?.description || '').trim();
+ const title=String(s?.title || s?.name || s?.topic || s?.headline || '').trim() || (summary.split(/[ ,.]/).filter(Boolean).slice(0,6).join(' ').slice(0,48) || `เรื่อง ${index+1}`);
+ return {id:String(s?.id || s?.story_id || `story-${index+1}`),title,summary};
+}
 export function checkPlan(text,lines){
  const raw=String(text || '').trim();if(!raw)return {error:''};
  const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
@@ -31,7 +37,10 @@ export function checkPlan(text,lines){
   if(used.has(l.segment_id))continue;
   if(run){run.end_ms=l.end_ms;run.count++;}else unused.push(run={source:l.source_id,start_ms:l.start_ms,end_ms:l.end_ms,count:1});
  }
- return {plan,fixed:json!==raw || Array.isArray(value),unused};
+ // store the id and title the cards show, so export names files the same way
+ const named=plan.stories.some((s,i)=>{const f=storyFields(s,i);return s.id!==f.id || s.title!==f.title;});
+ for(const [i,s] of plan.stories.entries()){const f=storyFields(s,i);s.id=f.id;s.title=f.title;}
+ return {plan,fixed:json!==raw || Array.isArray(value) || named,unused};
 }
 export function parsePlan(text){return checkPlan(text).plan || null;}
 
@@ -56,10 +65,8 @@ export function createStories({project,read,lines,write,go,editable,caption}){
    const kept=(Array.isArray(s?.segment_ids)?s.segment_ids:[]).map(id=>bySegment.get(id)).filter(Boolean)
     .map(l=>({...l,from_ms:l.start_ms,to_ms:l.end_ms,...trimmed(l,trims[l.segment_id])}));
    const counts=new Map();for(const l of kept)counts.set(l.source_id,(counts.get(l.source_id) || 0)+1);
-   // chat AIs rename fields (Gemini answered story_id and no title); take the usual synonyms, else the summary's opening
-   const summary=String(s?.summary || s?.description || '').trim();
-   const title=String(s?.title || s?.name || s?.topic || s?.headline || '').trim() || (summary.split(/[ ,.]/).filter(Boolean).slice(0,6).join(' ').slice(0,48) || `เรื่อง ${index+1}`);
-   return {index,id:String(s?.id || s?.story_id || `story-${index+1}`),title,summary,
+   const {id,title,summary}=storyFields(s,index);
+   return {index,id,title,summary,
     kept,source_id:[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0] || ''};
   });
   return {all,stories};
@@ -151,6 +158,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
    const plan=parsePlan(d.plan),entry=plan?.stories[story.index];if(!entry)return;
    entry.round1_ids=entry.round1_ids || entry.segment_ids.slice();entry.segment_ids=c.ids;
    if(c.title)entry.title=c.title;if(c.summary)entry.summary=c.summary;d.plan=JSON.stringify(plan,null,2);
+   if(d.story_reviews?.[story.id]){d.story_reviews={...d.story_reviews};delete d.story_reviews[story.id];}
   });
  };
  function current(){const m=model();if(!m)return null;return m.stories.find(s=>s.id===read().edit_story) || m.stories[0] || null;}
@@ -181,6 +189,14 @@ export function createStories({project,read,lines,write,go,editable,caption}){
    toggle.onclick=()=>flip(story,line);
    box.append(toggle,text);
    if(kept&&editable())box.append(handle(story,kept,'start_ms',box,zoom),handle(story,kept,'end_ms',box,zoom));
+   if(kept&&!showCut&&editable()){
+    box.draggable=true;box.dataset.id=kept.segment_id;
+    box.ondragstart=e=>{if(e.target.closest('.edit-grip')){e.preventDefault();return;}e.dataTransfer.setData('text/plain',kept.segment_id);e.dataTransfer.effectAllowed='move';box.classList.add('dragging');};
+    box.ondragend=()=>box.classList.remove('dragging');
+    box.ondragover=e=>{e.preventDefault();const r=box.getBoundingClientRect();box.dataset.drop=e.clientX<r.left+r.width/2?'before':'after';};
+    box.ondragleave=()=>{delete box.dataset.drop;};
+    box.ondrop=e=>{e.preventDefault();const side=box.dataset.drop;delete box.dataset.drop;move(story,e.dataTransfer.getData('text/plain'),kept.segment_id,side);};
+   }
    lane.append(box);
   }
   const head=document.createElement('div');head.className='edit-head';head.id='editHead';lane.append(head);
@@ -188,7 +204,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   editView={story,showCut,boxes,zoom};
   $('editClock').textContent=`ใช้ ${story.kept.length} บรรทัด · ${pieces(story)} ท่อน · ยาว ${clock(length(story.kept))}`;
  }
- let editView=null;
+ let editView=null,refocus=null;
  function handle(story,kept,edge,box,zoom){
   const grip=document.createElement('button');grip.type='button';grip.className='edit-grip';grip.dataset.edge=edge;
   grip.title=edge==='start_ms'?'ลากเพื่อยืดหรือหดต้นท่อน':'ลากเพื่อยืดหรือหดท้ายท่อน';grip.setAttribute('aria-label',grip.title+' ใช้ลูกศรซ้ายขวาทีละ 0.1 วินาที');
@@ -199,7 +215,8 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   grip.onpointerdown=e=>{from=e.clientX;grip.setPointerCapture(e.pointerId);e.preventDefault();};
   grip.onpointermove=e=>{if(from!==null)preview(kept[edge]+(e.clientX-from)/zoom*1000);};
   grip.onpointerup=()=>{if(from===null)return;from=null;save(story,kept,edge,value);};
-  grip.onkeydown=e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;e.preventDefault();save(story,kept,edge,kept[edge]+(e.key==='ArrowLeft'?-100:100));};
+  grip.onkeydown=e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;e.preventDefault();refocus={id:kept.segment_id,edge};save(story,kept,edge,kept[edge]+(e.key==='ArrowLeft'?-100:100));};
+  if(refocus&&refocus.id===kept.segment_id&&refocus.edge===edge)queueMicrotask(()=>{grip.focus();refocus=null;});
   return grip;
  }
  function save(story,kept,edge,value){
@@ -208,6 +225,14 @@ export function createStories({project,read,lines,write,go,editable,caption}){
    const trims={...(entry.trims || {})},next={start_ms:kept.start_ms,end_ms:kept.end_ms,[edge]:value},fit=trimmed({start_ms:kept.from_ms,end_ms:kept.to_ms},next);
    if(fit.start_ms===kept.from_ms&&fit.end_ms===kept.to_ms)delete trims[kept.segment_id];else trims[kept.segment_id]=fit;
    entry.trims=trims;d.plan=JSON.stringify(plan,null,2);
+  });
+ }
+ function move(story,id,target,side){
+  if(!id || id===target)return;
+  write(d=>{
+   const plan=parsePlan(d.plan),entry=plan?.stories[story.index];if(!entry)return;
+   const ids=(entry.segment_ids || []).filter(x=>x!==id),at=ids.indexOf(target);if(at<0)return;
+   ids.splice(side==='after'?at+1:at,0,id);entry.segment_ids=ids;d.plan=JSON.stringify(plan,null,2);
   });
  }
  // keep or drop one line; a line brought back goes where its time puts it among the lines already kept
@@ -230,7 +255,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
    // seek only for a real jump: a next line that starts here, or overlaps this one after a trim, just plays on
    if(!next)video.pause();else if(next.start_ms>now+40 || next.start_ms<line.start_ms)video.currentTime=next.start_ms/1000;
   }
-  const story=current(),said=story&&lines().find(l=>l.source_id===story.source_id&&now>=l.start_ms&&now<l.end_ms);
+  const story=current(),said=story&&story.kept.find(l=>now>=l.start_ms&&now<l.end_ms);
   caption(said?.text || '');
   const head=$('editHead');
   if(head&&editView){
@@ -245,7 +270,22 @@ export function createStories({project,read,lines,write,go,editable,caption}){
  video.addEventListener('loadeddata',()=>{$('editVideoNote').textContent='';});
  // the first open of a video waits for its preview to be made; if the browser gives up, ask again
  video.addEventListener('error',()=>{$('editVideoNote').textContent='กำลังเตรียมพรีวิว ลองใหม่อัตโนมัติ';setTimeout(()=>{if(!video.closest('[hidden]'))video.load();},5000);});
- $('editPlay').onclick=()=>{const story=current();if(!story)return;queue=story.kept.slice();start();};
+ function playPause(){
+  const story=current();if(!story)return;
+  if(!video.paused){video.pause();return;}
+  const now=video.currentTime*1000,line=queue[0];
+  if(line&&now>=line.start_ms-40&&now<line.end_ms){video.play().catch(()=>{});return;}
+  queue=story.kept.slice();start();
+ }
+ $('editPlay').onclick=playPause;
+ const playLabel=()=>{const playing=!video.paused;$('editPlay').dataset.icon=playing?'pause':'play';$('editPlay').textContent=playing?'หยุด':'เล่นทั้งเรื่อง';};
+ video.addEventListener('play',playLabel);video.addEventListener('pause',playLabel);
+ // space plays or pauses on step 3, except while typing or when a button already takes the key
+ document.addEventListener('keydown',e=>{
+  if(e.code!=='Space' || e.repeat || $('editor').hidden || $('editor').closest('[hidden]'))return;
+  if(e.target.closest?.('input,textarea,select,button,[contenteditable="true"],dialog'))return;
+  e.preventDefault();playPause();
+ });
  $('editZoom').oninput=renderEditor;
  $('editShowCut').onchange=renderEditor;
  $('editReviewed').onclick=()=>{const story=current();if(!story)return;write(d=>{const next={...(d.story_reviews || {})};if(next[story.id])delete next[story.id];else next[story.id]=true;d.story_reviews=next;});};
@@ -254,5 +294,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
  function warm(){for(const f of read().files.filter(f=>f.source_id&&!warmed.has(f.source_id))){warmed.add(f.source_id);
   fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/preview`,{headers:{Range:'bytes=0-0'}}).catch(()=>warmed.delete(f.source_id));}}
  function allReviewed(){const m=model();return !!m&&m.stories.length>0&&m.stories.every(s=>reviews()[s.id]);}
- return {renderCards,renderEditor,allReviewed,warm};
+ // leaving step 3: stop the preview and take its line off the subtitle frame
+ function stop(){queue=[];if(!video.paused)video.pause();caption('');}
+ return {renderCards,renderEditor,allReviewed,warm,stop};
 }

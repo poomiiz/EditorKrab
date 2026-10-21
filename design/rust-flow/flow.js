@@ -152,6 +152,7 @@ function render() {
   renderSteps();
   for (const p of document.querySelectorAll('[data-panel]')) p.hidden = Number(p.dataset.panel) !== activeStep(draft);
   // Placing subtitles runs the text check; only flagged lines ask to be heard.
+  if (activeStep(draft)!==3) stories.stop();
   if (activeStep(draft)===4) textQc.run();
   renderFiles();
   textEditor.render();
@@ -221,7 +222,7 @@ function renderFiles() {
 for (const b of document.querySelectorAll('[data-step]')) b.onclick = () => { upgradeFlow();draft.step = Number(b.dataset.step); rememberStep(); render(); };
 for (const id of ['title', 'language', 'plan']) $(id).addEventListener('input', () => { draft[id] = $(id).value;
   // a pasted answer the check could repair is stored repaired, so step 3 and export read the same stories
-  if (id === 'plan') { const check=planCheck(); if (check.fixed) $(id).value = draft.plan = JSON.stringify(check.plan, null, 2); }
+  if (id === 'plan') { const check=planCheck(); if (check.fixed) $(id).value = draft.plan = JSON.stringify(check.plan, null, 2); if (check.plan) { draft.story_reviews = {}; delete draft.edit_story; } }
   save(); if (id === 'plan') {validate();renderHeadline();renderSteps();stories.renderCards();} });
 // a subtitle kind's name selects it for styling (and turns it on); its checkbox only shows or hides it
 for(const button of document.querySelectorAll('[data-role-pick]'))button.onclick=()=>{
