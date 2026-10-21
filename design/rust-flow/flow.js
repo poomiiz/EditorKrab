@@ -127,7 +127,7 @@ function renderSteps() {
     note.textContent=hint;note.style.visibility=ready ? 'hidden' : '';
   }
 }
-const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('textQcList'),listen:id=>speech.listen(id),
+const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('textQcList'),listen:id=>speech.listen(id),verdicts:groups=>stories.qc(groups),
  texts:()=>{
   const subtitles=speech.texts(),end=Math.max(0,...subtitles.map(t=>t.end_ms));
   return [...headlineItems().filter(h=>h.text?.trim()).map(h=>({kind:'headline',id:'headline:'+h.id,text:h.text,start_ms:0,end_ms:end})),...subtitles];
@@ -137,7 +137,8 @@ const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('t
   if(finding.kind!=='headline'){speech.edit(finding.id,text);return;}
   const id=finding.id.slice('headline:'.length);draft.headline_items=headlineItems().map(h=>h.id===id?{...h,text}:h);save();textEditor.render();renderHeadline();
  }});
-const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,caption:text=>textEditor.live('speech',text),emphasis:text=>textEditor.live('emphasis',text),
+const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,
+ editLine:(line,text)=>{if(!editingAllowed)throw Error('not_editable');speech.edit(line.id,text);textQc.run(true);},listen:line=>speech.listen(line.id),caption:text=>textEditor.live('speech',text),emphasis:text=>textEditor.live('emphasis',text),
  write:change=>{if(!editingAllowed)return;change(draft);save();render();},
  go:step=>document.querySelector(`[data-step="${step}"]`).click()});
 const shortClock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
@@ -181,7 +182,7 @@ function render() {
   for (const p of document.querySelectorAll('[data-panel]')) p.hidden = Number(p.dataset.panel) !== activeStep(draft);
   // Placing subtitles runs the text check; only flagged lines ask to be heard.
   if (![3,4].includes(activeStep(draft))) stories.stop();
-  if (activeStep(draft)===4) textQc.run();
+  if (activeStep(draft)===4){const panel=document.querySelector('.text-inspector');if(panel)panel.dataset.tab='style';textQc.run();}
   renderFiles();
   textEditor.render();
   for (const id of ['title', 'language', 'plan']) $(id).value = draft[id];
