@@ -180,7 +180,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   if(frame&&video.parentElement!==frame)frame.prepend(video);
   const controls=$('editPlay').closest('.editor-controls'),dock=textMode?$('captionTransport'):$('editor');
   if(controls.parentElement!==dock){dock.append(controls,$('editTrack'));}
-  if(textMode)controls.querySelector('.editor-zoom').before(document.querySelector('.caption-ai'));
+  if(textMode)controls.querySelector('.editor-zoom').before(document.querySelector('.frame-aspect'),document.querySelector('.caption-ai'));
   const title=$(textMode?'captionsTitle':'editTitle');if(pick.parentElement!==title)title.append(pick);
   cropSource=story.source_id;showCrop();
   const src=`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(story.source_id)}/preview`;
@@ -531,7 +531,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   $('emphasisStatus').textContent=c.note;$('emphasisStatus').dataset.state='ok';$('emphasisStatus').hidden=false;
  };
  // leaving step 3: stop the preview and take its line off the subtitle frame
- function stop(){queue=[];if(!video.paused)video.pause();caption('');emphasis('');}
+ function stop(){queue=[];if(!video.paused)video.pause();caption('');emphasis('');
+  const size=document.querySelector('.frame-aspect'),home=document.querySelector('.preview-caption');if(size&&home&&size.parentElement!==home)home.append(size);}
  // per video: how many stories came from it, and how many are arranged with the AI and reviewed
  function summary(){
   const out=new Map(),m=model();

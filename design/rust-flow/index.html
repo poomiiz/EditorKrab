@@ -650,6 +650,17 @@ label[for="fx-enter"]::before{content:"🎬 "}
 .stage[data-panel="2"] .stage-body{padding-top:var(--space-md)}
 .story-marks{min-width:12em}
 #editVideoNote{min-height:1.4em}
+
+/* step 4 check: no title (the tab says it), counts as coloured dots, each finding boxed in its colour */
+.text-inspector #textQcTitle{display:none}
+.text-inspector #textQcSummary{font-size:1rem;color:var(--txt);letter-spacing:.02em}
+.text-inspector .qc-finding .badge{display:none}
+.text-inspector .qc-finding{grid-template-columns:minmax(0,1fr);border:1px solid var(--line);border-left-width:4px;border-radius:var(--radius-sm);padding:var(--space-sm) var(--space-md)}
+.text-inspector .qc-finding>*{grid-column:1/-1}
+.text-inspector .qc-finding[data-severity=critical]{border-color:var(--danger);background:color-mix(in oklch,var(--danger) 12%,transparent)}
+.text-inspector .qc-finding[data-severity=moderate]{border-color:var(--warn);background:color-mix(in oklch,var(--warn) 12%,transparent)}
+.text-inspector .qc-finding[data-severity=minor]{border-color:var(--ok);background:color-mix(in oklch,var(--ok) 12%,transparent)}
+#captionTransport .frame-aspect select{min-height:32px;padding:2px 8px;font-size:.8125rem}
 </style>
 </head>
 <body data-loading="true">
