@@ -279,12 +279,12 @@ async fn run_export(
             run_ffmpeg(
                 &ffmpeg,
                 &dir,
-                &editorkrab::export::ffmpeg_args(story, &partial),
+                &editorkrab::export::ffmpeg_args(story, &document, &partial),
                 signal.clone(),
                 progress,
             )
             .await?;
-            verify_export(&ffprobe, &partial, story.duration_ms(), story.pieces.len()).await?;
+            verify_export(&ffprobe, &partial, story.duration_ms(), story.pieces.len(), editorkrab::export::frame(&document)).await?;
             let name = editorkrab::export::story_name(&title, story, n);
             let target = editorkrab::export::unused_path(&folder, &name);
             // same drive: rename; otherwise copy, then the work folder is cleaned below
@@ -481,6 +481,7 @@ async fn verify_export(
     file: &std::path::Path,
     expected_ms: u64,
     pieces: usize,
+    frame: (u32, u32),
 ) -> Result<(), String> {
     let mut command = tokio::process::Command::new(ffprobe);
     command
@@ -505,7 +506,7 @@ async fn verify_export(
     let video = streams.iter().find(|s| s["codec_type"] == "video");
     let has_audio = streams.iter().any(|s| s["codec_type"] == "audio");
     let size_ok = video.is_some_and(|v| {
-        v["width"] == editorkrab::export::WIDTH && v["height"] == editorkrab::export::HEIGHT
+        v["width"] == frame.0 && v["height"] == frame.1
     });
     let duration_ms = info["format"]["duration"]
         .as_str()

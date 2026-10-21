@@ -9,6 +9,29 @@ use std::path::{Path, PathBuf};
 pub const WIDTH: u32 = 1080;
 pub const HEIGHT: u32 = 1920;
 
+/// The finished clip's size for the shape picked in step 3: 9:16 unless 1:1 or 16:9 was chosen.
+pub fn frame(document: &Value) -> (u32, u32) {
+    match document["output"]["aspect"].as_str() {
+        Some("1:1") => (1080, 1080),
+        Some("16:9") => (1920, 1080),
+        _ => (WIDTH, HEIGHT),
+    }
+}
+
+/// Where a video's crop window sits, 0..1 across the slack left and right (x) and above and below (y);
+/// the window is the largest one of the clip's shape. Keyed by the draft's source_id, centred when unset.
+pub fn crop(document: &Value, path: &Path) -> (f64, f64) {
+    let id = document["files"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|f| f["path"].as_str().map(Path::new) == Some(path))
+        .and_then(|f| f["source_id"].as_str());
+    let c = id.map(|id| &document["crops"][id]).unwrap_or(&Value::Null);
+    let at = |v: &Value| v.as_f64().filter(|v| v.is_finite()).unwrap_or(0.5).clamp(0.0, 1.0);
+    (at(&c["x"]), at(&c["y"]))
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Piece {
     /// Index into `Story::sources`.
@@ -259,15 +282,16 @@ fn escape(text: &str) -> String {
         .replace(['\r', '\n'], " ")
 }
 /// One positioned text event; size and position use the same 1080-wide frame as the step 4/5 preview.
-fn event(layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
-    let x = style["x"].as_f64().unwrap_or(50.0) / 100.0 * WIDTH as f64;
-    let y = style["y"].as_f64().unwrap_or(50.0) / 100.0 * HEIGHT as f64;
+fn event(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
+    let x = style["x"].as_f64().unwrap_or(50.0) / 100.0 * frame.0 as f64;
+    let y = style["y"].as_f64().unwrap_or(50.0) / 100.0 * frame.1 as f64;
+    let size = (style["size"].as_f64().unwrap_or(64.0) * frame.0 as f64 / 1080.0).round() as u64;
     format!(
         "Dialogue: {layer},{},{},Text,,0,0,0,,{{\\an5\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}}}{}\n",
         clock(start),
         clock(end),
         font(style["font"].as_str().unwrap_or("system")),
-        style["size"].as_u64().unwrap_or(64),
+        size,
         colour(style["color"].as_str().unwrap_or("#ffffff")),
         escape(text)
     )
@@ -336,8 +360,9 @@ pub fn lines(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
 /// What step 4/5 shows on screen, as ASS: headline items for the whole clip, speech lines in time.
 /// Returns the subtitle file and the text roles that were asked for but have nothing to draw yet.
 pub fn subtitles(story: &Story, document: &Value) -> (String, Vec<String>) {
+    let (width, height) = frame(document);
     let mut ass = format!(
-        "[Script Info]\nScriptType: v4.00+\nPlayResX: {WIDTH}\nPlayResY: {HEIGHT}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n\
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n\
 [V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n\
 Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,1,5,60,60,0,1\n\n\
 [Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
@@ -346,10 +371,11 @@ Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,
     let (speech, skipped) = speech_lines(story, document);
     let style = speech_style(document);
     for (start, end, text) in &speech {
-        ass.push_str(&event(0, *start, *end, &style, text));
+        ass.push_str(&event((width, height), 0, *start, *end, &style, text));
     }
     for item in headlines(document) {
         ass.push_str(&event(
+            (width, height),
             1,
             0,
             total,
@@ -407,7 +433,9 @@ pub fn headlines(document: &Value) -> Vec<Value> {
 }
 
 /// ffmpeg arguments, run with the work folder as the current directory (holds `subs.ass`).
-pub fn ffmpeg_args(story: &Story, output: &Path) -> Vec<String> {
+pub fn ffmpeg_args(story: &Story, document: &Value, output: &Path) -> Vec<String> {
+    let (width, height) = frame(document);
+    let shape = width as f64 / height as f64;
     let mut args: Vec<String> = [
         "-hide_banner",
         "-nostdin",
@@ -425,9 +453,12 @@ pub fn ffmpeg_args(story: &Story, output: &Path) -> Vec<String> {
     let mut graph = String::new();
     for (n, p) in story.pieces.iter().enumerate() {
         let (a, b) = (p.start_ms as f64 / 1000.0, p.end_ms as f64 / 1000.0);
+        // the largest window of the clip's shape, slid to where step 3 put it, then scaled to the frame
+        let (cx, cy) = crop(document, &story.sources[p.source]);
         graph.push_str(&format!(
-            "[{s}:v]trim=start={a:.3}:end={b:.3},setpts=PTS-STARTPTS,scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=decrease,\
-pad={WIDTH}:{HEIGHT}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[v{n}];\
+            "[{s}:v]trim=start={a:.3}:end={b:.3},setpts=PTS-STARTPTS,\
+crop=w='min(iw,ih*{shape:.6})':h='min(ih,iw/{shape:.6})':x='(iw-ow)*{cx:.4}':y='(ih-oh)*{cy:.4}',\
+scale={width}:{height},setsar=1,fps=30,format=yuv420p[v{n}];\
 [{s}:a]atrim=start={a:.3}:end={b:.3},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,afade=t=in:d=0.008,\
 afade=t=out:st={fade:.3}:d=0.008[a{n}];",
             s = p.source,

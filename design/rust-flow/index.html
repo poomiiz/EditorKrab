@@ -152,7 +152,7 @@ textarea{width:100%;min-height:120px;resize:none;font:.8125rem/1.7 Consolas,"Lee
 .text-stage{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--sunken);padding:var(--space-md) var(--space-lg)}
 .preview-caption{display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm);font-size:.75rem;color:var(--mut);margin-bottom:var(--space-sm)}
 .frame-surround{flex:1;min-height:0;display:flex;justify-content:center;align-items:center}
-.text-frame{position:relative;isolation:isolate;aspect-ratio:9/16;height:100%;max-height:100%;width:auto;max-width:100%;background:var(--raised);overflow:hidden;border-radius:6px;box-shadow:0 0 0 1px var(--line)}
+.text-frame{position:relative;isolation:isolate;aspect-ratio:var(--frame-ratio,9/16);height:auto;width:min(100cqw,100cqh * var(--frame-ratio,9/16));max-height:100%;max-width:100%;background:var(--raised);overflow:hidden;border-radius:6px;box-shadow:0 0 0 1px var(--line)}
 .frame-label{position:absolute;inset:35% 0 auto;text-align:center;color:var(--mut);font-size:.8125rem;pointer-events:none}
 .preview-text{position:absolute;transform:translate(-50%,-50%);display:grid;place-items:center;min-width:44px;min-height:44px;border:1px solid transparent;background:transparent;border-radius:var(--radius-sm);padding:var(--space-xs);line-height:1.3;font-weight:650;max-width:none;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none}
 .preview-text>span{white-space:nowrap}
@@ -465,6 +465,12 @@ textarea{font-size:.75rem}
 .parameter-row>.field{grid-template-columns:auto minmax(0,1fr)}
 .parameter-row .color-more{grid-column:1/-1}
 .text-controls .preview-hint:empty{display:none}
+
+/* shape and crop: the frame follows the picked shape; the video fills it and is slid to the crop */
+.frame-surround{container-type:size}
+.text-frame video.frame-video{object-fit:cover !important;cursor:grab}
+.text-frame[data-cropping=true] video.frame-video{cursor:grabbing}
+.frame-aspect select{min-height:28px;padding:2px 6px;font-size:.75rem;background:var(--surface)}
 </style>
 </head>
 <body data-loading="true">
@@ -535,7 +541,7 @@ textarea{font-size:.75rem}
 <div class="stage-body">
 <p id="editEmpty" class="caption">วางคำตอบจาก AI ในขั้น 2 แล้วเลือกเรื่องที่จะตัดต่อ</p>
 <div id="editor" class="editor" hidden>
-<div id="editStyleHost" class="editor-style"></div><video id="editVideo" class="frame-video" playsinline preload="metadata"></video><p id="editVideoNote" class="caption" role="status"></p>
+<div id="editStyleHost" class="editor-style"></div><video id="editVideo" class="frame-video" playsinline preload="metadata" title="ลากภาพเพื่อเลื่อนตำแหน่งครอป"></video><p id="editVideoNote" class="caption" role="status"></p>
 <div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><span class="caption">คลิกเส้นเวลาเพื่อเลือกจุดเล่น · ลากท่อนเพื่อสลับ · เว้นวรรคเล่น/หยุด</span><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
 <div id="editTrack" class="edit-track"></div>
 </div>
@@ -547,7 +553,7 @@ textarea{font-size:.75rem}
 <div class="stage-body">
 <section class="qc" aria-labelledby="textQcTitle"><h2 id="textQcTitle">ตรวจซับ</h2><p id="textQcSummary" class="caption" role="status"></p><button id="textQcGo" data-go="1" hidden>ไปขั้น 1</button><ol id="textQcList" class="qc-list"></ol></section>
 <div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
-<div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><span class="badge">9:16</span></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
+<div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><label class="frame-aspect"><span class="sr-only">ขนาดคลิป</span><select id="frameAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
 <aside class="text-inspector" aria-label="ปรับข้อความ">
 <fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำเน้น</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">อังกฤษ</button></div></fieldset>
 <div id="headlineActions" class="row" hidden><button id="addHeadline" class="primary" data-icon="plus">เพิ่มข้อความ</button><button id="removeHeadline" data-icon="trash">ลบข้อความนี้</button></div>

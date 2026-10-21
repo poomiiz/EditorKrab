@@ -148,8 +148,13 @@ function renderTimeline(){
   if(!complete){const wait=document.createElement('div');wait.className='timeline-seg timeline-wait';wait.textContent=lines.length?'กำลังถอดเสียงส่วนที่เหลือ…':'ยังไม่มีข้อความ ถอดเสียงในขั้น 1';boxes.push(wait);}
   track.replaceChildren(...boxes);
 }
+// the clip's shape (9:16 / 1:1 / 16:9) sizes every preview frame and the exported video
+const ratios={'9:16':'9/16','1:1':'1/1','16:9':'16/9'};
+function applyAspect(){const aspect=ratios[draft.output?.aspect]?draft.output.aspect:'9:16';$('frameAspect').value=aspect;document.documentElement.style.setProperty('--frame-ratio',ratios[aspect]);}
+$('frameAspect').onchange=()=>{if(!editingAllowed){applyAspect();return;}draft.output={...(draft.output || {}),aspect:$('frameAspect').value};save();applyAspect();requestAnimationFrame(()=>textEditor.render());};
 function render() {
   renderSteps();
+  applyAspect();
   for (const p of document.querySelectorAll('[data-panel]')) p.hidden = Number(p.dataset.panel) !== activeStep(draft);
   // Placing subtitles runs the text check; only flagged lines ask to be heard.
   if (activeStep(draft)!==3) stories.stop();

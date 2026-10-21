@@ -152,12 +152,34 @@ fn subtitles_place_speech_in_output_time_and_headline_for_the_whole_clip() {
 fn ffmpeg_cuts_each_piece_from_its_own_input_and_burns_subs() {
     let doc = document(json!({"stories": [{"segment_ids": ["b0", "a1"]}]}));
     let story = &plan(&doc, &jobs()).unwrap()[0];
-    let args = ffmpeg_args(story, Path::new("out.mp4"));
+    let args = ffmpeg_args(story, &doc, Path::new("out.mp4"));
     let graph = &args[args.iter().position(|a| a == "-filter_complex").unwrap() + 1];
     assert!(graph.starts_with("[0:v]trim=start=0.200:end=1.200"));
     assert!(graph.contains("[1:v]trim=start=1.500:end=4.000"));
+    assert!(graph.contains("crop=w='min(iw,ih*0.562500)':h='min(ih,iw/0.562500)':x='(iw-ow)*0.5000'"), "9:16, centred by default: {graph}");
+    assert!(graph.contains("scale=1080:1920"));
     assert!(graph.ends_with("[v0][a0][v1][a1]concat=n=2:v=1:a=1[cv][ca];[cv]ass=subs.ass[vout]"));
     assert_eq!(args.last().unwrap(), "out.mp4");
+}
+
+#[test]
+fn the_picked_shape_and_crop_reach_ffmpeg_and_the_subtitles() {
+    let mut doc = document(json!({"stories": [{"segment_ids": ["a1"]}]}));
+    let story = &plan(&doc, &jobs()).unwrap()[0];
+    let path = story.sources[0].display().to_string();
+    doc["output"] = json!({"aspect": "1:1"});
+    doc["files"] = json!([{"source_id": "s1", "path": path}]);
+    doc["crops"] = json!({"s1": {"x": 0.25, "y": 2.0}});
+    let args = ffmpeg_args(story, &doc, Path::new("out.mp4"));
+    let graph = &args[args.iter().position(|a| a == "-filter_complex").unwrap() + 1];
+    assert!(graph.contains("crop=w='min(iw,ih*1.000000)':h='min(ih,iw/1.000000)':x='(iw-ow)*0.2500':y='(ih-oh)*1.0000'"), "{graph}");
+    assert!(graph.contains("scale=1080:1080"));
+    let (ass, _) = subtitles(story, &doc);
+    assert!(ass.contains("PlayResX: 1080\nPlayResY: 1080"));
+    doc["output"] = json!({"aspect": "16:9"});
+    let (ass, _) = subtitles(story, &doc);
+    assert!(ass.contains("PlayResX: 1920\nPlayResY: 1080"));
+    assert!(ass.contains("\\fs114"), "64 px on a 1080-wide frame is 114 on 1920: {ass}");
 }
 
 #[test]

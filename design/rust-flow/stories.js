@@ -176,6 +176,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   const done=!!reviews()[story.id];$('editReviewed').textContent=done?'ตรวจแล้ว':'ตรวจเรื่องนี้แล้ว';$('editReviewed').classList.toggle('primary',!done);$('editReviewed').disabled=!editable();
   // the preview plays under the subtitle frame, so subtitles are placed and styled on the real picture
   const frame=$('textFrame');if(frame&&video.parentElement!==frame)frame.prepend(video);
+  cropSource=story.source_id;showCrop();
   const src=`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(story.source_id)}/preview`;
   if(video.dataset.src!==src){video.dataset.src=src;$('editVideoNote').textContent='กำลังเตรียมพรีวิว 360p ครั้งแรกอาจรอสักครู่';video.src=src;video.load();}
   // the clip as it plays: kept lines end to end in story order; the switch adds the cut lines back at their own time
@@ -218,7 +219,32 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   };
   $('editClock').textContent=`ใช้ ${story.kept.length} บรรทัด · ${pieces(story)} ท่อน · ยาว ${clock(length(story.kept))}`;
  }
- let editView=null,refocus=null;
+ let editView=null,refocus=null,cropSource=null;
+ // crop: where the clip-shaped window sits on the video, 0..1 across the slack each way (0.5 = centred)
+ const cropOf=id=>{const c=read().crops?.[id] || {};const f=v=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):0.5;return {x:f(c.x),y:f(c.y)};};
+ function showCrop(at=cropOf(cropSource)){video.style.objectPosition=`${at.x*100}% ${at.y*100}%`;}
+ {
+  const frame=$('textFrame');let drag=null;
+  frame.addEventListener('pointerdown',e=>{
+   if(e.target!==video || !cropSource || !editable() || e.button!==0)return;
+   const fw=frame.clientWidth,fh=frame.clientHeight,vw=video.videoWidth,vh=video.videoHeight;if(!vw || !vh)return;
+   const scale=Math.max(fw/vw,fh/vh);
+   drag={id:e.pointerId,x0:e.clientX,y0:e.clientY,start:cropOf(cropSource),ox:vw*scale-fw,oy:vh*scale-fh,at:null};
+   frame.setPointerCapture(e.pointerId);frame.dataset.cropping='true';e.preventDefault();
+  });
+  frame.addEventListener('pointermove',e=>{
+   if(!drag || e.pointerId!==drag.id)return;
+   const f=v=>Math.min(1,Math.max(0,v));
+   drag.at={x:drag.ox>1?f(drag.start.x-(e.clientX-drag.x0)/drag.ox):0.5,y:drag.oy>1?f(drag.start.y-(e.clientY-drag.y0)/drag.oy):0.5};
+   showCrop(drag.at);
+  });
+  const end=e=>{
+   if(!drag || e.pointerId!==drag.id)return;
+   const at=drag.at,id=cropSource;drag=null;delete frame.dataset.cropping;
+   if(at&&id)write(d=>{d.crops={...(d.crops || {}),[id]:{x:Math.round(at.x*1000)/1000,y:Math.round(at.y*1000)/1000}};});
+  };
+  frame.addEventListener('pointerup',end);frame.addEventListener('pointercancel',end);
+ }
  // the playhead goes to `ms` inside the kept line `id`; play continues the story from there, paused shows that frame
  function seekTo(story,ms,id,play){
   const from=story.kept.findIndex(k=>k.segment_id===id);if(from<0)return;
