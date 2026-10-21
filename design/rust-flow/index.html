@@ -722,6 +722,18 @@ label[for="fx-blend"]::before{content:"🌗 "}
  #textControls>*+*{margin-top:var(--space-sm)}
  #textControls>details.fx{float:right;width:calc(50% - var(--space-md));margin:0 0 0 var(--space-lg)}
 }
+
+/* nothing overflows: the font button wraps under a full-width field, colour is swatch + code, the shadow's
+   four boxes take the full effects width under their label, and number boxes drop their spinners */
+.font-pick{flex-wrap:wrap}.font-pick input{flex:1 1 100%}
+.colour-pick{display:grid;grid-template-columns:44px minmax(0,1fr);gap:var(--space-xs)}
+.colour-pick input[type=color]{width:44px;height:36px;padding:2px}
+.tool-row>*{min-width:0}
+.fx-grid>label[for="fx-shadow"]{grid-column:1/-1}
+.fx-grid .fx-shadow-row{grid-column:1/-1}
+.text-inspector input[type=number]{-moz-appearance:textfield;appearance:textfield}
+.text-inspector input[type=number]::-webkit-inner-spin-button,.text-inspector input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.fx-grid>*{min-width:0}
 </style>
 </head>
 <body data-loading="true">
@@ -815,7 +827,8 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <div class="tool-row"><label for="text-font">🔤 ฟอนต์</label><div class="font-pick"><input id="text-font" list="textFonts" maxlength="128" autocomplete="off" aria-describedby="fontStatus" aria-controls="fontList"><datalist id="textFonts"><option value="ฟอนต์ระบบ"></option><option value="Tahoma"></option><option value="Leelawadee UI"></option></datalist><button id="localFonts" type="button" data-icon="font" title="อ่านรายชื่อฟอนต์ที่ติดตั้งในเครื่องนี้">ฟอนต์ในเครื่อง</button></div></div>
 <div id="fontList" class="font-list" role="listbox" aria-label="ฟอนต์ในเครื่อง" hidden></div>
 <p id="fontStatus" class="preview-hint" role="status"></p>
-<div class="tool-row"><label for="text-size">📏 ขนาด</label><div class="size-colour"><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"><label id="colorLabel" for="text-color">สี</label><input id="text-color" type="color" aria-labelledby="colorLabel"><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false" aria-label="รหัสสี เช่น #FFFFFF" placeholder="#FFFFFF"></div></div>
+<div class="tool-row"><label for="text-size">📏 ขนาด</label><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"></div>
+<div class="tool-row"><label id="colorLabel" for="text-color">สี</label><div class="colour-pick"><input id="text-color" type="color" aria-labelledby="colorLabel"><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false" aria-label="รหัสสี เช่น #FFFFFF" placeholder="#FFFFFF"></div></div>
 <p id="textFieldError" class="field-warning" role="status" hidden></p></div>
 <section class="qc" aria-labelledby="textQcTitle"><h2 id="textQcTitle">ตรวจซับ</h2><p id="textQcSummary" class="caption" role="status"></p><button id="textQcGo" data-go="1" hidden>ไปขั้น 1</button><ol id="textQcList" class="qc-list"></ol></section></aside></div></div>
 </div>
