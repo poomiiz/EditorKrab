@@ -580,6 +580,20 @@ textarea{font-size:.75rem}
 .stage[data-panel="4"] .text-stage{position:relative;padding:var(--space-sm)}
 .stage[data-panel="4"] .preview-caption{position:absolute;top:var(--space-sm);right:var(--space-sm);z-index:3;margin:0}
 .stage[data-panel="4"] .preview-caption>span:first-child,.stage[data-panel="4"] #textDragHint{display:none}
+
+/* step 4: the preview gets the room; AI buttons sit in the play row, layers are slimmer */
+.stage[data-panel="4"] .caption-dock{padding:var(--space-xs) var(--space-md)}
+#captionTransport .caption-ai{display:flex;gap:var(--space-xs);margin-left:auto}
+#captionTransport .caption-ai button{min-height:32px;padding:0 10px;font-size:.8125rem}
+#captionTransport .editor-zoom{margin-left:var(--space-sm)}
+#editor .caption-ai{display:none}
+#captionTransport .editor-controls{gap:var(--space-sm)}
+#captionTransport .edit-lane{height:112px}
+#captionTransport .edit-mark::before{height:104px}
+.edit-vid{top:24px;height:12px}
+#captionTransport .edit-seg{top:39px;height:24px}
+#captionTransport .edit-text{line-height:22px;font-size:.75rem}
+.edit-emph{top:65px;height:22px;line-height:20px}
 </style>
 </head>
 <body data-loading="true">
@@ -662,7 +676,7 @@ textarea{font-size:.75rem}
 <div class="stage-head"><div><h1 id="captionsTitle"><span>ซับ</span></h1><p>เลือกสิ่งที่จะขึ้นจอ แล้วลากวางตำแหน่ง</p></div></div>
 <div class="stage-body">
 
-<div id="captionDock" class="caption-dock"><div class="row caption-ai"><strong class="caption-ai-label">คำเน้นด้วย AI</strong><button id="emphasisCopy" type="button" data-icon="copy">คัดลอกให้ AI</button><button id="emphasisOpen" type="button" data-icon="paste">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status" role="status" hidden></p></div><div id="captionTransport"><div id="layerHeads" class="layer-heads"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
+<div id="captionDock" class="caption-dock"><div class="row caption-ai"><button id="emphasisCopy" type="button" data-icon="copy" title="คัดลอกท่อนที่ใช้ทุกเรื่องไปให้ AI เลือกคำเน้น">AI เลือกคำเน้น</button><button id="emphasisOpen" type="button" data-icon="paste" title="วางคำตอบจาก AI">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status" role="status" hidden></p></div><div id="captionTransport"><div id="layerHeads" class="layer-heads"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
 <div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><label class="frame-aspect"><span class="sr-only">ขนาดคลิป</span><select id="frameAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
 <aside class="text-inspector" aria-label="ปรับข้อความ"><div class="inspector-tabs" role="tablist"><button type="button" role="tab" data-tab="style" aria-selected="true">ปรับข้อความ</button><button type="button" role="tab" data-tab="qc" aria-selected="false">ตรวจซับ</button></div><div id="lineWords" class="line-words" hidden></div>
 <fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำเน้น</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">อังกฤษ</button></div></fieldset>

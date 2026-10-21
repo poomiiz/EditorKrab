@@ -180,6 +180,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   if(frame&&video.parentElement!==frame)frame.prepend(video);
   const controls=$('editPlay').closest('.editor-controls'),dock=textMode?$('captionTransport'):$('editor');
   if(controls.parentElement!==dock){dock.append(controls,$('editTrack'));}
+  if(textMode)controls.querySelector('.editor-zoom').before(document.querySelector('.caption-ai'));
   const title=$(textMode?'captionsTitle':'editTitle');if(pick.parentElement!==title)title.append(pick);
   cropSource=story.source_id;showCrop();
   const src=`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(story.source_id)}/preview`;
@@ -265,9 +266,9 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  // track heads for the step 4 layers; the ticks are the "on screen" choices
  function drawHeads(){
   const heads=$('layerHeads');if(!heads)return;
-  const roles=read().text_roles || [],rows=[['วิดีโอ',null,22],['คำพูด','speech',48],['คำเน้น','emphasis',88],['อังกฤษ','english',126]];
+  const roles=read().text_roles || [],rows=[['วิดีโอ',null,22],['คำพูด','speech',38],['คำเน้น','emphasis',64],['อังกฤษ','english',90]];
   heads.replaceChildren(...rows.map(([label,role,top])=>{
-   const row=document.createElement('div');row.className='layer-head';row.style.top=top+'px';row.style.height=(role==='english'?38:role?40:26)+'px';
+   const row=document.createElement('div');row.className='layer-head';row.style.top=top+'px';row.style.height=(role==='english'?22:role?26:16)+'px';
    if(role){
     const tick=document.createElement('input');tick.type='checkbox';tick.checked=roles.includes(role);tick.disabled=!editable();tick.title='แสดงบนจอ';tick.setAttribute('aria-label',`แสดง${label}บนจอ`);
     tick.onchange=()=>{const box=document.querySelector(`[data-role-option="${role}"]`);if(box){box.checked=tick.checked;box.dispatchEvent(new Event('change'));}};
