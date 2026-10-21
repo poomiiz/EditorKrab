@@ -455,6 +455,16 @@ textarea{font-size:.75rem}
 .ai-text{display:grid;gap:2px;min-width:0}.ai-text h2{font-size:.9375rem}.ai-text .plan-status{margin-top:var(--space-xs);justify-self:start}
 
 [data-icon=paste]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect width='8' height='4' x='8' y='2' rx='1'/><path d='M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2'/></svg>")}
+
+/* the text panel fits without scrolling: labels sit beside their fields, tighter spacing */
+.text-inspector{gap:var(--space-md);padding:var(--space-md) var(--space-lg)}
+.text-components .role-pick{white-space:nowrap}
+.text-controls{gap:var(--space-sm);padding-top:var(--space-sm)}
+.text-controls>.field,.parameter-row>.field{display:grid;grid-template-columns:4.5em minmax(0,1fr);align-items:center;gap:var(--space-sm)}
+.parameter-row{grid-template-columns:1fr 1fr;gap:var(--space-sm)}
+.parameter-row>.field{grid-template-columns:auto minmax(0,1fr)}
+.parameter-row .color-more{grid-column:1/-1}
+.text-controls .preview-hint:empty{display:none}
 </style>
 </head>
 <body data-loading="true">
@@ -539,7 +549,7 @@ textarea{font-size:.75rem}
 <div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
 <div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><span class="badge">9:16</span></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
 <aside class="text-inspector" aria-label="ปรับข้อความ">
-<fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำสำคัญ</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">คำแปลอังกฤษ</button></div></fieldset>
+<fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำเน้น</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">อังกฤษ</button></div></fieldset>
 <div id="headlineActions" class="row" hidden><button id="addHeadline" class="primary" data-icon="plus">เพิ่มข้อความ</button><button id="removeHeadline" data-icon="trash">ลบข้อความนี้</button></div>
 <p id="textSelectionHint" class="selection-hint">ติ๊กอย่างน้อย 1 อย่าง</p>
 <div id="textControls" class="text-controls" hidden><h2 id="textRoleTitle">ข้อความพูด</h2>

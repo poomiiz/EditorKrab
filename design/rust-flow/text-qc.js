@@ -14,7 +14,8 @@ export function createTextQc({texts,summary,list,listen,edit,go}){
    go.hidden=items.length>0;summary.closest('.qc').hidden=!items.length;
    if(!items.length){summary.textContent='ยังไม่มีซับ ถอดเสียงที่ขั้น 1 ก่อน';list.replaceChildren();return;}
    summary.textContent='กำลังตรวจ';
-   const response=await fetch('/api/v1/text-qc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
+   // the server takes only these fields; subtitle lines also carry segment and source ids for steps 2 and 3
+   const response=await fetch('/api/v1/text-qc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:items.map(({kind,id,text,start_ms,end_ms,source})=>({kind,id,text,start_ms,end_ms,source}))})});
    const value=await response.json();if(!response.ok)throw Error(value.error || 'text_qc_failed');
    paint(items,value.findings);
   }catch(error){lastKey='';summary.textContent='ตรวจข้อความไม่ได้ ('+error.message+')';}
