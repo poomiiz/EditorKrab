@@ -382,7 +382,7 @@ textarea{font-size:.75rem}
 .editor-caption{position:absolute;left:6%;right:6%;bottom:14%;margin:0;text-align:center;font-weight:700;font-size:1rem;line-height:1.35;color:#fff;text-shadow:0 0 3px #000,0 0 6px #000}
 .editor-controls{gap:var(--space-md);align-items:center}.editor-zoom{margin-left:auto;display:flex;align-items:center;gap:var(--space-xs)}
 .edit-track{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--sunken)}
-.edit-lane{position:relative;height:96px}
+.edit-lane{position:relative;height:96px;cursor:text}
 .edit-mark{position:absolute;top:4px;transform:translateX(2px);white-space:nowrap}.edit-mark::before{content:"";position:absolute;left:-2px;top:0;height:86px;border-left:1px solid var(--line)}
 .edit-seg{position:absolute;top:26px;height:60px;display:flex;flex-direction:column;border:1px solid var(--acc);border-radius:6px;background:var(--acc-soft);overflow:hidden}
 .edit-seg[data-keep=false]{border-style:dashed;border-color:var(--line-strong);background:none;opacity:.6}
@@ -536,7 +536,7 @@ textarea{font-size:.75rem}
 <p id="editEmpty" class="caption">วางคำตอบจาก AI ในขั้น 2 แล้วเลือกเรื่องที่จะตัดต่อ</p>
 <div id="editor" class="editor" hidden>
 <div id="editStyleHost" class="editor-style"></div><video id="editVideo" class="frame-video" playsinline preload="metadata"></video><p id="editVideoNote" class="caption" role="status"></p>
-<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><span class="caption">ลากท่อนเพื่อสลับลำดับ · เว้นวรรคเพื่อเล่น/หยุด</span><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
+<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><span class="caption">คลิกเส้นเวลาเพื่อเลือกจุดเล่น · ลากท่อนเพื่อสลับ · เว้นวรรคเล่น/หยุด</span><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
 <div id="editTrack" class="edit-track"></div>
 </div>
 </div>

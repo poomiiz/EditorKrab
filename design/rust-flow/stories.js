@@ -190,7 +190,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   for(const {line,kept,at} of boxes){
    const span=kept || line,box=document.createElement('div');box.className='edit-seg';box.dataset.keep=!!kept;
    box.style.left=px(at)+'px';box.style.width=Math.max(6,px(span.end_ms-span.start_ms)-2)+'px';box.title=line.text;
-   const text=document.createElement('button');text.type='button';text.className='edit-text';text.textContent=line.text;text.onclick=()=>{queue=[span];start();};
+   const text=document.createElement('button');text.type='button';text.className='edit-text';text.textContent=line.text;text.onclick=()=>{if(kept&&!showCut)seekTo(story,kept.start_ms,kept.segment_id,true);else{queue=[span];start();}};
    const toggle=document.createElement('button');toggle.type='button';toggle.className='edit-toggle';toggle.dataset.icon=kept?'x':'plus';
    toggle.title=kept?'ตัดท่อนนี้ทิ้ง':'เก็บท่อนนี้';toggle.setAttribute('aria-label',toggle.title);toggle.disabled=!editable()||(kept&&story.kept.length===1);
    toggle.onclick=()=>flip(story,line);
@@ -209,9 +209,25 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   const head=document.createElement('div');head.className='edit-head';head.id='editHead';lane.append(head);
   const track=$('editTrack'),scroll=track.scrollLeft;track.replaceChildren(lane);track.scrollLeft=scroll;
   editView={story,showCut,boxes,zoom};
+  lane.onclick=e=>{
+   if(e.target!==lane&&!e.target.classList.contains('edit-mark'))return;
+   const at=(e.clientX-lane.getBoundingClientRect().left)/zoom*1000;
+   if(showCut){const line=story.kept.find(k=>k.end_ms>at) || story.kept.at(-1);if(line)seekTo(story,Math.max(line.start_ms,at),line.segment_id,false);return;}
+   const box=boxes.find(b=>at<b.at+b.kept.end_ms-b.kept.start_ms) || boxes.at(-1);
+   if(box)seekTo(story,box.kept.start_ms+Math.max(0,at-box.at),box.kept.segment_id,false);
+  };
   $('editClock').textContent=`ใช้ ${story.kept.length} บรรทัด · ${pieces(story)} ท่อน · ยาว ${clock(length(story.kept))}`;
  }
  let editView=null,refocus=null;
+ // the playhead goes to `ms` inside the kept line `id`; play continues the story from there, paused shows that frame
+ function seekTo(story,ms,id,play){
+  const from=story.kept.findIndex(k=>k.segment_id===id);if(from<0)return;
+  queue=story.kept.slice(from);video.currentTime=ms/1000;
+  caption(story.kept[from].text);
+  if(play){video.play().catch(()=>{});}else{if(!video.paused)video.pause();cancelAnimationFrame(ticking);ticking=0;}
+  const head=$('editHead');if(head&&editView){const box=editView.boxes.find(b=>b.kept?.segment_id===id);
+   const x=editView.showCut?ms:box?box.at+ms-box.kept.start_ms:-1;head.hidden=x<0;if(x>=0)head.style.left=(x/1000*editView.zoom)+'px';}
+ }
  function handle(story,kept,edge,box,zoom){
   const grip=document.createElement('button');grip.type='button';grip.className='edit-grip';grip.dataset.edge=edge;
   grip.title=edge==='start_ms'?'ลากเพื่อยืดหรือหดต้นท่อน':'ลากเพื่อยืดหรือหดท้ายท่อน';grip.setAttribute('aria-label',grip.title+' ใช้ลูกศรซ้ายขวาทีละ 0.1 วินาที');
@@ -255,7 +271,12 @@ export function createStories({project,read,lines,write,go,editable,caption}){
  let ticking=0;
  function start(){const line=queue[0];if(!line)return;video.currentTime=line.start_ms/1000;video.play().catch(()=>{});cancelAnimationFrame(ticking);ticking=requestAnimationFrame(tick);}
  // timeupdate fires about 4 times a second, late enough to play the start of a cut line; a frame callback is on time
- function tick(){
+ let stepped=0;
+ function tick(){step();ticking=queue.length&&!video.paused?requestAnimationFrame(tick):0;}
+ // frame callbacks stop when the window is hidden or busy; timeupdate keeps cuts and the playhead going then
+ video.addEventListener('timeupdate',()=>{if(performance.now()-stepped>120)step();});
+ function step(){
+  stepped=performance.now();
   const now=video.currentTime*1000,line=queue[0];
   if(line&&now>=line.end_ms){
    queue.shift();const next=queue[0];
@@ -270,7 +291,6 @@ export function createStories({project,read,lines,write,go,editable,caption}){
    if(!editView.showCut){const box=editView.boxes.find(b=>now>=b.kept.start_ms&&now<b.kept.end_ms);x=box?box.at+now-box.kept.start_ms:-1;}
    head.hidden=x<0;if(x>=0)head.style.left=(x/1000*editView.zoom)+'px';
   }
-  ticking=queue.length&&!video.paused?requestAnimationFrame(tick):0;
  }
  video.addEventListener('play',()=>{cancelAnimationFrame(ticking);ticking=requestAnimationFrame(tick);});
  video.addEventListener('seeked',()=>{if(video.paused)tick();});
