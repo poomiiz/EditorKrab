@@ -200,7 +200,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    const toggle=document.createElement('button');toggle.type='button';toggle.className='edit-toggle';toggle.dataset.icon=kept?'x':'plus';
    toggle.title=kept?'ตัดท่อนนี้ทิ้ง':'เก็บท่อนนี้';toggle.setAttribute('aria-label',toggle.title);toggle.disabled=!editable()||(kept&&story.kept.length===1);
    toggle.onclick=()=>flip(story,line);
-   box.append(toggle,text);
+   box.dataset.id=line.segment_id;
+   if(textMode)box.append(text);else box.append(toggle,text);
    if(kept&&editable()&&!textMode)box.append(handle(story,kept,'start_ms',box,zoom),handle(story,kept,'end_ms',box,zoom));
    if(kept&&!showCut&&editable()&&!textMode){
     box.draggable=true;box.dataset.id=kept.segment_id;
@@ -215,7 +216,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const head=document.createElement('div');head.className='edit-head';head.id='editHead';lane.append(head);
   const track=$('editTrack'),scroll=track.scrollLeft;track.replaceChildren(lane);track.scrollLeft=scroll;
   editView={story,showCut,boxes,zoom};
-  wordLine=wordLine?lines().find(l=>l.segment_id===wordLine.segment_id) || null:null;drawWords();
+  wordLine=wordLine?lines().find(l=>l.segment_id===wordLine.segment_id) || null:null;drawWords();if(textMode)drawHeads();
   lane.onclick=e=>{
    if(e.target!==lane&&!e.target.classList.contains('edit-mark'))return;
    const at=(e.clientX-lane.getBoundingClientRect().left)/zoom*1000;
@@ -233,22 +234,50 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function showWords(line){
   const same=(wordLine?.segment_id || null)===(line?.segment_id || null);wordLine=line || null;if(!same)drawWords();
  }
+ // step 4 layers: a video bar and a speech clip per kept line, and emphasis clips where picked words are said;
+ // the panel lists the words of the line picked on the speech layer
  function drawWords(){
   const lane=$('editTrack').querySelector('.edit-lane');if(!lane || !editView)return;
-  lane.querySelectorAll('.edit-word').forEach(n=>n.remove());
-  const emphasis=read().emphasis || {},z=editView.zoom;
-  for(const {line,kept,at} of editView.boxes){
-   if(!kept && !editView.showCut)continue;
-   const span=kept || line,picked=new Set(emphasis[line.segment_id] || []),open=wordLine?.segment_id===line.segment_id;
-   for(const w of line.words || []){
-    if(!open && !picked.has(w.start_ms))continue;
-    if(w.end_ms<=span.start_ms || w.start_ms>=span.end_ms)continue;
-    const b=document.createElement('button');b.type='button';b.className='edit-word';b.textContent=w.text;b.title=picked.has(w.start_ms)?'คำเน้น · คลิกเพื่อเอาออก':'คลิกเพื่อเน้นคำนี้';
-    b.style.left=((at+Math.max(0,w.start_ms-span.start_ms))/1000*z)+'px';b.style.width=Math.max(18,(w.end_ms-w.start_ms)/1000*z-2)+'px';
-    b.setAttribute('aria-pressed',String(picked.has(w.start_ms)));b.disabled=!editable();b.onclick=e=>{e.stopPropagation();toggleEmphasis(line,w);};
-    lane.append(b);
+  lane.querySelectorAll('.edit-emph,.edit-vid').forEach(n=>n.remove());
+  const textMode=lane.closest('#captionTransport'),emphasis=read().emphasis || {},z=editView.zoom,px=ms=>ms/1000*z;
+  if(textMode){
+   const roles=read().text_roles || [];lane.classList.toggle('edit-layer-off',!roles.includes('emphasis'));lane.classList.toggle('edit-layer-off-speech',!roles.includes('speech'));
+   for(const {line,kept,at} of editView.boxes){
+    const span=kept || line;
+    const bar=document.createElement('div');bar.className='edit-vid';bar.style.left=px(at)+'px';bar.style.width=Math.max(4,px(span.end_ms-span.start_ms)-2)+'px';lane.append(bar);
+    const picked=new Set(emphasis[line.segment_id] || []),words=(line.words || []).filter(w=>picked.has(w.start_ms)&&w.end_ms>span.start_ms&&w.start_ms<span.end_ms);
+    if(words.length){
+     const first=Math.max(words[0].start_ms,span.start_ms),clip=document.createElement('button');clip.type='button';clip.className='edit-emph';
+     clip.textContent=words.map(w=>w.text.trim()).join(' ');clip.title='คำเน้น · คลิกเพื่อแก้คำ';
+     clip.style.left=px(at+first-span.start_ms)+'px';clip.style.width=Math.max(24,px(span.end_ms-first)-2)+'px';
+     clip.onclick=e=>{e.stopPropagation();wordLine=line;drawWords();};lane.append(clip);
+    }
    }
+   for(const box of lane.querySelectorAll('.edit-seg'))box.dataset.lineSelected=String(box.dataset.id===wordLine?.segment_id || box.title===wordLine?.text);
   }
+  const host=$('lineWords');if(!host)return;
+  host.hidden=!textMode || !wordLine;if(host.hidden){host.replaceChildren();return;}
+  const picked=new Set(emphasis[wordLine.segment_id] || []),label=document.createElement('span');label.className='caption';
+  label.textContent=wordLine.words?.length?'คำในท่อนนี้ · คลิกคำเพื่อเน้น':'ท่อนนี้แก้ข้อความแล้ว ไม่มีเวลารายคำให้เลือกเน้น';
+  host.replaceChildren(label,...(wordLine.words || []).map(w=>{const b=document.createElement('button');b.type='button';b.className='line-word';b.textContent=w.text;
+   b.setAttribute('aria-pressed',String(picked.has(w.start_ms)));b.disabled=!editable();b.onclick=()=>toggleEmphasis(wordLine,w);return b;}));
+ }
+ // track heads for the step 4 layers; the ticks are the "on screen" choices
+ function drawHeads(){
+  const heads=$('layerHeads');if(!heads)return;
+  const roles=read().text_roles || [],rows=[['วิดีโอ',null,22],['คำพูด','speech',48],['คำเน้น','emphasis',88],['อังกฤษ','english',126]];
+  heads.replaceChildren(...rows.map(([label,role,top])=>{
+   const row=document.createElement('div');row.className='layer-head';row.style.top=top+'px';row.style.height=(role==='english'?38:role?40:26)+'px';
+   if(role){
+    const tick=document.createElement('input');tick.type='checkbox';tick.checked=roles.includes(role);tick.disabled=!editable();tick.title='แสดงบนจอ';tick.setAttribute('aria-label',`แสดง${label}บนจอ`);
+    tick.onchange=()=>{const box=document.querySelector(`[data-role-option="${role}"]`);if(box){box.checked=tick.checked;box.dispatchEvent(new Event('change'));}};
+    const name=document.createElement('button');name.type='button';name.textContent=label;name.title=`ปรับ${label}`;
+    name.onclick=()=>document.querySelector(`[data-role-pick="${role}"]`)?.click();
+    row.append(tick,name);
+   }else row.textContent=label;
+   return row;
+  }));
+  heads.style.height=$('editTrack').offsetHeight ? $('editTrack').offsetHeight+'px' : '';
  }
  function toggleEmphasis(line,word){
   write(d=>{

@@ -499,9 +499,6 @@ textarea{font-size:.75rem}
 .edit-lane{height:128px}
 .edit-mark::before{height:118px}
 .edit-seg{height:56px}
-.edit-lane::after{content:"คำเน้น · คลิกท่อนแล้วคลิกคำ";position:absolute;left:8px;top:92px;font-size:.6875rem;color:var(--mut);pointer-events:none;white-space:nowrap}
-.edit-word{position:absolute;top:88px;height:28px;min-height:0;padding:0 4px;font-size:.75rem;line-height:1;border-radius:6px;overflow:hidden;white-space:nowrap;text-overflow:clip;z-index:1;background:var(--surface);border:1px dashed var(--line-strong);color:var(--txt-sub)}
-.edit-word[aria-pressed=true]{border:1px solid var(--warn);background:color-mix(in oklch,var(--warn) 30%,var(--surface));color:var(--txt);font-weight:600}
 /* step 3 preview: no caption row or hint, the shape picker floats on the stage, tighter padding */
 .editor-style .text-stage{position:relative;padding:var(--space-sm)}
 .editor-style .preview-caption{position:absolute;top:var(--space-sm);right:var(--space-sm);z-index:3;margin:0}
@@ -520,7 +517,7 @@ textarea{font-size:.75rem}
 .caption-dock[hidden]{display:none}
 .caption-ai{gap:var(--space-sm);flex-wrap:wrap}.caption-ai .caption{flex:1;min-width:16em}
 #captionTransport{display:grid;gap:var(--space-xs);min-width:0}
-#editor .edit-lane{height:96px}#editor .edit-mark::before{height:86px}#editor .edit-lane::after,#editor .edit-word{display:none}
+#editor .edit-lane{height:96px}#editor .edit-mark::before{height:86px}
 #captionTransport .edit-grip,#captionTransport .edit-toggle,#captionTransport .edit-show-cut,#captionTransport .edit-aspect{display:none}
 
 /* step 1: a card per video with what came of it; narrower tool panels */
@@ -543,6 +540,39 @@ textarea{font-size:.75rem}
 .file-percent{font-size:.75rem;color:var(--txt-sub);font-variant-numeric:tabular-nums}
 :root{--side:250px}
 .stage[data-panel="4"] .stage-body{grid-template-columns:min(24%,300px) minmax(0,1fr) !important}
+
+/* step 4: CapCut-like layers (video, speech, emphasis, English) with their show/hide at the track heads;
+   the check and the text tools share the right panel as tabs; the "on screen" ticks live on the track heads */
+.stage[data-panel="4"] .stage-body{grid-template-columns:minmax(0,1fr) !important}
+.stage[data-panel="4"] #captionHost{grid-column:1}
+.stage[data-panel="4"] #textComponents{display:none}
+.inspector-tabs{display:none;gap:2px;border-bottom:1px solid var(--line)}
+.stage[data-panel="4"] .inspector-tabs{display:flex}
+.inspector-tabs button{flex:1;min-height:32px;border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--txt-sub);font-size:.8125rem}
+.inspector-tabs button[aria-selected=true]{border-bottom-color:var(--acc);color:var(--txt);font-weight:600}
+.text-inspector .qc{display:none;border:0;padding:0;flex:1;min-height:0;background:none}
+.stage[data-panel="4"] .text-inspector[data-tab=qc] .qc{display:flex}
+.stage[data-panel="4"] .text-inspector[data-tab=qc]>:not(.inspector-tabs):not(.qc){display:none !important}
+.line-words{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.stage:not([data-panel="4"]) .line-words{display:none}
+.line-words .caption{flex-basis:100%}
+.line-word{min-height:26px;padding:0 8px;font-size:.75rem;border-radius:999px}
+.line-word[aria-pressed=true]{border-color:var(--warn);background:color-mix(in oklch,var(--warn) 28%,transparent);color:var(--txt);font-weight:600}
+#captionTransport{grid-template-columns:104px minmax(0,1fr);column-gap:0}
+#captionTransport>.editor-controls{grid-column:1/-1;grid-row:1}#captionTransport>#layerHeads,#captionTransport>#editTrack{grid-row:2}
+#captionTransport>#editTrack{grid-column:2;border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+.layer-heads{grid-column:1;position:relative;border:1px solid var(--line);border-right:0;border-radius:var(--radius-sm) 0 0 var(--radius-sm);background:var(--panel)}
+.layer-head{position:absolute;left:0;right:0;display:flex;align-items:center;gap:6px;padding:0 8px;font-size:.75rem;color:var(--txt-sub);border-top:1px solid var(--line)}
+.layer-head input{width:16px;height:16px;min-height:16px;margin:0;accent-color:var(--acc)}
+.layer-head button{all:unset;cursor:pointer}.layer-head button:hover{color:var(--txt)}
+#captionTransport .edit-lane{height:166px}
+#captionTransport .edit-mark::before{height:156px}
+#captionTransport .edit-seg{top:52px;height:34px;border-color:var(--line-strong);background:var(--raised)}
+#captionTransport .edit-seg[data-line-selected=true]{border-color:var(--acc);background:var(--acc-soft)}
+#captionTransport .edit-text{-webkit-line-clamp:1;line-height:30px;padding:0 6px}
+.edit-vid{position:absolute;top:26px;height:20px;border-radius:4px;background:color-mix(in oklch,var(--acc) 35%,var(--raised));pointer-events:none}
+.edit-emph{position:absolute;top:92px;height:30px;padding:0 6px;border:1px solid var(--warn);border-radius:6px;background:color-mix(in oklch,var(--warn) 28%,var(--surface));color:var(--txt);font-size:.75rem;font-weight:600;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:0;z-index:1}
+.edit-layer-off .edit-emph,.edit-layer-off-speech .edit-seg{opacity:.35}
 </style>
 </head>
 <body data-loading="true">
@@ -624,10 +654,10 @@ textarea{font-size:.75rem}
 <section class="stage" data-panel="4" hidden aria-labelledby="captionsTitle">
 <div class="stage-head"><div><h1 id="captionsTitle">ซับ</h1><p>เลือกสิ่งที่จะขึ้นจอ แล้วลากวางตำแหน่ง</p></div></div>
 <div class="stage-body">
-<section class="qc" aria-labelledby="textQcTitle"><h2 id="textQcTitle">ตรวจซับ</h2><p id="textQcSummary" class="caption" role="status"></p><button id="textQcGo" data-go="1" hidden>ไปขั้น 1</button><ol id="textQcList" class="qc-list"></ol></section>
-<div id="captionDock" class="caption-dock"><div class="row caption-ai"><span class="caption">คำเน้น: ให้ AI เลือกจากท่อนที่ใช้ทุกเรื่อง แล้ววางคำตอบกลับ หรือคลิกคำในชั้นล่างของเส้นเวลาเอง</span><button id="emphasisCopy" type="button" data-icon="copy">คัดลอกให้ AI</button><button id="emphasisOpen" type="button" data-icon="paste">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status" role="status" hidden></p></div><div id="captionTransport"></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
+
+<div id="captionDock" class="caption-dock"><div class="row caption-ai"><span class="caption">คำเน้น: ให้ AI เลือกจากท่อนที่ใช้ทุกเรื่อง แล้ววางคำตอบกลับ หรือคลิกคำในชั้นล่างของเส้นเวลาเอง</span><button id="emphasisCopy" type="button" data-icon="copy">คัดลอกให้ AI</button><button id="emphasisOpen" type="button" data-icon="paste">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status" role="status" hidden></p></div><div id="captionTransport"><div id="layerHeads" class="layer-heads"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
 <div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><label class="frame-aspect"><span class="sr-only">ขนาดคลิป</span><select id="frameAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
-<aside class="text-inspector" aria-label="ปรับข้อความ">
+<aside class="text-inspector" aria-label="ปรับข้อความ"><div class="inspector-tabs" role="tablist"><button type="button" role="tab" data-tab="style" aria-selected="true">ปรับข้อความ</button><button type="button" role="tab" data-tab="qc" aria-selected="false">ตรวจซับ</button></div><div id="lineWords" class="line-words" hidden></div>
 <fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำเน้น</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">อังกฤษ</button></div></fieldset>
 <div id="headlineActions" class="row" hidden><button id="addHeadline" class="primary" data-icon="plus">เพิ่มข้อความ</button><button id="removeHeadline" data-icon="trash">ลบข้อความนี้</button></div>
 <p id="textSelectionHint" class="selection-hint">ติ๊กอย่างน้อย 1 อย่าง</p>
@@ -638,7 +668,7 @@ textarea{font-size:.75rem}
 <details class="font-more"><summary>ใช้ฟอนต์อื่นในเครื่อง</summary><button id="localFonts" type="button" data-icon="font">แสดงฟอนต์ในเครื่อง</button></details>
 <div class="parameter-row"><label class="field" for="text-size"><span>ขนาด</span><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"></label><div class="field"><label id="colorLabel" for="text-color">สี</label><input id="text-color" type="color" aria-labelledby="colorLabel"><details class="color-more"><summary>ใส่รหัสสี</summary><label class="field" for="text-color-hex"><span>รหัสสี เช่น #FFFFFF</span><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false"></label></details></div></div>
 <details class="fx"><summary>เอฟเฟกต์ (ขอบ เงา แถบหลัง ตอนขึ้น)</summary><div class="fx-grid"><label for="fx-outline">ขอบ</label><span class="fx-pair"><input id="fx-outline" type="number" min="0" max="20" step="1" inputmode="numeric"><input id="fx-outline-color" type="color" aria-label="สีขอบ"></span><label for="fx-shadow">เงา</label><input id="fx-shadow" type="number" min="0" max="20" step="1" inputmode="numeric"><label for="fx-box">แถบหลัง</label><span class="fx-pair"><input id="fx-box" type="checkbox"><input id="fx-box-color" type="color" aria-label="สีแถบพื้นหลัง"></span><label for="fx-enter">ตอนขึ้น</label><select id="fx-enter"><option value="none">ไม่มี</option><option value="fade">จางเข้า</option><option value="pop">เด้ง</option><option value="wipe">กวาดเปิด</option><option value="words">คำต่อคำ</option></select></div></details><p id="textFieldError" class="field-warning" role="status" hidden></p></div>
-</aside></div></div>
+<section class="qc" aria-labelledby="textQcTitle"><h2 id="textQcTitle">ตรวจซับ</h2><p id="textQcSummary" class="caption" role="status"></p><button id="textQcGo" data-go="1" hidden>ไปขั้น 1</button><ol id="textQcList" class="qc-list"></ol></section></aside></div></div>
 </div>
 <div class="stage-foot"><button class="back" data-go="3" data-icon="back">ย้อนกลับ</button><div class="actions"><button class="primary" data-go="5">ถัดไป</button></div></div>
 </section>
