@@ -2,7 +2,26 @@
 // story's subtitle on top of it, and a zoomable timeline where the AI's cuts can be kept or dropped line by line.
 const $=id=>document.getElementById(id);
 const clock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
-export function parsePlan(text){try{const plan=JSON.parse(text);return Array.isArray(plan?.stories)?plan:null;}catch(_){return null;}}
+// The AI's pasted answer, checked before it counts. A ```json fence, words around the JSON and a bare list of stories
+// (some AIs drop the {"stories": ...} wrapper) are fixed into the one shape export reads (`fixed`); anything else names
+// the first thing missing so the paste can be redone, never guessed at.
+export function checkPlan(text,lines){
+ const raw=String(text || '').trim();if(!raw)return {error:''};
+ const fence=raw.match(/```(?:json)?\s*([\s\S]*?)```/),body=(fence?fence[1]:raw).trim();
+ const from=body.search(/[[{]/),to=Math.max(body.lastIndexOf('}'),body.lastIndexOf(']')),json=from<0?body:body.slice(from,to+1);
+ let value;try{value=JSON.parse(json);}catch(_){return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};}
+ const plan=Array.isArray(value)?{stories:value}:value;
+ if(!Array.isArray(plan?.stories) || !plan.stories.length)return {error:'ไม่พบรายการเรื่องในคำตอบ ลองให้ AI ตอบใหม่ตามไฟล์ที่ส่ง'};
+ const known=new Set((lines || []).map(l=>l.segment_id));
+ for(const [i,s] of plan.stories.entries()){
+  const ids=s?.segment_ids;
+  if(!Array.isArray(ids) || !ids.length)return {error:`เรื่อง ${i+1} ไม่มีช่วงพูด (segment_ids)`};
+  const unknown=known.size?ids.filter(id=>!known.has(id)).length:0;
+  if(unknown)return {error:`เรื่อง ${i+1} อ้างช่วงพูดที่ไม่มีในงานนี้ ${unknown} ช่วง ใช้คำตอบของงานอื่นหรือเปล่า`};
+ }
+ return {plan,fixed:json!==raw || Array.isArray(value)};
+}
+export function parsePlan(text){return checkPlan(text).plan || null;}
 
 export function createStories({project,read,lines,write,go,editable}){
  let queue=[];
@@ -67,7 +86,7 @@ export function createStories({project,read,lines,write,go,editable}){
    const kept=keep.has(line.segment_id),box=document.createElement('div');box.className='edit-seg';box.dataset.keep=kept;
    box.style.left=(line.start_ms/1000*zoom)+'px';box.style.width=Math.max(6,(line.end_ms-line.start_ms)/1000*zoom-2)+'px';box.title=line.text;
    const text=document.createElement('button');text.type='button';text.className='edit-text';text.textContent=line.text;text.onclick=()=>{queue=[line];start();};
-   const toggle=document.createElement('button');toggle.type='button';toggle.className='edit-toggle';toggle.textContent=kept?'✕':'+';
+   const toggle=document.createElement('button');toggle.type='button';toggle.className='edit-toggle';toggle.dataset.icon=kept?'x':'plus';
    toggle.title=kept?'ตัดท่อนนี้ทิ้ง':'เก็บท่อนนี้';toggle.setAttribute('aria-label',toggle.title);toggle.disabled=!editable()||(kept&&story.kept.length===1);
    toggle.onclick=()=>flip(story,line);
    box.append(toggle,text);lane.append(box);

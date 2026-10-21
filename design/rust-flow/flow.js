@@ -4,7 +4,7 @@ import {uploadFile} from './uploads.js';
 import {createTranscription,validTranscriptEdits} from './transcription.js';
 import {createTextQc} from './text-qc.js';
 import {createExport} from './export.js';
-import {createStories} from './stories.js';
+import {createStories,checkPlan} from './stories.js';
 import {createStyleEditor,validTextStyles,validHeadlineItems,defaults} from './text-style.js';
 const $ = id => document.getElementById(id);
 const key = 'editorkrab-rust-flow-prototype-v1';
@@ -161,11 +161,14 @@ function render() {
   validate();
 }
 for(const button of document.querySelectorAll('[data-go]'))button.onclick=()=>{document.querySelector(`[data-step="${button.dataset.go}"]`).click();$('workspace').focus();$('workspace').scrollIntoView({block:'start'});};
-function planReady(){try{return !!draft.plan.trim() && !!JSON.parse(draft.plan);}catch(_){return false;}}
+const planCheck=()=>checkPlan(draft.plan,speech.texts());
+function planReady(){return !!planCheck().plan;}
 function stepsDone(){return {1:speech.complete(),2:planReady(),3:stories.allReviewed(),4:!!draft.text_roles?.length,5:headlineItems().length>0};}
 function validate() {
   $('planStatus').hidden=!draft.plan.trim();
-  $('planStatus').textContent=planReady() ? 'อ่านคำตอบได้' : 'คำตอบยังไม่ครบ ลองคัดลอกใหม่ทั้งหมด';
+  const check=planCheck();
+  $('planStatus').textContent=check.plan ? `อ่านได้ ${check.plan.stories.length} เรื่อง` : check.error;
+  $('planStatus').dataset.state=check.plan ? 'ok' : 'error';
 }
 function renderFiles() {
   let duration=0,ready=0;
@@ -188,7 +191,7 @@ function renderFiles() {
     else info.textContent=file.source_id ? 'กำลังตรวจข้อมูล' : file.upload_id ? 'ลากไฟล์เดิมมาวางเพื่อส่งต่อ' : 'ยังไม่พบวิดีโอต้นฉบับ';
     info.textContent=`${(file.size/1048576).toFixed(1)} MB · ${info.textContent}`;
     li.append(info);
-    const remove=document.createElement('button');remove.className='source-remove';remove.textContent='เอาออก';remove.disabled=!editingAllowed;
+    const remove=document.createElement('button');remove.className='source-remove icon-only';remove.dataset.icon='x';remove.title='เอาออก';remove.disabled=!editingAllowed;
     remove.setAttribute('aria-label',`เอา ${file.name} ออกจากรายการ`);
     remove.onclick=()=>{if (!editingAllowed) return;draft.files.splice(index,1);save();renderFiles();};
     li.append(remove);return li;
@@ -201,7 +204,10 @@ function renderFiles() {
   renderSteps();speech.refresh();
 }
 for (const b of document.querySelectorAll('[data-step]')) b.onclick = () => { upgradeFlow();draft.step = Number(b.dataset.step); rememberStep(); render(); };
-for (const id of ['title', 'language', 'plan']) $(id).addEventListener('input', () => { draft[id] = $(id).value; save(); if (id === 'plan') {validate();renderHeadline();renderSteps();} });
+for (const id of ['title', 'language', 'plan']) $(id).addEventListener('input', () => { draft[id] = $(id).value;
+  // a pasted answer the check could repair is stored repaired, so step 3 and export read the same stories
+  if (id === 'plan') { const check=planCheck(); if (check.fixed) $(id).value = draft.plan = JSON.stringify(check.plan, null, 2); }
+  save(); if (id === 'plan') {validate();renderHeadline();renderSteps();} });
 for(const input of document.querySelectorAll('[data-role-option]'))input.onchange=()=>{
  if(!editingAllowed)return;draft.text_roles=[...document.querySelectorAll('[data-role-option]:checked')].map(n=>n.dataset.roleOption);save();textEditor.render();renderSteps();
 };
@@ -216,7 +222,7 @@ function renderHeadline(){
  $('headlinePacket').disabled=!editingAllowed || !ready;
  $('headlinePrerequisite').textContent=ready?'ส่งไฟล์นี้ให้ AI แล้ววางคำตอบด้านบน':'วางคำตอบ AI ในขั้น 3 ก่อน';
 }
-function headlineContent(){return {title:draft.title,plan:JSON.parse(draft.plan),headline_slots:headlineItems().map(v=>({id:v.id,text:v.text})),sources:draft.files.map(f=>({id:f.source_id || f.upload_id,name:f.name,size:f.size,modified_ns:f.modified_ns}))};}
+function headlineContent(){return {title:draft.title,plan:planCheck().plan,headline_slots:headlineItems().map(v=>({id:v.id,text:v.text})),sources:draft.files.map(f=>({id:f.source_id || f.upload_id,name:f.name,size:f.size,modified_ns:f.modified_ns}))};}
 async function headlineInput(){
  const content=headlineContent();
  const bytes=new TextEncoder().encode(JSON.stringify(content));const hash=await crypto.subtle.digest('SHA-256',bytes);

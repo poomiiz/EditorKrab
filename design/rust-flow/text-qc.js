@@ -37,14 +37,14 @@ export function createTextQc({texts,summary,list,listen,edit,go}){
    problems.replaceChildren(...group.map(f=>{const li=document.createElement('li');li.textContent=f.problem+(f.category==='graphic'?' (งานกราฟิก)':'');return li;}));
    const actions=document.createElement('div');actions.className='qc-actions';
    const editable=first.id!==undefined&&first.id!==null||first.kind==='headline';
-   if(first.kind==='subtitle'&&first.id){const hear=document.createElement('button');hear.type='button';hear.textContent='ฟัง';hear.onclick=async()=>{if(!await listen(first.id))summary.textContent='เล่นเสียงช่วงนี้ไม่ได้ ตรวจไฟล์ที่ขั้น 1';};actions.append(hear);}
+   if(first.kind==='subtitle'&&first.id){const hear=document.createElement('button');hear.type='button';hear.className='icon-only';hear.dataset.icon='play';hear.title='ฟัง';hear.setAttribute('aria-label','ฟัง');hear.onclick=async()=>{if(!await listen(first.id))summary.textContent='เล่นเสียงช่วงนี้ไม่ได้ ตรวจไฟล์ที่ขั้น 1';};actions.append(hear);}
    if(editable){
-    const fix=document.createElement('button');fix.type='button';fix.textContent='แก้';
+    const fix=document.createElement('button');fix.type='button';fix.className='icon-only';fix.dataset.icon='edit';fix.title='แก้';fix.setAttribute('aria-label','แก้');
     fix.onclick=()=>{
      const form=document.createElement('form');form.className='qc-edit';
      const input=document.createElement('input');input.value=group.find(f=>f.fix)?.fix ?? first.shown;input.maxLength=2000;input.setAttribute('aria-label','ข้อความที่แก้');
-     const save=document.createElement('button');save.className='primary';save.textContent='บันทึก';
-     const cancel=document.createElement('button');cancel.type='button';cancel.textContent='ยกเลิก';cancel.onclick=()=>{form.remove();fix.hidden=false;};
+     const save=document.createElement('button');save.className='primary';save.dataset.icon='check';save.textContent='บันทึก';
+     const cancel=document.createElement('button');cancel.type='button';cancel.dataset.icon='x';cancel.textContent='ยกเลิก';cancel.onclick=()=>{form.remove();fix.hidden=false;};
      form.onsubmit=event=>{event.preventDefault();const text=input.value.trim();if(!text){input.focus();return;}
       try{edit(first,text);run(true);}catch(_){summary.textContent='บันทึกข้อความไม่ได้ ตรวจว่าแก้ไขได้อยู่';}};
      form.append(input,save,cancel);fix.hidden=true;row.append(form);input.focus();

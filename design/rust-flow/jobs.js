@@ -38,7 +38,7 @@ export function watchJobs(project, revision, container, changed=()=>{}, replaced
       if (['queued','running','failed','cancelled'].includes(job.status)) {
         const button=document.createElement('button');
         const action=['failed','cancelled'].includes(job.status) ? 'retry' : 'cancel';
-        button.textContent=action==='retry' ? 'ลองใหม่' : 'ยกเลิก';button.disabled=job.cancel_requested && job.status==='running';
+        button.textContent=action==='retry' ? 'ลองใหม่' : 'ยกเลิก';button.dataset.icon=action==='retry' ? 'retry' : 'x';button.disabled=job.cancel_requested && job.status==='running';
         button.onclick=async()=>{
           button.disabled=true;
           try {
