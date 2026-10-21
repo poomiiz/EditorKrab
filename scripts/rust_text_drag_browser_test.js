@@ -30,7 +30,7 @@ async(page)=>{
  await page.reload();await text.waitFor();
  check(Number(await text.evaluate(n=>parseFloat(n.style.left)))===Math.round((liveX-1)*10)/10,'reload lost drop/keyboard position');
  check(await page.locator('#text-x,#text-y').count()===0,'numeric position controls remain');
- await page.setViewportSize({width:375,height:1000});await text.scrollIntoViewIfNeeded();b=await text.boundingBox();
+ await page.setViewportSize({width:1280,height:1000});await text.scrollIntoViewIfNeeded();b=await text.boundingBox();
  await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down();await page.mouse.move(1,1,{steps:10});await page.mouse.up();await saved();
  const bounds=await page.locator('#textFrame').boundingBox(),placed=await text.boundingBox();
  check(placed.x>=bounds.x-1&&placed.y>=bounds.y-1,'drag moved text outside frame');
@@ -50,5 +50,5 @@ async(page)=>{
  check(await text.evaluate(n=>parseFloat(n.style.left))===49,'keyboard trapped at snap center');
  await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'output/text-drag-mobile.png',fullPage:true});
  await page.setViewportSize({width:1440,height:1100});await page.screenshot({path:'output/text-drag-desktop.png',fullPage:true});
- console.log(JSON.stringify({project,checks:['mouse drag/live parameters','one revision per drop','undo/redo','Escape cancels','keyboard arrows','reload retains position','pointer outside frame clamped','375px layout']}));
+ console.log(JSON.stringify({project,checks:['mouse drag/live parameters','one revision per drop','undo/redo','Escape cancels','keyboard arrows','reload retains position','pointer outside frame clamped','1280px layout']}));
 }

@@ -143,6 +143,7 @@ textarea{width:100%;min-height:120px;resize:none;font:.8125rem/1.7 Consolas,"Lee
 .plan-status{align-self:flex-start;font-size:.8125rem}
 .plan-status:empty{display:none}
 .plan-status[data-state=error]{white-space:normal;color:var(--danger);border-color:var(--danger)}
+.plan-status[data-state=warn]{white-space:normal;color:var(--warn);border-color:var(--warn)}
 
 /* stage 4/5 text desk */
 .stage[data-panel="4"] .stage-body,.stage[data-panel="5"] .stage-body{display:flex;flex-direction:column;padding:0}
@@ -215,40 +216,8 @@ summary:hover{color:var(--txt)}
 .skeleton-line{height:10px;width:40%;background:var(--raised);border-radius:5px}.skeleton-line:last-child{width:65%}
 body[data-loading=false] .boot-state{display:none}
 
-/* small screens: normal page scroll */
-@media(max-width:760px),(max-height:560px){
-.stage[data-panel="4"] .stage-body{flex-direction:column}.qc{flex:none;max-height:45vh;border-right:0;border-bottom:1px solid var(--line)}
-.app{height:auto;min-height:100%}
-main{display:block;padding:var(--space-md)}
-.workspace{overflow:visible}
-.stage-body{overflow:visible}
-.text-workspace{grid-template-columns:1fr}
-.text-stage{min-height:0}.frame-surround{height:auto}
-.text-frame{height:auto;width:min(100%,260px)}
-.text-inspector{border-left:0;border-top:1px solid var(--line);overflow:visible}
-.support{margin-top:var(--space-sm)}
-#jobProgress{position:static;width:auto;box-shadow:none}
-}
-@media(max-width:760px){
-.topbar-inner{flex-wrap:wrap;gap:var(--space-xs);padding:var(--space-xs) var(--space-md)}
-.project-field{order:3;flex-basis:100%;max-width:none}
-.topbar-actions .sep{display:none}
-.topbar-actions{flex-wrap:wrap;justify-content:flex-end}.topbar-actions button{padding-inline:var(--space-sm);font-size:.8125rem;white-space:nowrap}
-#saved{font-size:.75rem}
-.steps{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));padding:0}
-.steps button{flex-direction:column;gap:2px;padding:var(--space-sm) 0 var(--space-xs);min-height:56px;font-size:.6875rem;justify-content:flex-start}
-.steps small{white-space:normal;line-height:1.3;text-align:center}
-.stage-head{padding:var(--space-sm) var(--space-md)}
-.stage-body{padding:var(--space-md)}
-.drop{flex-direction:column;gap:var(--space-md);min-height:180px;text-align:center}
-.drop .row{justify-content:center}
-.stage-controls,.language-field{display:grid;grid-template-columns:1fr}
-.ai-route{flex-direction:column;gap:var(--space-sm);align-items:flex-start}
-.stage-foot{padding:var(--space-sm) var(--space-md);flex-wrap:wrap}
-.stage-foot .actions{flex:1;flex-direction:column-reverse}
-.stage-foot button{min-width:0;width:100%}
-.headline-optional{padding:0 var(--space-md)}
-}
+
+
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}button:active:not(:disabled){transform:none}}
 
 .transcript-panel{display:grid;gap:var(--space-md);padding-top:var(--space-lg);border-top:1px solid var(--line);min-width:0}.transcript-panel progress{width:100%;height:12px;accent-color:var(--acc)}#transcriptResult{display:grid;gap:var(--space-md);min-width:0}.transcript-rows{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-md)}.transcript-rows li{padding-block:var(--space-md);border-bottom:1px solid var(--line);min-width:0}.transcript-rows textarea{width:100%;min-height:80px;margin-top:var(--space-sm);resize:vertical;font:inherit}.transcript-rows label{display:grid;gap:var(--space-xs)}.transcript-panel audio{width:100%;max-width:100%}.transcript-panel .row{flex-wrap:wrap}.transcript-time{font-variant-numeric:tabular-nums}.stage[data-panel="4"] .stage-body{flex-direction:row}.qc{display:flex;flex-direction:column;gap:var(--space-sm);min-height:0;flex:0 0 min(34%,420px);padding:var(--space-md);border-right:1px solid var(--line)}.qc h2{font-size:1rem}.qc-problems{margin:0;padding-left:1.2em;color:var(--txt-sub)}.qc-actions{display:flex;gap:var(--space-sm);grid-column:2}.qc-edit{grid-column:2;display:flex;gap:var(--space-sm);flex-wrap:wrap}.qc-edit input{flex:1 1 14rem;min-width:0}.qc-list{list-style:none;margin:0;padding:0;display:grid;align-content:start;gap:var(--space-sm);overflow:auto;flex:1;min-height:0}.qc-finding{display:grid;grid-template-columns:5.5rem 1fr;gap:2px var(--space-md);align-items:baseline;padding-block:var(--space-sm);border-bottom:1px solid var(--line)}.qc-finding .badge{grid-row:span 5;align-self:start;justify-self:start}.qc-finding[data-severity=critical] .badge{color:var(--danger);border-color:var(--danger)}.qc-finding[data-severity=moderate] .badge{color:var(--warn);border-color:var(--warn)}.qc-head{font-size:.8125rem;color:var(--txt-sub);font-variant-numeric:tabular-nums}.qc-shown{font-weight:600;color:var(--txt)}.qc-fix{color:var(--txt-sub)}.qc-fix b{color:var(--ok);font-weight:600}.transcript-words{display:flex;flex-wrap:wrap;gap:2px 6px;margin-top:var(--space-xs);color:var(--mut)}.transcript-words span{border-radius:var(--radius-sm);padding-inline:2px;transition:background-color .15s var(--ease),color .15s var(--ease)}.transcript-words [data-on]{color:var(--txt);background:var(--acc-soft)}.transcript-suggest{font-size:.85em}.transcript-panel p{overflow-wrap:anywhere}.qc>button{align-self:start}
@@ -285,7 +254,8 @@ main{padding:0;gap:0}
 .split-side .transcript-panel{border-top:1px solid var(--line);padding-top:var(--space-xl);gap:var(--space-md)}
 .split-side .transcript-panel .row:first-child{justify-content:space-between}
 .split-side #transcribe{width:100%}
-.split-main #transcriptResult{margin-top:var(--space-2xl);padding-top:var(--space-xl);border-top:1px solid var(--line)}
+/* step 1 is only add + transcribe; the transcript is read and heard on steps 2-3 (the element stays: it hosts the audio player) */
+.split-main #transcriptResult{display:none!important}
 .drop{min-height:220px;flex-direction:column;gap:var(--space-md);border-radius:12px}
 .drop strong{font-size:1.0625rem}
 .stage[data-has-files] .drop{flex-direction:row;min-height:72px;padding:var(--space-md) var(--space-lg);gap:var(--space-lg)}
@@ -314,24 +284,11 @@ main{padding:0;gap:0}
 .text-inspector{background:var(--panel);padding:var(--space-xl);gap:var(--space-xl)}
 .headline-optional{padding:0 var(--space-2xl);background:var(--panel)}
 .task-empty h2{font-size:1.0625rem}
-/* the video list and its side panel stay side by side down to phone width; a short window scrolls instead */
-@media(max-width:600px){
-.stage-body.split{grid-template-columns:1fr;padding-right:var(--space-md);overflow:visible}
-.split-main,.split-side{max-height:none;overflow:visible}
-.split-side{border-left:0;border-top:1px solid var(--line);margin-inline:calc(-1 * var(--space-md))}
-.qc{flex:none}
-.stage[data-panel="4"] .stage-body{flex-direction:column}.text-workspace{grid-template-columns:1fr}
-}
-@media(max-width:760px){
-.steps{padding:0}.steps button+button::before{display:none}
-.stage-head{padding:var(--space-lg) var(--space-md) var(--space-md)}
-.stage-body{padding:0 var(--space-md) var(--space-md)}
-.stage-foot,.support{padding-inline:var(--space-md)}
-.ai-steps li{grid-template-columns:32px minmax(0,1fr)}.ai-steps li>button,.ai-steps li>.packet-actions{grid-column:2}
-.stage[data-has-files] .drop{flex-direction:column}.stage[data-has-files] .drop .row{margin-left:0}
-}
-/* density v3: editing-tool scale on mouse screens; touch keeps 44px targets */
-@media(pointer:fine){
+
+
+/* density: editing-tool scale; desktop only, a narrow window scrolls sideways instead of reflowing */
+.app{min-width:960px}
+
 body{font-size:.8125rem;line-height:1.5}
 button,input,select{min-height:32px}
 button,input,textarea,select{padding:4px 10px}
@@ -357,15 +314,15 @@ h1{font-size:1.0625rem}h2{font-size:.8125rem}small,.caption{font-size:.75rem}
 .text-components label{min-height:34px}
 .headline-optional{padding:0 var(--space-xl)}
 textarea{font-size:.75rem}
-}
+
 /* desktop: stages with little content center their one action instead of leaving dead space */
-@media(min-width:761px) and (min-height:561px){
+
 .stage:not([data-has-files]) .split-main{height:100%}.stage:not([data-has-files]) .split-main .drop{flex:1;min-height:320px}
 .stage[data-panel="2"] .stage-body{display:flex;flex-direction:column;justify-content:center}
 .stage[data-panel="2"] .ai-steps{margin:0 auto;width:100%;max-width:880px}
 .stage[data-panel="6"] .stage-body{display:grid;place-items:center}
 .stage[data-panel="6"] .export-panel{justify-items:center;text-align:center;width:min(560px,100%)}
-}
+
 /* desktop: lean top bar, each step's buttons sit beside its title */
 .topbar-actions.doc-tools{margin-left:0}.doc-tools .history{margin-left:var(--space-xs)}
 .topbar-actions .icon{width:36px;padding:0;display:grid;place-items:center}
@@ -374,7 +331,7 @@ textarea{font-size:.75rem}
 .more-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:10;display:grid;min-width:180px;padding:var(--space-xs);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 12px 32px oklch(0% 0 0 / .3)}
 .topbar-actions .more-menu button{justify-content:flex-start;text-align:left;width:100%}
 .stage-foot .transcribe-actions{gap:var(--space-sm)}
-@media(min-width:761px) and (min-height:561px){
+
 .stage{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr) auto}
 .stage>.stage-head{grid-column:1;grid-row:1}
 .stage>.stage-head p:not(.badge){display:none}
@@ -382,7 +339,7 @@ textarea{font-size:.75rem}
 .stage[data-panel="4"]>.stage-foot,.stage[data-panel="5"]>.stage-foot{border-bottom:1px solid var(--line)}
 .stage>.stage-body{grid-column:1/-1;grid-row:2;min-height:0}
 .stage>.headline-optional{grid-column:1/-1;grid-row:3}
-}
+
 
 /* step 2: the transcript as a timeline of boxes; each box plays its stretch */
 .timeline{display:grid;gap:var(--space-sm);min-width:0}.timeline>.row{justify-content:space-between;gap:var(--space-md)}
@@ -451,6 +408,28 @@ textarea{font-size:.75rem}
 [data-icon=external]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M15 3h6v6'/><path d='M10 14 21 3'/><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'/></svg>")}
 [data-icon=gpu]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='4' y='4' width='16' height='16' rx='2'/><rect x='9' y='9' width='6' height='6' rx='1'/><path d='M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2'/></svg>")}
 [data-icon=font]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M4 20 10 4h1l6 16'/><path d='M6.5 14h8'/></svg>")}
+.text-frame video.frame-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:-1}
+.editor-style .text-workspace{min-height:min(60vh,620px)}
+.select-all{display:flex;align-items:center;gap:6px;font-size:.8125rem;color:var(--txt-sub);margin-left:auto}
+#fileList li{grid-template-columns:24px 40px minmax(0,1fr) auto}#fileList li .file-pick{grid-row:1/3;width:18px;height:18px;margin:0;accent-color:var(--acc)}
+#fileList li .file-info{grid-column:3}#fileList li .source-remove{grid-column:4}
+#fileList li{grid-template-columns:24px 32px minmax(0,1fr) auto}
+.plan-dialog{width:min(720px,92vw);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);color:var(--txt);padding:var(--space-xl)}
+.plan-dialog::backdrop{background:rgb(0 0 0 / .55)}.plan-dialog form{display:grid;gap:var(--space-md)}.plan-dialog textarea{min-height:45vh;width:100%}
+.plan-dialog-actions{justify-content:flex-end;gap:var(--space-sm)}
+.role-row{display:flex;align-items:center;gap:var(--space-sm);min-height:44px;border:1px solid var(--line);border-radius:var(--radius-sm);padding:0 0 0 var(--space-md)}
+.role-row:has(input:checked){border-color:var(--acc-soft)}
+.role-row input{width:18px;height:18px;margin:0;accent-color:var(--acc);cursor:pointer}
+.role-pick{flex:1;justify-content:flex-start;text-align:left;border:0;background:none;min-height:42px}
+.role-row[data-selected=true]{border-color:var(--acc);background:var(--acc-soft)}
+
+/* step 2: send to AI, paste the answer back; numbered so the order reads at a glance */
+.ai-bar{list-style:none;padding:0;display:grid;gap:var(--space-sm);width:100%;max-width:1100px;margin:0 auto}
+.ai-bar>li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:var(--space-md);padding:var(--space-md);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.ai-num{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--raised);color:var(--txt-sub);font-size:.8125rem;font-weight:600;font-variant-numeric:tabular-nums}
+.ai-text{display:grid;gap:2px;min-width:0}.ai-text h2{font-size:.9375rem}.ai-text .plan-status{margin-top:var(--space-xs);justify-self:start}
+
+[data-icon=paste]::before{--icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect width='8' height='4' x='8' y='2' rx='1'/><path d='M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2'/></svg>")}
 </style>
 </head>
 <body data-loading="true">
@@ -463,7 +442,7 @@ textarea{font-size:.75rem}
 <div class="topbar-actions"><button id="fork" hidden>บันทึกเป็นงานใหม่</button><details class="more"><summary aria-label="เมนูงาน" title="เปิดงาน / สำรองงาน"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></summary><div class="more-menu"><button id="open" aria-label="เปิดงานที่บันทึกไว้" data-icon="folder">เปิดงาน</button><button id="backup" data-icon="download">ดาวน์โหลดสำรอง</button></div></details><button id="theme" aria-label="สลับโหมดมืดหรือสว่าง"><svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg><svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button><input id="openFile" type="file" accept=".json" hidden></div>
 </div></header>
 <nav class="steps" aria-label="ขั้นตอนทำคลิป">
-<button data-step="1"><span class="step-number">01</span><small>ใส่วิดีโอ</small></button><button data-step="2"><span class="step-number">02</span><small>สรุปเนื้อหา</small></button><button data-step="3"><span class="step-number">03</span><small>ตัดต่อ</small></button><button data-step="4"><span class="step-number">04</span><small>ซับ</small></button><button data-step="5"><span class="step-number">05</span><small>หัวคลิป</small></button><button data-step="6"><span class="step-number">06</span><small>รับคลิป</small></button>
+<button data-step="1"><span class="step-number">01</span><small>ใส่วิดีโอ</small></button><button data-step="2"><span class="step-number">02</span><small>สรุปเนื้อหา</small></button><button data-step="3"><span class="step-number">03</span><small>ตัดต่อ</small></button><button data-step="4"><span class="step-number">04</span><small>ตรวจซับ</small></button><button data-step="5"><span class="step-number">05</span><small>หัวคลิป</small></button><button data-step="6"><span class="step-number">06</span><small>รับคลิป</small></button>
 </nav>
 <main>
 <div class="boot-state" role="status"><span>กำลังเปิดร่าง</span><div class="skeleton-line"></div><div class="skeleton-line"></div></div>
@@ -479,7 +458,7 @@ textarea{font-size:.75rem}
 <input id="files" type="file" accept="video/*,audio/*" multiple hidden><input id="folders" type="file" webkitdirectory multiple hidden>
 </div>
 <div class="source-feedback"><p id="sourceStatus" role="status" aria-live="polite"></p><button id="cancelUpload" hidden data-icon="stop">หยุด</button></div>
-<div class="library-head"><h2>วิดีโอ</h2><span id="fileCount" class="badge">0 ไฟล์</span><span id="fileTotal"></span></div>
+<div class="library-head"><h2>วิดีโอ</h2><span id="fileCount" class="badge">0 ไฟล์</span><span id="fileTotal"></span><label class="select-all" id="selectAllLabel" hidden><input type="checkbox" id="selectAll">เลือกทั้งหมด</label><button id="removeSelected" type="button" hidden data-icon="trash">ลบที่เลือก</button></div>
 <p id="empty" class="empty">ยังไม่มีวิดีโอ</p><ul id="fileList" aria-label="วิดีโอ"></ul>
 <div id="transcriptResult" hidden>
 <label class="field" for="transcriptFile"><span>เลือกวิดีโอ</span><select id="transcriptFile"></select></label>
@@ -504,14 +483,14 @@ textarea{font-size:.75rem}
 <div class="stage-foot"><div class="row transcribe-actions"><button id="transcribe" disabled data-icon="mic">ถอดเสียง</button><button id="cancelTranscription" hidden data-icon="stop">หยุดถอดเสียง</button><button id="retryTranscription" hidden data-icon="retry">ลองช่วงที่ไม่สำเร็จ</button><button id="reloadAsr" hidden data-icon="retry">ลองอีกครั้ง</button></div><div class="actions"><button data-go="2">ถัดไป</button></div></div>
 </section>
 <section class="stage" data-panel="2" hidden aria-labelledby="aiTitle">
-<div class="stage-head"><div><h1 id="aiTitle">สรุปเนื้อหา</h1><p>ส่งข้อความให้ AI แบ่งเรื่อง แล้ววางคำตอบข้างล่าง</p></div></div>
+<div class="stage-head"><div><h1 id="aiTitle">สรุปเนื้อหา</h1><p>ให้ AI แบ่งคลิปเป็นเรื่อง แล้วกดเรื่องเพื่อตัดต่อ</p></div></div>
 <div class="stage-body">
+<ol class="ai-bar" aria-label="ให้ AI แบ่งเรื่อง"><li><span class="ai-num" aria-hidden="true">1</span><div class="ai-text"><h2 id="transcriptPacketTitle">ถอดเสียงในขั้น 1 ก่อน</h2><p id="transcriptPacketHint" class="caption">ถอดเสียงเสร็จแล้วจึงส่งได้</p><p id="transcriptPacketError" class="field-warning" role="alert" hidden></p></div><div class="packet-actions"><button id="transcriptCopy" class="primary" disabled hidden data-icon="copy">คัดลอกให้ AI</button><button id="transcriptPacket" disabled data-icon="download">ดาวน์โหลดไฟล์</button><button id="transcriptGoPrepare" class="primary" data-go="1" hidden>ไปขั้น 1</button></div></li><li><span class="ai-num" aria-hidden="true">2</span><div class="ai-text"><h2>วางคำตอบกลับมา</h2><p class="caption">คัดลอกคำตอบทั้งหมดในแชท แล้วกดวางที่นี่</p><p id="planStatus" class="badge plan-status" role="status"></p></div><div class="packet-actions"><button id="planOpen" type="button" data-icon="paste">วางคำตอบ</button></div></li></ol>
 <section id="storyCards" class="story-groups" aria-label="เรื่องที่แบ่งได้" hidden></section>
 <section id="timeline" class="timeline" aria-labelledby="timelineTitle"><div class="row"><h2 id="timelineTitle">ข้อความจากวิดีโอ</h2><p id="timelineStatus" class="caption" role="status"></p></div><progress id="timelineProgress" aria-label="ช่วงเสียงที่ถอดสำเร็จ" hidden></progress><div id="timelineTrack" class="timeline-track"></div><p class="caption">ชี้ที่กล่องเพื่อเลือก กดเพื่อฟังท่อนนั้น เลื่อนซ้ายขวาดูทั้งคลิป</p></section>
-<ol class="ai-steps"><li class="current"><div><h2 id="transcriptPacketTitle">ถอดเสียงในขั้น 1 ก่อน</h2><p id="transcriptPacketHint" class="caption">เมื่อถอดครบ จะรวมคำพูดกับคำสั่งให้ AI ในไฟล์เดียว</p><p id="transcriptPacketError" class="field-warning" role="alert" hidden></p></div><div class="packet-actions"><button id="transcriptPacket" class="primary" disabled data-icon="download">ดาวน์โหลดไฟล์</button><button id="transcriptCopy" disabled hidden data-icon="copy">คัดลอกให้ AI</button><button id="transcriptGoPrepare" class="primary" data-go="1" hidden>ไปขั้น 1</button></div></li><li><div><h2>แนบไฟล์ หรือวางข้อความที่คัดลอกในแชท AI</h2><p class="caption">เช่น ChatGPT, Gemini หรือ Claude</p></div></li><li><div><h2>คัดลอกคำตอบทั้งหมด</h2><p class="caption">แล้วไปวางในขั้นถัดไป</p></div></li></ol>
-<section class="plan-answer" aria-labelledby="planTitle"><div class="row"><h2 id="planTitle">วางคำตอบจาก AI</h2><p id="planStatus" class="badge plan-status" role="status"></p></div>
+<dialog id="planDialog" class="plan-dialog" aria-labelledby="planTitle"><form method="dialog"><h2 id="planTitle">วางคำตอบจาก AI</h2><p class="caption">คัดลอกคำตอบทั้งหมดจากแชท AI แล้ววางในช่องนี้</p>
 <label class="field plan-field"><span class="sr-only">คำตอบจาก AI</span><textarea id="plan" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label>
-</section>
+<div class="row plan-dialog-actions"><button value="close">ปิด</button><button value="close" class="primary">ใช้คำตอบนี้</button></div></form></dialog>
 </div>
 <div class="stage-foot"><button class="back" data-go="1" data-icon="back">ย้อนกลับ</button><div class="actions"><button data-go="3">ถัดไป</button></div></div>
 </section>
@@ -520,8 +499,8 @@ textarea{font-size:.75rem}
 <div class="stage-body">
 <p id="editEmpty" class="caption">วางคำตอบจาก AI ในขั้น 2 แล้วเลือกเรื่องที่จะตัดต่อ</p>
 <div id="editor" class="editor" hidden>
-<div class="editor-preview"><div class="editor-frame"><video id="editVideo" playsinline preload="metadata"></video><p id="editCaption" class="editor-caption" hidden></p></div><p id="editVideoNote" class="caption" role="status"></p></div>
-<div class="row editor-controls"><button id="editPlay" type="button" class="primary" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="60" value="12"></label></div>
+<div id="editStyleHost" class="editor-style"></div><video id="editVideo" class="frame-video" playsinline preload="metadata"></video><p id="editVideoNote" class="caption" role="status"></p>
+<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="60" value="12"></label></div>
 <div id="editTrack" class="edit-track"></div>
 </div>
 </div>
@@ -534,7 +513,7 @@ textarea{font-size:.75rem}
 <div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
 <div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><span class="badge">9:16</span></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
 <aside class="text-inspector" aria-label="ปรับข้อความ">
-<fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><label><input type="checkbox" data-role-option="speech">คำพูด</label><label><input type="checkbox" data-role-option="emphasis">คำสำคัญ</label><label><input type="checkbox" data-role-option="english">คำแปลอังกฤษ</label></fieldset>
+<fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำสำคัญ</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">คำแปลอังกฤษ</button></div></fieldset>
 <div id="headlineActions" class="row" hidden><button id="addHeadline" class="primary" data-icon="plus">เพิ่มข้อความ</button><button id="removeHeadline" data-icon="trash">ลบข้อความนี้</button></div>
 <p id="textSelectionHint" class="selection-hint">ติ๊กอย่างน้อย 1 อย่าง</p>
 <div id="textControls" class="text-controls" hidden><h2 id="textRoleTitle">ข้อความพูด</h2>
@@ -575,7 +554,8 @@ textarea{font-size:.75rem}
 </section>
 </div>
 <div class="support">
-<details class="job-panel"><summary>ความคืบหน้างาน</summary><div id="jobProgress"><p>กำลังอ่านสถานะ</p></div></details>
+<!-- hidden for now (P'Ohm 20 Oct): the watcher still feeds job states to the page -->
+<details class="job-panel" hidden><summary>ความคืบหน้างาน</summary><div id="jobProgress"><p>กำลังอ่านสถานะ</p></div></details>
 <p id="error" class="error" role="alert" hidden></p>
 
 </div>

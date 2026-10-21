@@ -19,11 +19,18 @@ export function checkPlan(text,lines){
   const unknown=known.size?ids.filter(id=>!known.has(id)).length:0;
   if(unknown)return {error:`เรื่อง ${i+1} อ้างช่วงพูดที่ไม่มีในงานนี้ ${unknown} ช่วง ใช้คำตอบของงานอื่นหรือเปล่า`};
  }
- return {plan,fixed:json!==raw || Array.isArray(value)};
+ // speech no story uses, as runs of neighbouring lines in each video: round 1 should cover the whole clip
+ const used=new Set(plan.stories.flatMap(s=>s.segment_ids)),unused=[];let run=null;
+ for(const l of [...(lines || [])].sort((a,b)=>a.source_id===b.source_id?a.start_ms-b.start_ms:a.source_id<b.source_id?-1:1)){
+  if(used.has(l.segment_id) || run?.source!==l.source_id)run=null;
+  if(used.has(l.segment_id))continue;
+  if(run){run.end_ms=l.end_ms;run.count++;}else unused.push(run={source:l.source_id,start_ms:l.start_ms,end_ms:l.end_ms,count:1});
+ }
+ return {plan,fixed:json!==raw || Array.isArray(value),unused};
 }
 export function parsePlan(text){return checkPlan(text).plan || null;}
 
-export function createStories({project,read,lines,write,go,editable}){
+export function createStories({project,read,lines,write,go,editable,caption}){
  let queue=[];
  const video=$('editVideo');
  const reviews=()=>read().story_reviews || {};
@@ -34,7 +41,10 @@ export function createStories({project,read,lines,write,go,editable}){
   const stories=plan.stories.map((s,index)=>{
    const kept=(Array.isArray(s?.segment_ids)?s.segment_ids:[]).map(id=>bySegment.get(id)).filter(Boolean);
    const counts=new Map();for(const l of kept)counts.set(l.source_id,(counts.get(l.source_id) || 0)+1);
-   return {index,id:String(s?.id || `story-${index+1}`),title:String(s?.title || `เรื่อง ${index+1}`).trim(),summary:String(s?.summary || '').trim(),
+   // chat AIs rename fields (Gemini answered story_id and no title); take the usual synonyms, else the summary's opening
+   const summary=String(s?.summary || s?.description || '').trim();
+   const title=String(s?.title || s?.name || s?.topic || s?.headline || '').trim() || (summary.split(/[ ,.]/).filter(Boolean).slice(0,6).join(' ').slice(0,48) || `เรื่อง ${index+1}`);
+   return {index,id:String(s?.id || s?.story_id || `story-${index+1}`),title,summary,
     kept,source_id:[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0] || ''};
   });
   return {all,stories};
@@ -75,7 +85,9 @@ export function createStories({project,read,lines,write,go,editable}){
   const story=current();$('editEmpty').hidden=!!story;$('editor').hidden=!story;
   if(!story){$('editTitle').textContent='ตัดต่อ';return;}
   $('editTitle').textContent=`ตัดต่อ · ${story.index+1}. ${story.title}`;
-  const done=!!reviews()[story.id];$('editReviewed').textContent=done?'ตรวจแล้ว ✓':'ตรวจเรื่องนี้แล้ว';$('editReviewed').classList.toggle('primary',!done);$('editReviewed').disabled=!editable();
+  const done=!!reviews()[story.id];$('editReviewed').textContent=done?'ตรวจแล้ว':'ตรวจเรื่องนี้แล้ว';$('editReviewed').classList.toggle('primary',!done);$('editReviewed').disabled=!editable();
+  // the preview plays under the subtitle frame, so subtitles are placed and styled on the real picture
+  const frame=$('textFrame');if(frame&&video.parentElement!==frame)frame.prepend(video);
   const src=`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(story.source_id)}/preview`;
   if(video.dataset.src!==src){video.dataset.src=src;$('editVideoNote').textContent='กำลังเตรียมพรีวิว 360p ครั้งแรกอาจรอสักครู่';video.src=src;video.load();}
   const zoom=Number($('editZoom').value),order=lines().filter(l=>l.source_id===story.source_id),keep=new Set(story.kept.map(l=>l.segment_id));
@@ -110,7 +122,7 @@ export function createStories({project,read,lines,write,go,editable}){
   const now=video.currentTime*1000,line=queue[0];
   if(line&&now>=line.end_ms){queue.shift();if(queue.length)video.currentTime=queue[0].start_ms/1000;else video.pause();}
   const story=current(),said=story&&lines().find(l=>l.source_id===story.source_id&&now>=l.start_ms&&now<l.end_ms);
-  $('editCaption').textContent=said?.text || '';$('editCaption').hidden=!said;
+  caption(said?.text || '');
   const head=$('editHead');if(head)head.style.left=(now/1000*Number($('editZoom').value))+'px';
  });
  video.addEventListener('loadeddata',()=>{$('editVideoNote').textContent='';});

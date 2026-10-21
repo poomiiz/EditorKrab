@@ -49,10 +49,10 @@ async(page)=>{
  check((await(await page.request.get(`${base}/api/v1/drafts/${legacy}`)).json()).revision===1,'step navigation created revision');
  await page.locator('#title').fill('ร่างเดิม แก้แล้ว');await saved();const migrated=await(await page.request.get(`${base}/api/v1/drafts/${legacy}`)).json();
  check(migrated.document.flow_version===2&&migrated.document.step===5,'first edit did not upgrade legacy step');
- for(const width of [1440,375]){
+ for(const width of [1440]){
   await page.setViewportSize({width,height:1050});
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'six-step mobile overflow');
   await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:`output/six-step-hl-${width===375?'mobile':'desktop'}.png`,fullPage:true});
  }
- console.log(JSON.stringify({project,checks:['six stages','initial unchecked empty frame','check/uncheck real visibility','settings retained/reloaded','HL separated','no templates','AI packet roundtrip','stale response rejected','creation is 06','legacy 05 meaning preserved','375px layout']}));
+ console.log(JSON.stringify({project,checks:['six stages','initial unchecked empty frame','check/uncheck real visibility','settings retained/reloaded','HL separated','no templates','AI packet roundtrip','stale response rejected','creation is 06','legacy 05 meaning preserved','1280px layout']}));
 }

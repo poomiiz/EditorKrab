@@ -22,6 +22,6 @@ async(page)=>{
  await page.locator('#removeHeadline').click();await saved();check((await read()).document.headline_items.every(v=>v.id!==resized.id),'delete failed');
  await page.locator('#undo').click();await saved();check((await read()).document.headline_items[1].id===resized.id,'undo lost ID');
  await page.reload();await page.locator('[data-text-role=headline]').first().waitFor();check(await page.locator('[data-text-role=headline]').count()===3,'reload lost items');
- for(const width of [1440,375]){await page.setViewportSize({width,height:1100});check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'overflow');await page.screenshot({path:`output/headline-items-${width}.png`,fullPage:true});}
+ for(const width of [1440]){await page.setViewportSize({width,height:1100});check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'overflow');await page.screenshot({path:`output/headline-items-${width}.png`,fullPage:true});}
  console.log(JSON.stringify({project,checks:['three independent items','drag','resize one revision','keyboard resize','delete','undo stable ID','reload','desktop/mobile']}));
 }

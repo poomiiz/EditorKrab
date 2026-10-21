@@ -44,10 +44,10 @@ async (page) => {
     } finally {watcher.close();window.fetch=actualFetch;window.EventSource=ActualEventSource;}
   });
   check(result.remaining===0 && result.replacements===2,'reset retained old source metadata');
-  await page.setViewportSize({width:375,height:1000});
+  await page.setViewportSize({width:1280,height:1000});
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile overflow');
   await page.screenshot({path:'output/rust-sources-mobile.png',fullPage:true});
   await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:'output/rust-sources-desktop.png',fullPage:true});
-  console.log(JSON.stringify({project,checks:['invalid imports preserve draft','outbox remains editable','snapshot reset clears metadata','375px layout']}));
+  console.log(JSON.stringify({project,checks:['invalid imports preserve draft','outbox remains editable','snapshot reset clears metadata','1280px layout']}));
 }

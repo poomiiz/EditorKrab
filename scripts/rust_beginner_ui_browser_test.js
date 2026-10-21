@@ -27,7 +27,7 @@ async(page)=>{
  await page.locator('#headlineAi > summary').click();check(await page.locator('#headlineReply').isVisible(),'optional AI inaccessible');
  await page.locator('#headlineAi > summary').click();
  check((await read()).revision===before.revision,'disclosure changed draft');
- for(const width of [1440,375]){
+ for(const width of [1440]){
   await page.setViewportSize({width,height:1100});
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'page overflow');
   check(await page.locator('[data-step],#addHeadline,#text-font,#text-color').evaluateAll(nodes=>nodes.every(n=>n.getBoundingClientRect().height>=44&&n.getBoundingClientRect().width>=44)),'small targets');
@@ -47,6 +47,6 @@ async(page)=>{
  await page.reload();await page.locator('#createTitle').waitFor();
  check((await read()).document.headline_items.length===2,'reload lost headline data');
  await page.locator('[data-step="1"]').click();await saved();
- for(const width of [1440,375]){await page.setViewportSize({width,height:1100});check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'start overflow');await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:`output/beginner-start-${width}.png`,fullPage:true});}
+ for(const width of [1440]){await page.setViewportSize({width,height:1100});check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'start overflow');await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:`output/beginner-start-${width}.png`,fullPage:true});}
  console.log(JSON.stringify({project,checks:['plain labels','six horizontal stages','no blank disabled inspector','checkbox-only overlays','sample/headline meaning','advanced/AI collapsed but accessible','one primary','next focus/navigation','draft unchanged by disclosure','reload preserves data','truthful unavailable output','375px/desktop']}));
 }

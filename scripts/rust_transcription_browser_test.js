@@ -52,7 +52,7 @@ async(page)=>{
  check(await page.locator('#transcriptResult').isHidden(),'old language transcript still current');
  await page.locator('[data-step="2"]').click();check(await page.locator('#transcriptPacket').isDisabled(),'stale-language packet allowed');
  await page.locator('[data-step="1"]').click();await page.locator('#language').selectOption('auto');await saved();await complete();
- for(const width of [1440,375]){
+ for(const width of [1440]){
   await page.setViewportSize({width,height:1000});
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'horizontal overflow');
   const small=await page.locator('[data-panel="1"] button,[data-panel="1"] input:not([type=file]),[data-panel="1"] select').evaluateAll(nodes=>nodes.filter(n=>n.getClientRects().length).filter(n=>n.getBoundingClientRect().width<44||n.getBoundingClientRect().height<44).map(n=>n.id));

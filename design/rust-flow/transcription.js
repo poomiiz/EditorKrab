@@ -110,8 +110,8 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   $('transcriptFile').value=chosen;$('transcriptFile').disabled=!editable;
   $('transcriptResult').hidden=!files.some(f=>segments(f).length>0);paintRows(force);
   $('transcriptPacket').disabled=!editable||!ready||!complete()||busy;$('transcriptPacket').hidden=!complete();$('transcriptCopy').disabled=$('transcriptPacket').disabled;$('transcriptCopy').hidden=!complete();$('transcriptGoPrepare').hidden=complete();
-  $('transcriptPacketTitle').textContent=complete()?'พร้อมส่งให้ AI':'ถอดเสียงในขั้น 1 ก่อน';
-  $('transcriptPacketHint').textContent=complete()?'ไฟล์เล็ก มีแค่ข้อความ ไม่มีวิดีโอ':'ถอดเสียงเสร็จแล้วจึงดาวน์โหลดได้';
+  $('transcriptPacketTitle').textContent=complete()?'ส่งข้อความให้ AI':'ถอดเสียงในขั้น 1 ก่อน';
+  $('transcriptPacketHint').textContent=complete()?'วางในแชท ChatGPT, Gemini หรือ Claude หรือแนบไฟล์ที่ดาวน์โหลด':'ถอดเสียงเสร็จแล้วจึงส่งได้';
   changed();
  }
  async function loadSettings(){const generation=++settingsGeneration;configuration='loading';refresh();try{const response=await fetch('/api/v1/transcription/settings',{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error('settings');const value=await response.json();if(generation!==settingsGeneration)return;if(value&&(!Number.isInteger(value.threads)||!['engine','model','ffmpeg'].every(key=>typeof value[key]?.path==='string'&&/^[a-f0-9]{64}$/i.test(value[key]?.sha256))))throw Error('settings');settings=value;configuration=value?'ready':'missing';if(!value&&!download)queueMicrotask(pollDownload);}catch(_){if(generation!==settingsGeneration)return;configuration='error';}refresh();}
@@ -186,18 +186,20 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   try{
    const saved=state(),snapshotDraft=structuredClone(read());
    for(const file of eligible())await request(`/api/v1/projects/${encodeURIComponent(project)}/transcription`,{request_id:crypto.randomUUID(),revision:saved.revision,source_id:file.source_id,settings});
-   const sources=eligible().map(file=>({id:file.source_id,name:file.name,sha256:chunks(file)[0].result.source.sha256,duration_ms:ranges(file).at(-1)[1],segments:segments(file).map(({job,segment})=>({...segment,text:correction(job,segment)?.text ?? segment.text,original_text:segment.text,text_corrected:!!correction(job,segment),alignment:'unverified'}))}));
+   const sources=eligible().map(file=>({id:file.source_id,name:file.name,sha256:chunks(file)[0].result.source.sha256,duration_ms:ranges(file).at(-1)[1],segments:segments(file).map(({job,segment})=>({id:segment.id,start_ms:segment.start_ms,end_ms:segment.end_ms,text:correction(job,segment)?.text ?? segment.text}))}));
    if(sources.some(source=>source.segments.some(segment=>!segment.text.trim())))throw Error('มีคำพูดว่าง ตรวจข้อความก่อนส่งให้ AI');
    const content={language:read().language,settings:{engine_sha256:settings.engine.sha256,model_sha256:settings.model.sha256,ffmpeg_sha256:settings.ffmpeg.sha256,threads:settings.threads},sources};
    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(content))),hash=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
    if(!state().saved||state().revision!==saved.revision||JSON.stringify(snapshotDraft)!==JSON.stringify(read())||!complete())throw Error('งานเปลี่ยนแล้ว ดาวน์โหลดใหม่อีกครั้ง');
-   const packet={schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,content,instructions:'แบ่งเรื่องและเรียงช่วงพูดโดยอ้าง segment_ids ที่ให้เท่านั้น ห้ามสร้างเวลาใหม่ รักษาตอนจบให้ครบ แต่ละเรื่องใช้ช่วงพูดจากไฟล์เดียวเท่านั้น ไม่ถือว่าคนละไฟล์คือกล้องซิงก์กัน ใส่ summary สรุปเนื้อหาเรื่องละ 1-2 ประโยค เวลาระดับคำและคนพูดยังไม่ยืนยัน ส่ง JSON ตาม response_schema',response_schema:{schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,stories:[{id:'story-1',title:'ชื่อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[]}]}};
+   const packet={schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,content,instructions:'แบ่งคลิปเป็นเรื่องตามหัวข้อที่คุย อ่านให้ครบถึงท่อนสุดท้ายของทุกไฟล์ ท่อนที่มีเนื้อหาต้องอยู่ในเรื่องใดเรื่องหนึ่ง ข้ามได้เฉพาะท่อนที่ไม่มีเนื้อหาจริง เช่น ตั้งกล้องหรือทักทาย แต่ละเรื่องเป็นช่วงต่อเนื่องตามเวลา รอบนี้ยังไม่ต้องตัดคำพูดย่อยหรือเรียงใหม่ (คัดละเอียดทำทีหลังทีละเรื่อง) อ้างท่อนด้วย segment_ids ที่ให้เท่านั้น ห้ามสร้างเวลาใหม่ แต่ละเรื่องใช้ท่อนจากไฟล์เดียว ทุกเรื่องต้องมีครบทุกช่องตาม response_schema: id, title (หัวข้อสั้นๆ ไม่เกิน 40 ตัวอักษร เห็นแล้วรู้ทันทีว่าเรื่องอะไร), summary (สรุปเนื้อหา 1-2 ประโยค), segment_ids ห้ามเปลี่ยนชื่อช่อง ส่ง JSON ตาม response_schema',response_schema:{schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,stories:[{id:'story-1',title:'หัวข้อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[]}]}};
    await deliver(packet);
   }catch(error){packetNotice=error.message;}finally{busy=false;refresh();}
  }
- $('transcriptPacket').onclick=()=>sendPacket(packet=>{const url=URL.createObjectURL(new Blob([JSON.stringify(packet,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='editorkrab-transcript-ai.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+ // the instructions lead the file: an AI handed the bare JSON only described it (Gemini, 20 Oct 2026)
+ const forAi=packet=>packet.instructions+'\nตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,2);
+ $('transcriptPacket').onclick=()=>sendPacket(packet=>{const url=URL.createObjectURL(new Blob([forAi(packet)],{type:'text/plain;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='editorkrab-ส่งให้AI.txt';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
  $('transcriptCopy').onclick=()=>sendPacket(async packet=>{
-  try{await navigator.clipboard.writeText(packet.instructions+'\nตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,2));}
+  try{await navigator.clipboard.writeText(forAi(packet));}
   catch(_){throw Error('คัดลอกไม่ได้ ใช้ปุ่มดาวน์โหลดไฟล์แทน');}
   $('transcriptCopy').textContent='คัดลอกแล้ว';setTimeout(()=>{$('transcriptCopy').textContent='คัดลอกให้ AI';},2000);
  });

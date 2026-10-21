@@ -125,7 +125,7 @@ const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('t
   if(finding.kind!=='headline'){speech.edit(finding.id,text);return;}
   const id=finding.id.slice('headline:'.length);draft.headline_items=headlineItems().map(h=>h.id===id?{...h,text}:h);save();textEditor.render();renderHeadline();
  }});
-const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,
+const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,caption:text=>textEditor.live('speech',text),
  write:change=>{if(!editingAllowed)return;change(draft);save();render();},
  go:step=>document.querySelector(`[data-step="${step}"]`).click()});
 const shortClock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
@@ -167,17 +167,29 @@ function stepsDone(){return {1:speech.complete(),2:planReady(),3:stories.allRevi
 function validate() {
   $('planStatus').hidden=!draft.plan.trim();
   const check=planCheck();
-  $('planStatus').textContent=check.plan ? `อ่านได้ ${check.plan.stories.length} เรื่อง` : check.error;
-  $('planStatus').dataset.state=check.plan ? 'ok' : 'error';
+  // round 1 should cover the whole clip: name the first stretch of speech no story uses
+  const gaps=check.unused || [],spare=gaps.reduce((n,g)=>n+g.count,0),clock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
+  $('planStatus').textContent=!check.plan ? check.error : `อ่านได้ ${check.plan.stories.length} เรื่อง`+(spare ? ` · ยังไม่ใช้ ${spare} ท่อน เช่น ${clock(gaps[0].start_ms)}-${clock(gaps[0].end_ms)}` : '');
+  $('planStatus').dataset.state=!check.plan ? 'error' : spare ? 'warn' : 'ok';
+  // once an answer is read, sending again is no longer the next thing to do
+  $('transcriptCopy').classList.toggle('primary',!check.plan);
 }
+// files picked with their checkboxes on step 1, by source (or upload) id; only this page uses it
+const picked=new Set();
+const fileKey=file=>file.source_id || file.upload_id || file.path || file.name;
+$('selectAll').onchange=()=>{picked.clear();if($('selectAll').checked)for(const f of draft.files)picked.add(fileKey(f));renderFiles();};
+$('removeSelected').onclick=()=>{if(!editingAllowed||!picked.size)return;draft.files=draft.files.filter(f=>!picked.has(fileKey(f)));picked.clear();save();render();};
 function renderFiles() {
   let duration=0,ready=0;
+  for(const key of [...picked])if(!draft.files.some(f=>fileKey(f)===key))picked.delete(key);
   $('fileList').replaceChildren(...draft.files.map((file,index)=>{
     const li=document.createElement('li');
     const icon=document.createElement('span');icon.className='file-icon';icon.setAttribute('aria-hidden','true');
     icon.textContent=file.name.includes('.') ? file.name.split('.').pop().toUpperCase().slice(0,4) : 'FILE';
     const name=document.createElement('span');name.className='file-name';name.textContent=file.name;name.title=file.name;
-    li.append(icon,name);
+    const pick=document.createElement('input');pick.type='checkbox';pick.className='file-pick';pick.checked=picked.has(fileKey(file));pick.disabled=!editingAllowed;
+    pick.setAttribute('aria-label',`เลือก ${file.name}`);pick.onchange=()=>{if(pick.checked)picked.add(fileKey(file));else picked.delete(fileKey(file));renderFiles();};
+    li.append(pick,icon,name);
     const probe=probes.get(file.source_id);
     li.dataset.state=probe?.status || 'pending';
     const info=document.createElement('p');info.className='file-info';
@@ -196,6 +208,9 @@ function renderFiles() {
     remove.onclick=()=>{if (!editingAllowed) return;draft.files.splice(index,1);save();renderFiles();};
     li.append(remove);return li;
   }));
+  $('selectAllLabel').hidden=!draft.files.length;$('selectAll').disabled=!editingAllowed;
+  $('selectAll').checked=draft.files.length>0&&picked.size===draft.files.length;$('selectAll').indeterminate=picked.size>0&&picked.size<draft.files.length;
+  $('removeSelected').hidden=!picked.size;$('removeSelected').disabled=!editingAllowed;$('removeSelected').textContent=`ลบที่เลือก (${picked.size})`;
   $('empty').hidden=draft.files.length>0;
   document.querySelector('[data-panel="1"]').toggleAttribute('data-has-files',draft.files.length>0);
   $('fileCount').textContent=`${draft.files.length} ไฟล์`;
@@ -207,7 +222,15 @@ for (const b of document.querySelectorAll('[data-step]')) b.onclick = () => { up
 for (const id of ['title', 'language', 'plan']) $(id).addEventListener('input', () => { draft[id] = $(id).value;
   // a pasted answer the check could repair is stored repaired, so step 3 and export read the same stories
   if (id === 'plan') { const check=planCheck(); if (check.fixed) $(id).value = draft.plan = JSON.stringify(check.plan, null, 2); }
-  save(); if (id === 'plan') {validate();renderHeadline();renderSteps();} });
+  save(); if (id === 'plan') {validate();renderHeadline();renderSteps();stories.renderCards();} });
+// a subtitle kind's name selects it for styling (and turns it on); its checkbox only shows or hides it
+for(const button of document.querySelectorAll('[data-role-pick]'))button.onclick=()=>{
+ const role=button.dataset.rolePick;
+ if(editingAllowed&&!(draft.text_roles || []).includes(role)){draft.text_roles=[...(draft.text_roles || []),role];save();renderSteps();}
+ textEditor.select(role);
+};
+$('planOpen').onclick=()=>{$('planDialog').showModal();$('plan').focus();};
+$('planDialog').addEventListener('close',()=>{stories.renderCards();renderSteps();});
 for(const input of document.querySelectorAll('[data-role-option]'))input.onchange=()=>{
  if(!editingAllowed)return;draft.text_roles=[...document.querySelectorAll('[data-role-option]:checked')].map(n=>n.dataset.roleOption);save();textEditor.render();renderSteps();
 };
@@ -410,7 +433,8 @@ try {
   if (session.created) {
     try { localStorage.setItem(key + '-migrated', projectId); } catch (_) { /* Raw legacy data remains untouched. */ }
   }
-} catch (_) {
+} catch (failure) {
+  console.error('draft_open_failed',failure);
   try {
     const original = localStorage.getItem(key);
     if (original) localStorage.setItem(key + '-recovery-' + Date.now(), original);
