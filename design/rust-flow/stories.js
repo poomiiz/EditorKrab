@@ -20,6 +20,7 @@ export function storyFields(s,index){
 export function checkPlan(text,lines){
  const raw=String(text || '').trim();if(!raw)return {error:''};
  const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
+ if(value?.response_schema)return {error:'นี่คือข้อความที่ส่งให้ AI ยังไม่ใช่คำตอบ วางในแชท AI ก่อน แล้วคัดลอกคำตอบของ AI กลับมา'};
  const plan=Array.isArray(value)?{stories:value}:value;
  if(!Array.isArray(plan?.stories) || !plan.stories.length)return {error:'ไม่พบรายการเรื่องในคำตอบ ลองให้ AI ตอบใหม่ตามไฟล์ที่ส่ง'};
  const known=new Set((lines || []).map(l=>l.segment_id));
@@ -66,7 +67,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
     .map(l=>({...l,from_ms:l.start_ms,to_ms:l.end_ms,...trimmed(l,trims[l.segment_id])}));
    const counts=new Map();for(const l of kept)counts.set(l.source_id,(counts.get(l.source_id) || 0)+1);
    const {id,title,summary}=storyFields(s,index);
-   return {index,id,title,summary,
+   return {index,id,title,summary,refined:Array.isArray(s?.round1_ids),
     kept,source_id:[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0] || ''};
   });
   return {all,stories};
@@ -93,15 +94,17 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   box.append(title,grid);return box;
  }
  function card(story){
-  const row=document.createElement('div');row.className='story-row';
+  const row=document.createElement('div');row.className='story-row';row.dataset.refined=story.refined;
   const button=document.createElement('button');button.type='button';button.className='story-card';button.disabled=!story.kept.length;
   const done=!!reviews()[story.id],status=document.createElement('span');status.className='badge story-status';status.dataset.done=done;status.textContent=done?'ตรวจแล้ว':'ยังไม่ดู';
   const title=document.createElement('strong');title.textContent=`${story.index+1}. ${story.title}`;
   const summary=document.createElement('span');summary.className='story-summary';summary.textContent=story.summary || story.kept.map(l=>l.text).join(' ').slice(0,100);
   const meta=document.createElement('span');meta.className='caption story-meta';meta.textContent=`${clock(length(story.kept))} · ${pieces(story)} ท่อน`;
-  button.title=`${story.title}\n${summary.textContent}`;button.append(status,title,summary,meta);
+  const marks=document.createElement('span');marks.className='story-marks';marks.append(status);
+  if(story.refined){const done=document.createElement('span');done.className='badge story-refined';done.textContent='เรียบเรียงแล้ว';marks.append(done);}
+  button.title=`${story.title}\n${summary.textContent}`;button.append(marks,title,summary,meta);
   button.onclick=()=>{write(d=>{d.edit_story=story.id;});go(3);};
-  const refine=document.createElement('button');refine.type='button';refine.dataset.icon='cut';refine.textContent='ตัดต่อเรียบเรียง';
+  const refine=document.createElement('button');refine.type='button';refine.dataset.icon='cut';refine.textContent=story.refined?'เรียบเรียงใหม่':'ตัดต่อเรียบเรียง';refine.title=story.refined?'คัดลอกเรื่องนี้ให้ AI เรียบเรียงอีกครั้ง':'คัดลอกเรื่องนี้ให้ AI เลือกและเรียงท่อน';
   refine.disabled=!story.kept.length || !editable();refine.onclick=()=>openRefine(story);
   row.append(button,refine);return row;
  }
@@ -136,6 +139,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
  function checkRefine(){
   const story=refineStory(),raw=$('refineAnswer').value.trim();if(!story || !raw)return {error:''};
   const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
+  if(value?.response_schema)return {error:'นี่คือข้อความที่ส่งให้ AI ยังไม่ใช่คำตอบ วางในแชท AI ก่อน แล้วคัดลอกคำตอบของ AI กลับมา'};
   const answer=Array.isArray(value)?{segment_ids:value}:Array.isArray(value?.stories)?value.stories[0]:value;
   if(answer?.story_id&&String(answer.story_id)!==story.id)return {error:'คำตอบนี้เป็นของเรื่องอื่น'};
   const ids=answer?.segment_ids,allowed=new Set(offered(story).map(l=>l.segment_id));
