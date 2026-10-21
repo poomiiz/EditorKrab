@@ -236,7 +236,11 @@ fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
     assert_eq!(editorkrab::export::emphasis_lines(&story, &doc), vec![(1000, 3000, "สอง".to_owned())]);
     // a dictionary word split out of a timed phrase is stored with its own text and start
     let split = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "สาม", "start_ms": 3100, "end_ms": 3400}, 2000]}});
-    assert_eq!(editorkrab::export::emphasis_lines(&story, &split), vec![(1000, 3000, "สอง สาม".to_owned())]);
+    // picks apart in time show one at a time, each as it is said, until the next one starts
+    assert_eq!(
+        editorkrab::export::emphasis_lines(&story, &split),
+        vec![(1000, 2100, "สอง".to_owned()), (2100, 3000, "สาม".to_owned())]
+    );
     // neighbouring dictionary words read as one name: no space between Thai words, a space between Latin ones
     let name = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "มอน", "start_ms": 3000, "end_ms": 3300}, {"text": "สเตอร์", "start_ms": 3300, "end_ms": 3600}]}});
     assert_eq!(editorkrab::export::emphasis_lines(&story, &name), vec![(2000, 3000, "มอนสเตอร์".to_owned())]);

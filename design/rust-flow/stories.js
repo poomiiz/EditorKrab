@@ -307,7 +307,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  }
  // the speech line as shown: words said by `now`, without the ones on screen as emphasis (option 1, P'Ohm
  // 21 Oct: the same word twice reads as a stutter); each pick is cut where it is said closest to its time
- function speechText(line,now=Infinity){
+ function speechText(line,now=Infinity,reveal=true){
   const {text,from,said}=timedText(line);if(!text)return line?.text || '';
   const keep=[...text].map(()=>true),list=(read().text_roles || []).includes('emphasis')?picks(line):[];
   for(const p of list){
@@ -315,7 +315,22 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    for(let i=text.indexOf(want);i>=0;i=text.indexOf(want,i+1)){const d=Math.abs(from[i]-p.start_ms);if(d<gap){gap=d;best=i;}}
    if(best>=0)for(let k=best;k<best+want.length;k++)keep[k]=false;
   }
-  return [...text].filter((c,i)=>keep[i]&&said[i]<=now).join('').replace(/\s+/g,' ').trim();
+  // the kept letters of each timed word, then display lines that fit the frame, broken like the export
+  // (lines() in export.rs): a line holds words while their letters fit `limit`
+  const words=[];[...text].forEach((c,i)=>{if(!keep[i])return;const last=words.at(-1);if(last&&last.at===said[i])last.text+=c;else words.push({at:said[i],text:c});});
+  const size=Number(read().text_styles?.speech?.size) || 64,limit=Math.max(4,Math.floor(0.86*1080/(size*0.55)));
+  const units=t=>[...t].filter(c=>!/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/.test(c)).length;
+  const rows=[];for(const w of words.map(w=>({...w,text:w.text.trim()})).filter(w=>w.text)){const row=rows.at(-1);
+   if(row&&units(row.map(x=>x.text).join(''))+1+units(w.text)<=limit)row.push(w);else rows.push([w]);}
+  if(!rows.length)return '';
+  const row=[...rows].reverse().find((r,n)=>n===rows.length-1 || r[0].at<=now) || rows[0];
+  return row.filter(w=>!reveal || w.at<=now).map(w=>w.text).reduce((out,t)=>out+(out&&/[A-Za-z0-9]$/.test(out)&&/^[A-Za-z0-9]/.test(t)?' ':'')+t,'');
+ }
+ // emphasis on screen: the group being said (neighbouring picks read as one), until the next group starts
+ function emphasisNow(line,now){
+  const groups=[];for(const p of picks(line)){const g=groups.at(-1),prev=g?.at(-1);if(prev&&p.start_ms<=prev.end_ms+1)g.push(p);else groups.push([p]);}
+  const current=[...groups].reverse().find(g=>g[0].start_ms<=now);
+  return current?joinPicks(current):'';
  }
  // chips: each timed word, split only when the dictionary cuts it cleanly ("ยกตัวอย่าง" -> "ยก|ตัวอย่าง");
  // splitting the whole line cut loan words apart ("เจน|เทิ|ลม|อนส|เต|อร์")
@@ -452,8 +467,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const story=current(),said=story&&(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept).find(l=>now>=l.start_ms&&now<l.end_ms);
   const words=said?.words || [],wordByWord=(read().text_styles?.speech?.enter ?? 'words')==='words'&&words.length;
   // while a line plays, an empty box stays empty (a no-break space) instead of falling back to the sample text
-  caption(!said?'':(words.length?speechText(said,wordByWord?now:Infinity):said.text) || '\u00a0');
-  emphasis(said?joinPicks(picks(said).filter(w=>w.start_ms<=now)) || '\u00a0':'');
+  caption(!said?'':(words.length?speechText(said,now,wordByWord):said.text) || '\u00a0');
+  emphasis(said?emphasisNow(said,now) || '\u00a0':'');
   if(said&&said.segment_id!==wordLine?.segment_id&&!video.paused)showWords(said);
   const head=$('editHead');
   if(head&&editView){
