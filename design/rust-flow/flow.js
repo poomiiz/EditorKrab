@@ -167,8 +167,12 @@ function stepsDone(){return {1:speech.complete(),2:planReady(),3:stories.allRevi
 function validate() {
   $('planStatus').hidden=!draft.plan.trim();
   const check=planCheck();
-  $('planStatus').textContent=check.plan ? `อ่านได้ ${check.plan.stories.length} เรื่อง` : check.error;
-  $('planStatus').dataset.state=check.plan ? 'ok' : 'error';
+  // round 1 should cover the whole clip: name the first stretch of speech no story uses
+  const gaps=check.unused || [],spare=gaps.reduce((n,g)=>n+g.count,0),clock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
+  $('planStatus').textContent=!check.plan ? check.error : `อ่านได้ ${check.plan.stories.length} เรื่อง`+(spare ? ` · ยังไม่ใช้ ${spare} ท่อน เช่น ${clock(gaps[0].start_ms)}-${clock(gaps[0].end_ms)}` : '');
+  $('planStatus').dataset.state=!check.plan ? 'error' : spare ? 'warn' : 'ok';
+  // once an answer is read, sending again is no longer the next thing to do
+  $('transcriptCopy').classList.toggle('primary',!check.plan);
 }
 // files picked with their checkboxes on step 1, by source (or upload) id; only this page uses it
 const picked=new Set();

@@ -19,7 +19,14 @@ export function checkPlan(text,lines){
   const unknown=known.size?ids.filter(id=>!known.has(id)).length:0;
   if(unknown)return {error:`เรื่อง ${i+1} อ้างช่วงพูดที่ไม่มีในงานนี้ ${unknown} ช่วง ใช้คำตอบของงานอื่นหรือเปล่า`};
  }
- return {plan,fixed:json!==raw || Array.isArray(value)};
+ // speech no story uses, as runs of neighbouring lines in each video: round 1 should cover the whole clip
+ const used=new Set(plan.stories.flatMap(s=>s.segment_ids)),unused=[];let run=null;
+ for(const l of [...(lines || [])].sort((a,b)=>a.source_id===b.source_id?a.start_ms-b.start_ms:a.source_id<b.source_id?-1:1)){
+  if(used.has(l.segment_id) || run?.source!==l.source_id)run=null;
+  if(used.has(l.segment_id))continue;
+  if(run){run.end_ms=l.end_ms;run.count++;}else unused.push(run={source:l.source_id,start_ms:l.start_ms,end_ms:l.end_ms,count:1});
+ }
+ return {plan,fixed:json!==raw || Array.isArray(value),unused};
 }
 export function parsePlan(text){return checkPlan(text).plan || null;}
 
@@ -78,7 +85,7 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   const story=current();$('editEmpty').hidden=!!story;$('editor').hidden=!story;
   if(!story){$('editTitle').textContent='ตัดต่อ';return;}
   $('editTitle').textContent=`ตัดต่อ · ${story.index+1}. ${story.title}`;
-  const done=!!reviews()[story.id];$('editReviewed').textContent=done?'ตรวจแล้ว ✓':'ตรวจเรื่องนี้แล้ว';$('editReviewed').classList.toggle('primary',!done);$('editReviewed').disabled=!editable();
+  const done=!!reviews()[story.id];$('editReviewed').textContent=done?'ตรวจแล้ว':'ตรวจเรื่องนี้แล้ว';$('editReviewed').classList.toggle('primary',!done);$('editReviewed').disabled=!editable();
   // the preview plays under the subtitle frame, so subtitles are placed and styled on the real picture
   const frame=$('textFrame');if(frame&&video.parentElement!==frame)frame.prepend(video);
   const src=`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(story.source_id)}/preview`;
