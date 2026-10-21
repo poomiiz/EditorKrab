@@ -18,7 +18,7 @@ export function defaults(){
 // optional text effects; absent fields mean the export defaults (outline 4 black, shadow 1, no box, no entrance)
 export const effectDefaults={outline:4,outline_color:'#000000',shadow:1,shadow_blur:0,shadow_color:'#000000',shadow_opacity:60,box_on:false,box_color:'#000000',enter:'none',blend:'normal'};
 const effectValid={outline:v=>Number.isInteger(v)&&v>=0&&v<=20,shadow:v=>Number.isInteger(v)&&v>=0&&v<=20,outline_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),
- box_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),box_on:v=>typeof v==='boolean',enter:v=>['none','fade','pop','wipe','words'].includes(v),
+ box_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),box_on:v=>typeof v==='boolean',box_pad_x:v=>Number.isInteger(v)&&v>=0&&v<=120,box_pad_y:v=>Number.isInteger(v)&&v>=0&&v<=120,enter:v=>['none','fade','pop','wipe','words'].includes(v),
  shadow_blur:v=>Number.isInteger(v)&&v>=0&&v<=20,shadow_opacity:v=>Number.isInteger(v)&&v>=0&&v<=100,shadow_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),blend:v=>['normal','add','screen','multiply'].includes(v)};
 // speech appears word by word unless another entrance is picked
 export const roleEffects=key=>key==='speech'?{...effectDefaults,enter:'words'}:effectDefaults;
@@ -121,6 +121,7 @@ export function createStyleEditor(read,write,layout,writeItems){
   $('textBounds').hidden=!overflow.length;
  }
  // a round outline: copies of the text all around it, a second ring inside for thick outlines
+ function boxPad(e,axis){const own=e['box_pad_'+axis];return Number.isInteger(own)?own:Math.max(4,e.outline || 12);}
  function ring(r,colour){
   const out=[];for(const radius of r>3?[r,r/2]:[r])for(let i=0;i<24;i++){const a=i/24*Math.PI*2;out.push(`${(Math.cos(a)*radius).toFixed(2)}px ${(Math.sin(a)*radius).toFixed(2)}px 0 ${colour}`);}
   return out.join(',');
@@ -137,7 +138,7 @@ export function createStyleEditor(read,write,layout,writeItems){
    span.style.webkitTextStroke='';span.style.textShadow=!e.box_on&&e.outline?ring(e.outline*k,e.outline_color):'';
    span.style.filter=!e.box_on&&e.shadow?`drop-shadow(${e.shadow*k}px ${e.shadow*k}px ${e.shadow_blur*k}px ${e.shadow_color}${Math.round(e.shadow_opacity*2.55).toString(16).padStart(2,'0')})`:'';
    node.style.mixBlendMode={add:'plus-lighter',screen:'screen',multiply:'multiply'}[e.blend] || '';
-   span.style.background=e.box_on?e.box_color:'';span.style.padding=e.box_on?`${Math.max(4,e.outline || 12)*k}px`:'';
+   span.style.background=e.box_on?e.box_color:'';span.style.padding=e.box_on?`${boxPad(e,'y')*k}px ${boxPad(e,'x')*k}px`:'';
    span.dataset.enter=e.enter;
    node.dataset.selected=String(key===selected);node.disabled=!enabled;
    if(key===selected)node.setAttribute('aria-current','true');else node.removeAttribute('aria-current');
@@ -190,10 +191,11 @@ export function createStyleEditor(read,write,layout,writeItems){
    $('textFieldError').hidden=true;commit(next);$('text-color-hex').removeAttribute('aria-invalid');$('text-color-hex').value=next[selected].color;checkFont(next[selected].font);paint();
   });
  }
- const effectInputs={outline:$('fx-outline'),outline_color:$('fx-outline-color'),shadow:$('fx-shadow'),shadow_blur:$('fx-shadow-blur'),shadow_color:$('fx-shadow-color'),shadow_opacity:$('fx-shadow-opacity'),box_on:$('fx-box'),box_color:$('fx-box-color'),enter:$('fx-enter'),blend:$('fx-blend')};
+ const effectInputs={outline:$('fx-outline'),outline_color:$('fx-outline-color'),shadow:$('fx-shadow'),shadow_blur:$('fx-shadow-blur'),shadow_color:$('fx-shadow-color'),shadow_opacity:$('fx-shadow-opacity'),box_on:$('fx-box'),box_color:$('fx-box-color'),box_pad_x:$('fx-box-x'),box_pad_y:$('fx-box-y'),enter:$('fx-enter'),blend:$('fx-blend')};
  function showEffects(){
   const current=values()[selected],e={...roleEffects(selected),...(current || {})};
-  for(const [key,input] of Object.entries(effectInputs)){if(input.type==='checkbox')input.checked=!!e[key];else input.value=e[key];input.disabled=!enabled || !current;}
+  for(const [key,input] of Object.entries(effectInputs)){if(input.type==='checkbox')input.checked=!!e[key];else input.value=key.startsWith('box_pad_')?boxPad(e,key.slice(-1)):e[key];input.disabled=!enabled || !current;}
+  effectInputs.box_pad_x.disabled=effectInputs.box_pad_y.disabled=!enabled || !current || !e.box_on;
   effectInputs.outline_color.disabled=effectInputs.shadow.disabled=effectInputs.shadow_blur.disabled=effectInputs.shadow_color.disabled=effectInputs.shadow_opacity.disabled=!enabled || !current || e.box_on;effectInputs.box_color.disabled=!enabled || !current || !e.box_on;
   for(const tile of document.querySelectorAll('[data-enter-pick]')){tile.setAttribute('aria-pressed',String(tile.dataset.enterPick===e.enter));tile.disabled=!enabled || !current;}
  }

@@ -311,3 +311,14 @@ fn shadow_opacity_becomes_ass_alpha() {
     let (ass, _) = subtitles(story, &doc);
     assert!(ass.contains(r"&H000000&\4a&HBF&"), "{ass}");
 }
+
+#[test]
+fn box_padding_across_and_up_down() {
+    let mut doc = document(json!({"stories": [{"segment_ids": ["a1"]}]}));
+    let story = &plan(&doc, &jobs()).unwrap()[0];
+    doc["text_styles"]["speech"]["box_on"] = json!(true);
+    doc["text_styles"]["speech"]["box_pad_x"] = json!(30);
+    doc["text_styles"]["speech"]["box_pad_y"] = json!(8);
+    let (ass, _) = subtitles(story, &doc);
+    assert!(ass.contains(r"\xbord30\ybord8"), "{ass}");
+}

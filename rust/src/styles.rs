@@ -23,6 +23,10 @@ struct Text {
     #[serde(default)]
     box_color: Option<String>,
     #[serde(default)]
+    box_pad_x: Option<u8>,
+    #[serde(default)]
+    box_pad_y: Option<u8>,
+    #[serde(default)]
     enter: Option<String>,
     #[serde(default)]
     shadow_blur: Option<u8>,
@@ -74,6 +78,8 @@ fn valid_text(v: &Text) -> bool {
         && v.shadow.is_none_or(|n| n <= 20)
         && v.outline_color.as_deref().is_none_or(hex)
         && v.box_color.as_deref().is_none_or(hex)
+        && v.box_pad_x.is_none_or(|n| n <= 120)
+        && v.box_pad_y.is_none_or(|n| n <= 120)
         && v.enter.as_deref().is_none_or(|e| ["none", "fade", "pop", "wipe", "words"].contains(&e))
         && v.shadow_blur.is_none_or(|n| n <= 20)
         && v.shadow_color.as_deref().is_none_or(hex)
