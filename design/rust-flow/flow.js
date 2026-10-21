@@ -177,6 +177,7 @@ function validate() {
   const gaps=check.unused || [],spare=gaps.reduce((n,g)=>n+g.count,0),clock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
   $('planStatus').textContent=!check.plan ? check.error : `อ่านได้ ${check.plan.stories.length} เรื่อง`+(spare ? ` · ยังไม่ใช้ ${spare} ท่อน เช่น ${clock(gaps[0].start_ms)}-${clock(gaps[0].end_ms)}` : '');
   $('planStatus').dataset.state=!check.plan ? 'error' : spare ? 'warn' : 'ok';
+  document.querySelector('.ai-bar').dataset.done=String(!!check.plan);
   // once an answer is read, sending again is no longer the next thing to do
   $('transcriptCopy').classList.toggle('primary',!check.plan);
 }

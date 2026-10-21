@@ -83,20 +83,21 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   if(!m){host.replaceChildren();return;}
   const files=read().files.filter(f=>f.source_id),groups=files.map(file=>({file,stories:m.stories.filter(s=>s.source_id===file.source_id)})).filter(g=>g.stories.length);
   const loose=m.stories.filter(s=>!files.some(f=>f.source_id===s.source_id));
-  const head=document.createElement('p');head.className='caption';
+  const head=document.createElement('p');head.className='caption';head.hidden=true;
   head.textContent=`ได้ ${m.stories.length} เรื่อง จาก ${groups.length} ไฟล์ · ตรวจแล้ว ${m.stories.filter(s=>reviews()[s.id]).length} เรื่อง · กดเรื่องเพื่อตัดต่อ`;
   host.replaceChildren(head,...groups.map(g=>group(g.file.name,g.stories)),...(loose.length?[group('ไม่พบช่วงพูดของเรื่องนี้',loose)]:[]));
  }
  function group(name,stories){
   const box=document.createElement('section');box.className='story-group';
-  const title=document.createElement('h3');title.textContent=`${name} · ${stories.length} เรื่อง`;
+  const title=document.createElement('h3'),seen=stories.filter(s=>reviews()[s.id]).length;
+  title.textContent=`${name} · ${stories.length} เรื่อง`+(seen?` · ตรวจแล้ว ${seen}`:'')+' · กดเรื่องเพื่อตัดต่อ';
   const grid=document.createElement('div');grid.className='story-grid';grid.append(...stories.map(card));
   box.append(title,grid);return box;
  }
  function card(story){
   const row=document.createElement('div');row.className='story-row';row.dataset.refined=story.refined;
   const button=document.createElement('button');button.type='button';button.className='story-card';button.disabled=!story.kept.length;
-  const done=!!reviews()[story.id],status=document.createElement('span');status.className='badge story-status';status.dataset.done=done;status.textContent=done?'ตรวจแล้ว':'ยังไม่ดู';
+  const done=!!reviews()[story.id],status=document.createElement('span');status.className='badge story-status';status.dataset.done=done;status.textContent='ตรวจแล้ว';status.hidden=!done;
   const title=document.createElement('strong');title.textContent=`${story.index+1}. ${story.title}`;
   const summary=document.createElement('span');summary.className='story-summary';summary.textContent=story.summary || story.kept.map(l=>l.text).join(' ').slice(0,100);
   const meta=document.createElement('span');meta.className='caption story-meta';meta.textContent=`${clock(length(story.kept))} · ${pieces(story)} ท่อน`;

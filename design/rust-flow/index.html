@@ -489,6 +489,16 @@ textarea{font-size:.75rem}
 .edit-words .caption{margin-right:var(--space-xs)}
 .edit-word{min-height:28px;padding:2px 8px;font-size:.8125rem;border-radius:999px}
 .edit-word[aria-pressed=true]{border-color:var(--warn);background:color-mix(in oklch,var(--warn) 22%,transparent);color:var(--txt)}
+
+/* step 2 after an answer is read: one line, send again or paste again, stories below */
+.ai-bar[data-done=true]{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-sm)}
+.ai-bar[data-done=true]>li{grid-template-columns:minmax(0,1fr) auto;padding:var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md);gap:var(--space-sm)}
+.ai-bar[data-done=true] .ai-num,.ai-bar[data-done=true] .ai-text>.caption{display:none}
+.ai-bar[data-done=true] .ai-text{grid-auto-flow:column;justify-content:start;align-items:center;gap:var(--space-sm)}
+.ai-bar[data-done=true] .ai-text h2{font-size:.8125rem;font-weight:500;color:var(--txt-sub)}
+.ai-bar[data-done=true] .ai-text .plan-status{margin-top:0}
+.story-status[hidden]{display:none}
+.story-marks{min-width:6.5em}
 </style>
 </head>
 <body data-loading="true">
