@@ -1,6 +1,8 @@
 // Style samples live in a separate draft field; they never replace dialogue or the AI plan.
 export const roles=['headline','speech','emphasis','english'];
 const fonts={system:'"Segoe UI","Leelawadee UI",Tahoma,system-ui,sans-serif',tahoma:'Tahoma,"Leelawadee UI",sans-serif',thai:'"Leelawadee UI",Tahoma,sans-serif'};
+// a font hovered in the font list, tried on the preview text being edited
+let hoverFont=null;
 const fontLabels={system:'ฟอนต์ระบบ',tahoma:'Tahoma',thai:'Leelawadee UI'};
 export function validFont(value){return typeof value==='string' && (Object.hasOwn(fonts,value) || (value.startsWith('family:') && value.slice(7).length>0 && value.slice(7).length<=128 && value.slice(7).trim()===value.slice(7) && !/[\p{Cc}"'\\,;{}<>]/u.test(value.slice(7))));}
 function fontValue(name){return Object.keys(fontLabels).find(key=>fontLabels[key]===name) || 'family:'+name;}
@@ -130,7 +132,7 @@ export function createStyleEditor(read,write,layout,writeItems){
    const v=values()[key];node.setAttribute('aria-label',`ปรับ${label(key)}`);
    node.firstElementChild.textContent=live.get(key) || v.text || '…';
    node.style.left=v.x+'%';node.style.top=v.y+'%';node.style.color=v.color;
-   node.firstElementChild.style.fontFamily=fontCss(v.font);node.firstElementChild.style.fontSize=(v.size*frame.clientWidth/1080)+'px';
+   node.firstElementChild.style.fontFamily=key===selected&&hoverFont?JSON.stringify(hoverFont)+','+fonts.system:fontCss(v.font);node.firstElementChild.style.fontSize=(v.size*frame.clientWidth/1080)+'px';
    const e={...roleEffects(key),...v},k=frame.clientWidth/1080,span=node.firstElementChild;
    span.style.webkitTextStroke='';span.style.textShadow=!e.box_on&&e.outline?ring(e.outline*k,e.outline_color):'';
    span.style.filter=!e.box_on&&e.shadow?`drop-shadow(${e.shadow*k}px ${e.shadow*k}px ${e.shadow_blur*k}px ${e.shadow_color}${Math.round(e.shadow_opacity*2.55).toString(16).padStart(2,'0')})`:'';
@@ -214,6 +216,20 @@ export function createStyleEditor(read,write,layout,writeItems){
  }
  // the read fonts as a list under the field, each shown in its own face and narrowed by what is typed
  let localNames=[];
+ // the list opens as a dropdown under the field, over the panel (fixed, so the panel's scroll never cuts it);
+ // picking a font or clicking anywhere else closes it
+ function closeFontList(){$('fontList').hidden=true;if(hoverFont){hoverFont=null;paint();}}
+ function placeFontList(){
+  const list=$('fontList'),box=$('text-font').closest('.tc-font') || $('text-font'),r=box.getBoundingClientRect();
+  const below=innerHeight-r.bottom-8,above=r.top-8,up=below<240&&above>below;
+  list.style.left=r.left+'px';list.style.width=r.width+'px';
+  list.style.maxHeight=Math.max(160,Math.min(360,up?above:below))+'px';
+  list.style.top=up?'':(r.bottom+4)+'px';list.style.bottom=up?(innerHeight-r.top+4)+'px':'';
+ }
+ document.addEventListener('pointerdown',e=>{if(!$('fontList').hidden&&!e.target.closest('#fontList,.tc-font'))closeFontList();});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('fontList').hidden)closeFontList();});
+ addEventListener('resize',()=>{if(!$('fontList').hidden)placeFontList();});
+ $('fontList').addEventListener('pointerleave',()=>{if(hoverFont){hoverFont=null;paint();}});
  function showFontList(filter=false){
   const list=$('fontList');if(!localNames.length){list.hidden=true;return;}
   const current=$('text-font').value.trim(),typed=filter?current.toLowerCase():'';
@@ -221,12 +237,15 @@ export function createStyleEditor(read,write,layout,writeItems){
   const names=shown.length?shown:localNames.slice(0,200);
   list.replaceChildren(...names.map(name=>{const b=document.createElement('button');b.type='button';b.setAttribute('role','option');b.setAttribute('aria-selected',String(name===current));
    b.style.fontFamily=JSON.stringify(name)+',system-ui,sans-serif';b.append(name);const sample=document.createElement('small');sample.textContent='สวัสดี Aa';sample.style.fontFamily=b.style.fontFamily;b.append(sample);
-   b.onclick=()=>{const input=$('text-font');input.value=name;input.dispatchEvent(new Event('input'));showFontList();};return b;}));
-  list.hidden=false;
+   b.onpointerenter=()=>{hoverFont=name;paint();};
+   b.onclick=()=>{const input=$('text-font');hoverFont=null;input.value=name;input.dispatchEvent(new Event('input'));closeFontList();};return b;}));
+  list.hidden=false;placeFontList();
  }
  $('text-font').addEventListener('input',e=>{if(e.isTrusted)showFontList(true);});
+ $('text-font').addEventListener('focus',()=>{if(localNames.length)showFontList();});
  $('localFonts').onclick=async()=>{
   if(!enabled || !selected || fontLoading)return;
+  if(localNames.length){if($('fontList').hidden)showFontList();else closeFontList();return;}
   if(!window.queryLocalFonts){$('fontStatus').textContent='เบราว์เซอร์นี้อ่านรายชื่อไม่ได้ · พิมพ์ชื่อฟอนต์แทน';return;}
   fontLoading=true;$('localFonts').disabled=true;$('localFonts').textContent='กำลังอ่านฟอนต์';
   try{
