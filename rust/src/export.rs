@@ -329,7 +329,7 @@ fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, 
         )
     };
     let blur = (style["shadow_blur"].as_f64().unwrap_or(0.0) * scale * 10.0).round() / 10.0;
-    let shadowed = style["box_on"].as_bool() != Some(true) && style["shadow"].as_f64().unwrap_or(1.0) > 0.0;
+    let shadowed = style["box_on"].as_bool() != Some(true) && style["shadow"].as_f64().unwrap_or(0.0) > 0.0;
     // glow: a wide, soft outline of the glow colour under the text (no fill, no shadow)
     let mut out = String::new();
     if style["glow_on"].as_bool() == Some(true) && style["box_on"].as_bool() != Some(true) {
@@ -370,8 +370,8 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
     } else {
         tags += &format!(
             "\\bord{}\\shad{}\\3c{}\\4c{}",
-            px("outline", 4.0),
-            px("shadow", 1.0),
+            px("outline", 0.0),
+            px("shadow", 0.0),
             colour(style["outline_color"].as_str().unwrap_or("#000000")),
             colour(style["shadow_color"].as_str().unwrap_or("#000000"))
         );
@@ -381,7 +381,7 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
         }
         // a shadow cast at an angle: the distance is the old diagonal offset, so 45° matches \shad
         if let Some(angle) = style["shadow_angle"].as_f64() {
-            let d = px("shadow", 1.0) * std::f64::consts::SQRT_2;
+            let d = px("shadow", 0.0) * std::f64::consts::SQRT_2;
             let a = angle.to_radians();
             tags += &format!("\\xshad{:.1}\\yshad{:.1}", d * a.cos(), d * a.sin());
         }

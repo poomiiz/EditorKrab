@@ -15,8 +15,8 @@ export function defaults(){
  return {headline:{text:'หัวข้อคลิป',font:'system',size:80,color:white,x:50,y:16},speech:{text:'ตัวอย่างข้อความพูด',font:'system',size:64,color:white,x:50,y:69},
   emphasis:{text:'คำเน้นสำคัญ',font:'system',size:84,color:orange,x:50,y:55},english:{text:'English subtitle',font:'system',size:56,color:white,x:50,y:78}};
 }
-// optional text effects; absent fields mean the export defaults (outline 4 black, shadow 1, no box, no entrance)
-export const effectDefaults={outline:4,outline_color:'#000000',shadow:1,shadow_blur:0,shadow_color:'#000000',shadow_opacity:60,shadow_angle:45,box_on:false,box_color:'#000000',box_opacity:100,enter:'none',blend:'normal',
+// optional text effects; absent fields mean the export defaults: every effect off (no stroke, shadow, box or glow)
+export const effectDefaults={outline:0,outline_color:'#000000',shadow:0,shadow_blur:0,shadow_color:'#000000',shadow_opacity:60,shadow_angle:45,box_on:false,box_color:'#000000',box_opacity:100,enter:'none',blend:'normal',
  bold:true,italic:false,underline:false,case:'none',spacing:0,align:'center',glow_on:false,glow_color:'#ffffff',glow_strength:60,glow_range:20};
 const effectValid={outline:v=>Number.isInteger(v)&&v>=0&&v<=20,shadow:v=>Number.isInteger(v)&&v>=0&&v<=20,outline_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),
  box_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),box_on:v=>typeof v==='boolean',box_pad_x:v=>Number.isInteger(v)&&v>=0&&v<=120,box_pad_y:v=>Number.isInteger(v)&&v>=0&&v<=120,enter:v=>['none','fade','pop','wipe','words'].includes(v),
