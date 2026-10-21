@@ -292,6 +292,19 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   }
   return {words,text,from,to,said};
  }
+ // two picks a few letters apart are one name ("เจน" + "เทิล" + "มอนสเตอร์"): join them with the letters
+ // between, so the speech line is not left with a stray piece of the name
+ function bridge(line,list){
+  const {text,from,to}=timedText(line),at=p=>{let best=-1,gap=Infinity;for(let i=text.indexOf(p.text);i>=0;i=text.indexOf(p.text,i+1)){const d=Math.abs(from[i]-p.start_ms);if(d<gap){gap=d;best=i;}}return best;};
+  const out=[];
+  for(const p of list){
+   const prev=out.at(-1),a=prev?at(prev):-1,b=at(p);
+   const between=a>=0&&b>=0?text.slice(a+prev.text.length,b):null;
+   if(between!==null&&between.length>0&&between.length<=4&&!/\s/.test(between)){const s=text.slice(a,b+p.text.length);out[out.length-1]={text:s,start_ms:from[a],end_ms:to[b+p.text.length-1]};}
+   else out.push(p);
+  }
+  return out;
+ }
  // the speech line as shown: words said by `now`, without the ones on screen as emphasis (option 1, P'Ohm
  // 21 Oct: the same word twice reads as a stutter); each pick is cut where it is said closest to its time
  function speechText(line,now=Infinity){
@@ -525,7 +538,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
     if(!hit){const said=findSaid(line,p);if(said&&!found.some(w=>samePick(w,said)))found.push(said);}
    }
    found.sort((a,b)=>a.start_ms-b.start_ms);
-   if(found.length){picked[id]=found;words+=found.length;}
+   const joined=bridge(line,found);
+   if(joined.length){picked[id]=joined;words+=joined.length;}
   }
   if(!words)return {error:'คำตอบไม่ตรงกับท่อนหรือคำที่ส่งไป ลองให้ AI ตอบใหม่'};
   return {picked,note:`เน้น ${words} คำ ใน ${Object.keys(picked).length} ท่อน`};
