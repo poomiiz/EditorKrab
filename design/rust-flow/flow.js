@@ -186,6 +186,12 @@ const picked=new Set();
 const fileKey=file=>file.source_id || file.upload_id || file.path || file.name;
 $('selectAll').onchange=()=>{picked.clear();if($('selectAll').checked)for(const f of draft.files)picked.add(fileKey(f));renderFiles();};
 $('removeSelected').onclick=()=>{if(!editingAllowed||!picked.size)return;draft.files=draft.files.filter(f=>!picked.has(fileKey(f)));picked.clear();save();render();};
+// a video's progress: transcribed, split into stories, each story arranged and reviewed, clips made (20% each)
+function progressOf(file){
+  const s=stories.summary().get(file.source_id) || {stories:0,refined:0,reviewed:0},part=n=>s.stories?n/s.stories:0;
+  const stages=[['ถอดเสียง',file.source_id&&speech.fileDone(file)?1:0],['แบ่งเรื่อง',s.stories?1:0],['เรียบเรียง',part(s.refined)],['ตรวจ',part(s.reviewed)],['สร้างคลิป',s.stories&&exporter?.done()?1:0]];
+  return {stories:s.stories,stages,percent:Math.round(stages.reduce((n,[,v])=>n+v,0)/stages.length*100)};
+}
 function renderFiles() {
   let duration=0,ready=0;
   for(const key of [...picked])if(!draft.files.some(f=>fileKey(f)===key))picked.delete(key);
@@ -196,8 +202,15 @@ function renderFiles() {
     const name=document.createElement('span');name.className='file-name';name.textContent=file.name;name.title=file.name;
     const pick=document.createElement('input');pick.type='checkbox';pick.className='file-pick';pick.checked=picked.has(fileKey(file));pick.disabled=!editingAllowed;
     pick.setAttribute('aria-label',`เลือก ${file.name}`);pick.onchange=()=>{if(pick.checked)picked.add(fileKey(file));else picked.delete(fileKey(file));renderFiles();};
-    li.append(pick,icon,name);
     const probe=probes.get(file.source_id);
+    // a card per video: cover frame, then what came of it so far
+    li.className='file-card';
+    const cover=document.createElement('div');cover.className='file-cover';cover.append(icon);
+    if(file.source_id&&probe?.status==='succeeded'&&probe.result.streams.some(s=>s.codec_type==='video')){
+     const still=document.createElement('video');still.muted=true;still.preload='metadata';still.setAttribute('aria-hidden','true');
+     still.src=`/api/v1/projects/${encodeURIComponent(projectId)}/sources/${encodeURIComponent(file.source_id)}/preview#t=2`;cover.append(still);
+    }
+    li.append(cover,pick,name);
     li.dataset.state=probe?.status || 'pending';
     const info=document.createElement('p');info.className='file-info';
     if (probe?.status==='succeeded') {
@@ -210,6 +223,11 @@ function renderFiles() {
     else info.textContent=file.source_id ? 'กำลังตรวจข้อมูล' : file.upload_id ? 'ลากไฟล์เดิมมาวางเพื่อส่งต่อ' : 'ยังไม่พบวิดีโอต้นฉบับ';
     info.textContent=`${(file.size/1048576).toFixed(1)} MB · ${info.textContent}`;
     li.append(info);
+    const facts=progressOf(file),stages=document.createElement('ol');stages.className='file-stages';stages.setAttribute('aria-label','ทำถึงขั้นไหน');
+    for(const [label,value] of facts.stages){const dot=document.createElement('li');dot.dataset.done=String(value>=1);dot.dataset.part=String(value>0&&value<1);dot.title=`${label}${value>0&&value<1?' (บางเรื่อง)':''}`;dot.textContent=label;stages.append(dot);}
+    const bar=document.createElement('div');bar.className='file-progress';bar.innerHTML='<span></span>';bar.firstChild.style.width=facts.percent+'%';
+    const percent=document.createElement('p');percent.className='file-percent';percent.textContent=(facts.stories?`${facts.stories} เรื่อง · `:'')+`เสร็จ ${facts.percent}%`;
+    li.append(stages,bar,percent);
     const remove=document.createElement('button');remove.className='source-remove icon-only';remove.dataset.icon='x';remove.title='เอาออก';remove.disabled=!editingAllowed;
     remove.setAttribute('aria-label',`เอา ${file.name} ออกจากรายการ`);
     remove.onclick=()=>{if (!editingAllowed) return;draft.files.splice(index,1);save();renderFiles();};
@@ -222,7 +240,8 @@ function renderFiles() {
   document.querySelector('[data-panel="1"]').toggleAttribute('data-has-files',draft.files.length>0);
   $('fileCount').textContent=`${draft.files.length} ไฟล์`;
   const totalSeconds=Math.round(duration),minutes=Math.floor(totalSeconds/60),seconds=totalSeconds%60;
-  $('fileTotal').textContent=ready ? `รวม ${minutes}:${String(seconds).padStart(2,'0')}` : '';
+  const all=draft.files.map(progressOf),storyTotal=all.reduce((n,f)=>n+f.stories,0),average=all.length?Math.round(all.reduce((n,f)=>n+f.percent,0)/all.length):0;
+  $('fileTotal').textContent=(ready ? `รวม ${minutes}:${String(seconds).padStart(2,'0')} · ` : '')+(storyTotal?`${storyTotal} เรื่อง · `:'')+`เสร็จ ${average}%`;
   renderSteps();speech.refresh();
 }
 for (const b of document.querySelectorAll('[data-step]')) b.onclick = () => { upgradeFlow();draft.step = Number(b.dataset.step); rememberStep(); render(); };

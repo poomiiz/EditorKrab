@@ -215,5 +215,7 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   if((correction(job,segment)?.text ?? segment.text)!==text)throw Error('edit_not_saved');
   learn(segment.text,before,text);rowsKey='';paintRows(true);
  }
- return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit};
+ // one video's speech is all transcribed
+ function fileDone(file){const list=chunks(file);return list.length>0&&list.every(j=>j?.status==='succeeded');}
+ return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit,fileDone};
 }

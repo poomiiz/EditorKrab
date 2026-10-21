@@ -438,5 +438,11 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  };
  // leaving step 3: stop the preview and take its line off the subtitle frame
  function stop(){queue=[];if(!video.paused)video.pause();caption('');emphasis('');}
- return {renderCards,renderEditor,allReviewed,warm,stop};
+ // per video: how many stories came from it, and how many are arranged with the AI and reviewed
+ function summary(){
+  const out=new Map(),m=model();
+  for(const s of m?.stories || []){const v=out.get(s.source_id) || {stories:0,refined:0,reviewed:0};v.stories++;if(s.refined)v.refined++;if(reviews()[s.id])v.reviewed++;out.set(s.source_id,v);}
+  return out;
+ }
+ return {renderCards,renderEditor,allReviewed,warm,stop,summary};
 }
