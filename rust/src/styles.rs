@@ -66,7 +66,7 @@ fn valid_text(v: &Text) -> bool {
         && v.shadow.is_none_or(|n| n <= 20)
         && v.outline_color.as_deref().is_none_or(hex)
         && v.box_color.as_deref().is_none_or(hex)
-        && v.enter.as_deref().is_none_or(|e| ["none", "fade", "pop", "wipe"].contains(&e))
+        && v.enter.as_deref().is_none_or(|e| ["none", "fade", "pop", "wipe", "words"].contains(&e))
 }
 pub fn valid(document: &Value) -> bool {
     if !crate::transcript_edits::valid(document) {

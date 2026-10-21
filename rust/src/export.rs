@@ -44,6 +44,9 @@ pub struct Piece {
     /// The line had timed words before trimming: none left means nothing is said, not "spread the text".
     #[serde(default)]
     pub timed: bool,
+    /// The transcript line (segment id) this piece plays.
+    #[serde(default)]
+    pub segment: String,
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Story {
@@ -211,6 +214,7 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
                 start_ms,
                 end_ms,
                 text: s.text.clone(),
+                segment: id.to_owned(),
                 timed: !s.words.is_empty(),
                 words: s
                     .words
@@ -283,6 +287,10 @@ fn escape(text: &str) -> String {
 }
 /// One positioned text event; size and position use the same 1080-wide frame as the step 4/5 preview.
 fn event(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
+    event_raw(frame, layer, start, end, style, &escape(text))
+}
+/// `text` is already escaped ASS (it may hold override tags such as karaoke).
+fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
     let x = style["x"].as_f64().unwrap_or(50.0) / 100.0 * frame.0 as f64;
     let y = style["y"].as_f64().unwrap_or(50.0) / 100.0 * frame.1 as f64;
     let scale = frame.0 as f64 / 1080.0;
@@ -296,7 +304,7 @@ fn event(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text
         size,
         colour(style["color"].as_str().unwrap_or("#ffffff")),
         effects(style, scale, frame),
-        escape(text)
+        text
     )
 }
 
@@ -314,6 +322,7 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
         Some("fade") => tags += "\\fad(250,0)",
         Some("pop") => tags += "\\fscx70\\fscy70\\t(0,180,\\fscx100\\fscy100)",
         // a clip that opens left to right across the frame, so the text is revealed as it passes
+        // "words" is drawn by karaoke tags in the text itself
         Some("wipe") => tags += &format!("\\clip(0,0,0,{h})\\t(0,400,\\clip(0,0,{w},{h}))", w = frame.0, h = frame.1),
         _ => {}
     }
@@ -392,10 +401,33 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
 [Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     );
     let total = story.duration_ms();
-    let (speech, skipped) = speech_lines(story, document);
+    let (speech, mut skipped) = speech_lines(story, document);
     let style = speech_style(document);
-    for (start, end, text) in &speech {
-        ass.push_str(&event((width, height), 0, *start, *end, &style, text));
+    if style["enter"].as_str().unwrap_or("words") == "words" && !speech.is_empty() {
+        let size = style["size"].as_f64().unwrap_or(64.0);
+        let limit = (0.86 * WIDTH as f64 / (size * 0.55)).max(4.0) as usize;
+        let mut at = 0;
+        for p in &story.pieces {
+            for (start, end, text) in karaoke(p, limit) {
+                ass.push_str(&event_raw((width, height), 0, at + start, at + end, &style, &text));
+            }
+            at += p.end_ms - p.start_ms;
+        }
+    } else {
+        for (start, end, text) in &speech {
+            ass.push_str(&event((width, height), 0, *start, *end, &style, text));
+        }
+    }
+    let emphasis = emphasis_lines(story, document);
+    if !emphasis.is_empty() {
+        skipped.retain(|role| role != "emphasis");
+        let style = match &document["text_styles"]["emphasis"] {
+            s @ Value::Object(_) => s.clone(),
+            _ => serde_json::json!({"font":"system","size":84,"color":"#f59e0b","x":50,"y":55}),
+        };
+        for (start, end, text) in &emphasis {
+            ass.push_str(&event((width, height), 0, *start, *end, &style, text));
+        }
     }
     for item in headlines(document) {
         ass.push_str(&event(
@@ -408,6 +440,92 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
         ));
     }
     (ass, skipped)
+}
+
+/// One piece's speech as display lines whose words appear as they are said: `\ko` karaoke keeps each word
+/// (and its outline) hidden until its start. Pieces without timed words fall back to whole lines.
+pub fn karaoke(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
+    let plain = lines(piece, limit);
+    if piece.words.is_empty() {
+        return plain.into_iter().map(|(a, b, t)| (a, b, escape(&t))).collect();
+    }
+    let local = |ms: u64| ms.clamp(piece.start_ms, piece.end_ms) - piece.start_ms;
+    let words: Vec<(u64, &str)> = piece
+        .words
+        .iter()
+        .map(|(w, from, _)| (local(*from), w.trim()))
+        .filter(|(_, w)| !w.is_empty())
+        .collect();
+    let mut out = Vec::new();
+    let mut next = 0;
+    for (start, end, text) in plain {
+        // the words of this display line, in order, as lines() grouped them
+        let mut line = String::new();
+        let mut cursor = start;
+        let mut built = String::new();
+        while next < words.len() && (built.is_empty() || {
+            let mut probe = built.clone();
+            join(&mut probe, words[next].1);
+            text.starts_with(probe.as_str())
+        }) {
+            let (at, word) = words[next];
+            let mut joined = built.clone();
+            join(&mut joined, word);
+            let spoken = &joined[built.len()..];
+            if at > cursor {
+                line += &format!("{{\\k{}}}", (at - cursor) / 10);
+                cursor = at;
+            }
+            let until = words.get(next + 1).map(|w| w.0).unwrap_or(end).clamp(cursor, end.max(cursor));
+            line += &format!("{{\\ko{}}}{}", (until - cursor) / 10, escape(spoken));
+            cursor = until;
+            built = joined;
+            next += 1;
+            if built == text {
+                break;
+            }
+        }
+        if line.is_empty() {
+            line = escape(&text);
+        }
+        out.push((start, end, line));
+    }
+    out
+}
+
+/// Emphasis words picked in step 3 (by each word's start time on its transcript line), on screen in output
+/// time from the first picked word to the end of its piece.
+pub fn emphasis_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)> {
+    let ticked = document["text_roles"]
+        .as_array()
+        .is_some_and(|r| r.iter().any(|v| v == "emphasis"));
+    let mut out = Vec::new();
+    if !ticked {
+        return out;
+    }
+    let mut at = 0;
+    for p in &story.pieces {
+        let picked: Vec<u64> = document["emphasis"][&p.segment]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_u64)
+            .collect();
+        let words: Vec<&(String, u64, u64)> = p.words.iter().filter(|w| picked.contains(&w.1)).collect();
+        if let Some(first) = words.first() {
+            let mut text = String::new();
+            for w in &words {
+                if !text.is_empty() {
+                    text.push(' ');
+                }
+                text.push_str(w.0.trim());
+            }
+            let start = first.1.clamp(p.start_ms, p.end_ms) - p.start_ms;
+            out.push((at + start, at + p.end_ms - p.start_ms, text));
+        }
+        at += p.end_ms - p.start_ms;
+    }
+    out
 }
 
 /// Step 4's speech style; a draft that never opened its style panel uses that panel's defaults.

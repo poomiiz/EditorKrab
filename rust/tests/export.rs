@@ -99,7 +99,7 @@ fn trims_move_a_lines_in_and_out_points_within_limits() {
 
 #[test]
 fn a_line_trimmed_past_all_its_words_shows_no_subtitle() {
-    let piece = Piece { source: 0, start_ms: 0, end_ms: 800, text: "หนึ่ง สอง".into(), words: vec![], timed: true };
+    let piece = Piece { source: 0, start_ms: 0, end_ms: 800, text: "หนึ่ง สอง".into(), words: vec![], timed: true, segment: String::new() };
     assert!(lines(&piece, 20).is_empty());
     let untimed = Piece { timed: false, ..piece };
     assert!(!lines(&untimed, 20).is_empty(), "a line the engine never timed still spreads its text");
@@ -212,4 +212,28 @@ fn output_names_are_safe_and_never_overwrite() {
     std::fs::write(dir.join("clip.mp4"), b"x").unwrap();
     assert_eq!(unused_path(&dir, "clip"), dir.join("clip (2).mp4"));
     assert_eq!(unused_path(&dir, "new"), dir.join("new.mp4"));
+}
+
+#[test]
+fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
+    let piece = Piece {
+        source: 0,
+        start_ms: 1000,
+        end_ms: 4000,
+        text: "หนึ่งสองสาม".into(),
+        words: vec![("หนึ่ง".into(), 1200, 1500), ("สอง".into(), 2000, 2400), ("สาม".into(), 3000, 3600)],
+        timed: true,
+        segment: "a1".into(),
+    };
+    let lines = editorkrab::export::karaoke(&piece, 40);
+    assert_eq!(lines.len(), 1);
+    // 0.2 s before the first word, then each word held until the next one starts
+    assert_eq!(lines[0].2, r"{\k20}{\ko80}หนึ่ง{\ko100}สอง{\ko100}สาม");
+    let story = editorkrab::export::Story { id: "s".into(), title: String::new(), sources: vec!["a.mp4".into()], pieces: vec![piece] };
+    let doc = json!({"text_roles": ["speech", "emphasis"], "emphasis": {"a1": [2000]}});
+    assert_eq!(editorkrab::export::emphasis_lines(&story, &doc), vec![(1000, 3000, "สอง".to_owned())]);
+    let (ass, skipped) = subtitles(&story, &doc);
+    assert!(ass.contains(r"{\k20}{\ko80}หนึ่ง"), "{ass}");
+    assert!(ass.contains("0:00:01.00,0:00:03.00,Text") && ass.contains("}สอง\n"), "{ass}");
+    assert!(skipped.is_empty(), "emphasis is drawn now: {skipped:?}");
 }

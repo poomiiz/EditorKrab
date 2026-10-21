@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 fn piece(source: usize, start_ms: u64, end_ms: u64, text: &str) -> Piece {
     Piece {
         timed: false,
+        segment: String::new(),
         source,
         start_ms,
         end_ms,
