@@ -201,7 +201,7 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  $('transcriptCopy').onclick=()=>sendPacket(async packet=>{
   try{await navigator.clipboard.writeText(forAi(packet));}
   catch(_){throw Error('คัดลอกไม่ได้ ใช้ปุ่มดาวน์โหลดไฟล์แทน');}
-  $('transcriptCopy').textContent='คัดลอกแล้ว';setTimeout(()=>{$('transcriptCopy').textContent='คัดลอกให้ AI';},2000);
+  $('toast').textContent='คัดลอกแล้ว วางในแชท AI ได้เลย';$('toast').hidden=false;
  });
  queueMicrotask(loadSettings);queueMicrotask(()=>gpuCall('/api/v1/transcription/gpu'));
  // Every subtitle line as it will show (hand edit if any), timed on its own source file.

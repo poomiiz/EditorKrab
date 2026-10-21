@@ -612,10 +612,15 @@ textarea{font-size:.75rem}
 .stage>.stage-head select.edit-story{min-height:30px;padding-block:2px}
 .stage>.stage-foot{padding:var(--space-xs) var(--space-lg) var(--space-xs) var(--space-sm);border-bottom:1px solid var(--line)}
 .stage>.stage-foot button{min-height:32px;min-width:0;padding-inline:var(--space-md)}
+
+/* short notes pop up at the bottom and go away by themselves, so nothing around them jumps */
+.toast{position:fixed !important;left:50%;bottom:24px;transform:translateX(-50%);z-index:1000;margin:0 !important;max-width:min(560px,90vw);padding:8px 16px;border:1px solid var(--line-strong);border-radius:999px;background:var(--raised);color:var(--txt);font-size:.875rem;box-shadow:0 8px 24px oklch(0% 0 0 / .35);white-space:normal;pointer-events:none}
+.toast[hidden]{display:none !important}
 </style>
 </head>
 <body data-loading="true">
 <a class="skip" href="#workspace">ข้ามไปพื้นที่ทำงาน</a>
+<p id="toast" class="badge toast" role="status" hidden></p>
 <div class="app">
 <header class="topbar"><div class="topbar-inner">
 <strong class="brand"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9 5 3-5 3Z"/></svg>EditorKrab</strong>
@@ -693,7 +698,7 @@ textarea{font-size:.75rem}
 <div class="stage-head"><div><h1 id="captionsTitle"><span>ซับ</span></h1><p>เลือกสิ่งที่จะขึ้นจอ แล้วลากวางตำแหน่ง</p></div></div>
 <div class="stage-body">
 
-<div id="captionDock" class="caption-dock"><div class="row caption-ai"><button id="emphasisCopy" type="button" data-icon="copy" title="คัดลอกท่อนที่ใช้ทุกเรื่องไปให้ AI เลือกคำเน้น">AI เลือกคำเน้น</button><button id="emphasisOpen" type="button" data-icon="paste" title="วางคำตอบจาก AI">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status" role="status" hidden></p></div><div id="captionTransport"><div id="layerHeads" class="layer-heads"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
+<div id="captionDock" class="caption-dock"><div class="row caption-ai"><button id="emphasisCopy" type="button" data-icon="copy" title="คัดลอกท่อนที่ใช้ทุกเรื่องไปให้ AI เลือกคำเน้น">AI เลือกคำเน้น</button><button id="emphasisOpen" type="button" data-icon="paste" title="วางคำตอบจาก AI">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status toast" role="status" hidden></p></div><div id="captionTransport"><div id="layerHeads" class="layer-heads"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
 <div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><label class="frame-aspect"><span class="sr-only">ขนาดคลิป</span><select id="frameAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
 <aside class="text-inspector" aria-label="ปรับข้อความ"><div class="inspector-tabs" role="tablist"><button type="button" role="tab" data-tab="style" aria-selected="true">ปรับข้อความ</button><button type="button" role="tab" data-tab="qc" aria-selected="false">ตรวจซับ</button></div><div id="lineWords" class="line-words" hidden></div>
 <fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำเน้น</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">อังกฤษ</button></div></fieldset>
@@ -715,7 +720,7 @@ textarea{font-size:.75rem}
 <div class="stage-body">
 <div id="headlineHost"></div>
 </div>
-<details id="headlineAi" class="headline-optional"><summary>ให้ AI ช่วยคิดหัวคลิป</summary><div class="headline-exchange"><label class="field" for="headlineReply"><span>คำตอบจาก AI</span><textarea id="headlineReply" maxlength="32000" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><p id="headlineStatus" class="plan-status" role="status"></p><button id="applyHeadline" data-icon="check">ใช้คำตอบนี้</button></div>
+<details id="headlineAi" class="headline-optional"><summary>ให้ AI ช่วยคิดหัวคลิป</summary><div class="headline-exchange"><label class="field" for="headlineReply"><span>คำตอบจาก AI</span><textarea id="headlineReply" maxlength="32000" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><p id="headlineStatus" class="plan-status toast" role="status" hidden></p><button id="applyHeadline" data-icon="check">ใช้คำตอบนี้</button></div>
 <div class="headline-packet"><p id="headlinePrerequisite"></p><button id="headlinePacket" data-icon="download">ดาวน์โหลดไฟล์ให้ AI</button></div>
  </details>
 <div class="stage-foot"><button class="back" data-go="4" data-icon="back">ย้อนกลับ</button><div class="actions"><button data-go="6">ถัดไป</button></div></div>

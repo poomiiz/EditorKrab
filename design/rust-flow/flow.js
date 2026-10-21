@@ -7,6 +7,16 @@ import {createExport} from './export.js';
 import {createStories,checkPlan} from './stories.js';
 import {createStyleEditor,validTextStyles,validHeadlineItems,defaults} from './text-style.js';
 const $ = id => document.getElementById(id);
+// a note shows when its text is set or it is unhidden, then hides itself after 3 seconds
+for (const note of document.querySelectorAll('.toast')) {
+  let last = '', timer = 0;
+  new MutationObserver(() => {
+    const text = note.textContent;
+    if (text !== last) { last = text; note.hidden = !text; }
+    clearTimeout(timer);
+    if (!note.hidden && text) timer = setTimeout(() => { note.hidden = true; }, 3000);
+  }).observe(note, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+}
 const key = 'editorkrab-rust-flow-prototype-v1';
 let draft = {flow_version:2,headline_items:[],step: 1, title: '', language: 'auto', files: [], plan: '', style: 'bold16'};
 let unsaved = false;
