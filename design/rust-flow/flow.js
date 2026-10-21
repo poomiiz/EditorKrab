@@ -34,7 +34,7 @@ try { localStorage.setItem('editorkrab-last-project', projectId); } catch (_) { 
 const speech=createTranscription({project:projectId,read:()=>draft,
  state:()=>({editing:editingAllowed,saved:!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved,revision:session?.record?.revision || 0}),
  writeEdit:edit=>{if(!editingAllowed)return;const entries=(draft.transcript_edits || []).filter(v=>v.job_id!==edit.job_id||v.segment_id!==edit.segment_id);if(edit.text!==edit.original_text)entries.push(edit);if(!validTranscriptEdits(entries))return;draft.transcript_edits=entries;save();},
- changed:()=>queueMicrotask(()=>{renderSteps();renderTimeline();stories.renderCards();if(activeStep(draft)===3)stories.renderEditor();}),
+ changed:()=>queueMicrotask(()=>{renderSteps();renderTimeline();stories.renderCards();if([3,4].includes(activeStep(draft)))stories.renderEditor();}),
  // pressing transcribe moves on to step 2, where the transcript fills in while the person prepares the AI step
  started:()=>{if(activeStep(draft)===1)document.querySelector('[data-step="2"]').click();}});
 
@@ -150,20 +150,20 @@ function renderTimeline(){
 }
 // the clip's shape (9:16 / 1:1 / 16:9) sizes every preview frame and the exported video
 const ratios={'9:16':'9/16','1:1':'1/1','16:9':'16/9'};
-function applyAspect(){const aspect=ratios[draft.output?.aspect]?draft.output.aspect:'9:16';$('frameAspect').value=aspect;document.documentElement.style.setProperty('--frame-ratio',ratios[aspect]);}
-$('frameAspect').onchange=()=>{if(!editingAllowed){applyAspect();return;}draft.output={...(draft.output || {}),aspect:$('frameAspect').value};save();applyAspect();requestAnimationFrame(()=>textEditor.render());};
+function applyAspect(){const aspect=ratios[draft.output?.aspect]?draft.output.aspect:'9:16';$('frameAspect').value=aspect;$('editAspect').value=aspect;document.documentElement.style.setProperty('--frame-ratio',ratios[aspect]);}
+for(const id of ['frameAspect','editAspect'])$(id).onchange=()=>{if(!editingAllowed){applyAspect();return;}draft.output={...(draft.output || {}),aspect:$(id).value};save();applyAspect();requestAnimationFrame(()=>textEditor.render());};
 function render() {
   renderSteps();
   applyAspect();
   for (const p of document.querySelectorAll('[data-panel]')) p.hidden = Number(p.dataset.panel) !== activeStep(draft);
   // Placing subtitles runs the text check; only flagged lines ask to be heard.
-  if (activeStep(draft)!==3) stories.stop();
+  if (![3,4].includes(activeStep(draft))) stories.stop();
   if (activeStep(draft)===4) textQc.run();
   renderFiles();
   textEditor.render();
   for (const id of ['title', 'language', 'plan']) $(id).value = draft[id];
   $('headlineReply').value=draft.headline_reply || '';
-  renderHeadline();speech.refresh(true);renderTimeline();stories.renderCards();stories.warm();if(activeStep(draft)===3)stories.renderEditor();
+  renderHeadline();speech.refresh(true);renderTimeline();stories.renderCards();stories.warm();if([3,4].includes(activeStep(draft)))stories.renderEditor();
   validate();
 }
 for(const button of document.querySelectorAll('[data-go]'))button.onclick=()=>{document.querySelector(`[data-step="${button.dataset.go}"]`).click();$('workspace').focus();$('workspace').scrollIntoView({block:'start'});};

@@ -121,11 +121,10 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function refineText(story){
   const packet={schema_version:1,step:'refine_story',project_id:project,story_id:story.id,title:story.title,summary:story.summary,
    lines:offered(story).map(l=>({id:l.segment_id,start_ms:l.start_ms,end_ms:l.end_ms,text:l.text})),
-   response_schema:{story_id:story.id,title:'หัวข้อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[],emphasis:{'<segment id>':['คำที่เน้น']}}};
+   response_schema:{story_id:story.id,title:'หัวข้อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[]}};
   return 'เรียบเรียงเรื่องนี้ให้เป็นคลิปที่ดูแล้วรู้เรื่องในตัวเอง เลือกเฉพาะท่อนที่ดีที่สุด ตัดท่อนที่พูดซ้ำ พูดติดขัด หรือออกนอกเรื่อง '
    +'เรียงลำดับใหม่ได้ถ้าเล่าแล้วดีขึ้น เปิดเรื่องให้น่าสนใจและรักษาตอนจบให้ครบ อ้างท่อนด้วย id ใน lines เท่านั้น ห้ามสร้างท่อนหรือเวลาใหม่ '
-   +'segment_ids คือท่อนที่เก็บ เรียงตามลำดับที่จะเล่น ปรับ title และ summary ให้ตรงกับเรื่องที่เรียบเรียงแล้ว '
-   +'emphasis คือคำเน้น เลือก 1-2 คำที่สำคัญที่สุดเฉพาะท่อนที่ควรเน้น คัดลอกคำตามที่อยู่ใน text ของท่อนนั้น\n'
+   +'segment_ids คือท่อนที่เก็บ เรียงตามลำดับที่จะเล่น ปรับ title และ summary ให้ตรงกับเรื่องที่เรียบเรียงแล้ว\n'
    +'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,1);
  }
  const refineStory=()=>model()?.stories.find(s=>s.id===refining) || null;
@@ -149,7 +148,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   if(ids.some(id=>!allowed.has(id)))return {error:'คำตอบอ้างท่อนที่ไม่ได้ส่งไป ลองให้ AI ตอบใหม่'};
   if(new Set(ids).size!==ids.length)return {error:'คำตอบใช้ท่อนเดียวกันซ้ำ'};
   const byId=new Map(lines().map(l=>[l.segment_id,l]));
-  return {ids,emphasis:answer.emphasis,title:String(answer.title || '').trim(),summary:String(answer.summary || '').trim(),
+  return {ids,title:String(answer.title || '').trim(),summary:String(answer.summary || '').trim(),
    note:`เก็บ ${ids.length} จาก ${allowed.size} ท่อน · ยาว ${clock(length(ids.map(id=>byId.get(id))))}`};
  }
  function checkRefineUi(){
@@ -164,12 +163,6 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    const plan=parsePlan(d.plan),entry=plan?.stories[story.index];if(!entry)return;
    entry.round1_ids=entry.round1_ids || entry.segment_ids.slice();entry.segment_ids=c.ids;
    if(c.title)entry.title=c.title;if(c.summary)entry.summary=c.summary;d.plan=JSON.stringify(plan,null,2);
-   // emphasis words from the answer: a picked string marks the line's words it contains
-   if(c.emphasis&&typeof c.emphasis==='object'){const all={...(d.emphasis || {})},byId=new Map(lines().map(l=>[l.segment_id,l]));
-    for(const [id,picks] of Object.entries(c.emphasis)){const line=byId.get(id);if(!line?.words?.length || !c.ids.includes(id) || !Array.isArray(picks))continue;
-     const starts=line.words.filter(w=>picks.some(p=>typeof p==='string'&&p.trim()&&(p.includes(w.text.trim())&&w.text.trim().length>1 || w.text.includes(p.trim())))).map(w=>w.start_ms);
-     if(starts.length)all[id]=[...new Set(starts)].sort((a,b)=>a-b);}
-    d.emphasis=all;}
    if(d.story_reviews?.[story.id]){d.story_reviews={...d.story_reviews};delete d.story_reviews[story.id];}
   });
  };
@@ -182,8 +175,12 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   pick.replaceChildren(...model().stories.map(s=>{const o=document.createElement('option');o.value=s.id;o.selected=s.id===story.id;
    o.disabled=!s.refined&&s.id!==story.id;o.textContent=`${s.index+1}. ${s.title}`+(s.refined?'':' (ยังไม่เรียบเรียง)');return o;}));
   const done=!!reviews()[story.id];$('editReviewed').textContent=done?'ตรวจแล้ว':'ตรวจเรื่องนี้แล้ว';$('editReviewed').classList.toggle('primary',!done);$('editReviewed').disabled=!editable();
-  // the preview plays under the subtitle frame, so subtitles are placed and styled on the real picture
-  const frame=$('textFrame');if(frame&&video.parentElement!==frame)frame.prepend(video);
+  // step 3 cuts the video in its own frame; step 4 plays it under the subtitle frame with the emphasis track
+  const textMode=!$('captionDock').closest('[data-panel]').hidden,frame=$(textMode?'textFrame':'editFrame');
+  if(frame&&video.parentElement!==frame)frame.prepend(video);
+  const controls=$('editPlay').closest('.editor-controls'),dock=textMode?$('captionTransport'):$('editor');
+  if(controls.parentElement!==dock){dock.append(controls,$('editTrack'));}
+  if(textMode){if(pick.parentElement!==controls)controls.prepend(pick);}else if(pick.parentElement!==$('editTitle'))$('editTitle').append(pick);
   cropSource=story.source_id;showCrop();
   const src=`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(story.source_id)}/preview`;
   if(video.dataset.src!==src){video.dataset.src=src;$('editVideoNote').textContent='กำลังเตรียมพรีวิว 360p ครั้งแรกอาจรอสักครู่';video.src=src;video.load();}
@@ -204,8 +201,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    toggle.title=kept?'ตัดท่อนนี้ทิ้ง':'เก็บท่อนนี้';toggle.setAttribute('aria-label',toggle.title);toggle.disabled=!editable()||(kept&&story.kept.length===1);
    toggle.onclick=()=>flip(story,line);
    box.append(toggle,text);
-   if(kept&&editable())box.append(handle(story,kept,'start_ms',box,zoom),handle(story,kept,'end_ms',box,zoom));
-   if(kept&&!showCut&&editable()){
+   if(kept&&editable()&&!textMode)box.append(handle(story,kept,'start_ms',box,zoom),handle(story,kept,'end_ms',box,zoom));
+   if(kept&&!showCut&&editable()&&!textMode){
     box.draggable=true;box.dataset.id=kept.segment_id;
     box.ondragstart=e=>{if(e.target.closest('.edit-grip')){e.preventDefault();return;}e.dataTransfer.setData('text/plain',kept.segment_id);e.dataTransfer.effectAllowed='move';box.classList.add('dragging');};
     box.ondragend=()=>box.classList.remove('dragging');
@@ -264,7 +261,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  const cropOf=id=>{const c=read().crops?.[id] || {};const f=v=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):0.5;return {x:f(c.x),y:f(c.y)};};
  function showCrop(at=cropOf(cropSource)){video.style.objectPosition=`${at.x*100}% ${at.y*100}%`;}
  {
-  const frame=$('textFrame');let drag=null;
+  let drag=null;
+  for(const frame of [$('textFrame'),$('editFrame')]){
   frame.addEventListener('pointerdown',e=>{
    if(e.target!==video || !cropSource || !editable() || e.button!==0)return;
    const fw=frame.clientWidth,fh=frame.clientHeight,vw=video.videoWidth,vh=video.videoHeight;if(!vw || !vh)return;
@@ -284,6 +282,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    if(at&&id)write(d=>{d.crops={...(d.crops || {}),[id]:{x:Math.round(at.x*1000)/1000,y:Math.round(at.y*1000)/1000}};});
   };
   frame.addEventListener('pointerup',end);frame.addEventListener('pointercancel',end);
+  }
  }
  // with the cut lines shown, the preview is the video as filmed: from `ms` it plays on to the end, nothing skipped
  function playRaw(ms,play){
@@ -399,6 +398,44 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function warm(){for(const f of read().files.filter(f=>f.source_id&&!warmed.has(f.source_id))){warmed.add(f.source_id);
   fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/preview`,{headers:{Range:'bytes=0-0'}}).catch(()=>warmed.delete(f.source_id));}}
  function allReviewed(){const m=model();return !!m&&m.stories.length>0&&m.stories.every(s=>reviews()[s.id]);}
+ // emphasis round: every story's kept lines go to an AI, which names the words worth emphasising per line
+ function keptLines(){const m=model();if(!m)return [];const seen=new Set();return m.stories.flatMap(s=>s.kept.map(l=>({story:s,line:lines().find(x=>x.segment_id===l.segment_id) || l}))).filter(({line})=>!seen.has(line.segment_id)&&seen.add(line.segment_id));}
+ function emphasisText(){
+  const packet={schema_version:1,step:'emphasis',project_id:project,
+   stories:(model()?.stories || []).filter(s=>s.kept.length).map(s=>({title:s.title,lines:s.kept.map(k=>{const l=lines().find(x=>x.segment_id===k.segment_id) || k;return {id:l.segment_id,text:l.text,words:(l.words || []).map(w=>w.text)};})})),
+   response_schema:{emphasis:{'<line id>':['คำที่เน้น']}}};
+  return 'เลือกคำเน้นสำหรับซับ: แต่ละท่อนเลือกได้ 0-2 คำที่สำคัญที่สุด (ชื่อแบรนด์ ตัวเลข คำที่ให้อารมณ์ หรือใจความหลัก) ท่อนที่ไม่มีอะไรเด่นไม่ต้องใส่ '
+   +'ใช้คำตาม words ของท่อนนั้นเท่านั้น อ้างท่อนด้วย id ที่ให้\nตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,1);
+ }
+ function checkEmphasis(){
+  const raw=$('emphasisAnswer').value.trim();if(!raw)return {error:''};
+  const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
+  if(value?.response_schema)return {error:'นี่คือข้อความที่ส่งให้ AI ยังไม่ใช่คำตอบ วางในแชท AI ก่อน แล้วคัดลอกคำตอบของ AI กลับมา'};
+  const answer=value?.emphasis && typeof value.emphasis==='object'?value.emphasis:value;
+  if(!answer || typeof answer!=='object' || Array.isArray(answer))return {error:'ไม่พบ emphasis ในคำตอบ'};
+  const byId=new Map(keptLines().map(({line})=>[line.segment_id,line])),picked={};let words=0;
+  for(const [id,list] of Object.entries(answer)){
+   const line=byId.get(id);if(!line?.words?.length || !Array.isArray(list))continue;
+   const starts=line.words.filter(w=>list.some(p=>typeof p==='string'&&p.trim()&&(p.trim()===w.text.trim() || (p.includes(w.text.trim())&&w.text.trim().length>1)))).map(w=>w.start_ms);
+   if(starts.length){picked[id]=[...new Set(starts)].sort((a,b)=>a-b);words+=picked[id].length;}
+  }
+  if(!words)return {error:'คำตอบไม่ตรงกับท่อนหรือคำที่ส่งไป ลองให้ AI ตอบใหม่'};
+  return {picked,note:`เน้น ${words} คำ ใน ${Object.keys(picked).length} ท่อน`};
+ }
+ function checkEmphasisUi(){const c=checkEmphasis();$('emphasisCheck').textContent=c.picked?c.note:c.error;$('emphasisCheck').dataset.state=c.picked?'ok':'error';$('emphasisCheck').hidden=!$('emphasisCheck').textContent;$('emphasisApply').disabled=!c.picked || !editable();}
+ $('emphasisCopy').onclick=async()=>{
+  try{await navigator.clipboard.writeText(emphasisText());$('emphasisStatus').textContent=`คัดลอก ${keptLines().length} ท่อนแล้ว วางในแชท AI ได้เลย`;$('emphasisStatus').dataset.state='ok';}
+  catch(_){$('emphasisStatus').textContent='คัดลอกไม่ได้ ลองกดอีกครั้ง';$('emphasisStatus').dataset.state='error';}
+  $('emphasisStatus').hidden=false;
+ };
+ $('emphasisOpen').onclick=()=>{$('emphasisAnswer').value='';checkEmphasisUi();$('emphasisDialog').showModal();};
+ $('emphasisAnswer').oninput=checkEmphasisUi;
+ $('emphasisApply').onclick=event=>{
+  const c=checkEmphasis();if(!c.picked){event.preventDefault();return;}
+  // the AI's picks replace the emphasis of the lines it answered for; other lines keep theirs
+  write(d=>{d.emphasis={...(d.emphasis || {}),...c.picked};});
+  $('emphasisStatus').textContent=c.note;$('emphasisStatus').dataset.state='ok';$('emphasisStatus').hidden=false;
+ };
  // leaving step 3: stop the preview and take its line off the subtitle frame
  function stop(){queue=[];if(!video.paused)video.pause();caption('');emphasis('');}
  return {renderCards,renderEditor,allReviewed,warm,stop};

@@ -507,6 +507,21 @@ textarea{font-size:.75rem}
 .editor-style .preview-caption{position:absolute;top:var(--space-sm);right:var(--space-sm);z-index:3;margin:0}
 .editor-style .preview-caption>span:first-child,.editor-style #textDragHint{display:none}
 #editor:not([hidden]){gap:var(--space-sm)}
+
+/* step 3 is the video: frame + timeline; step 4 is the text: check | workspace, with the playing story's timeline below */
+.edit-stage{min-height:0;display:flex;background:var(--sunken);border-radius:var(--radius-sm);padding:var(--space-sm)}
+.edit-stage .frame-surround{flex:1}
+.edit-frame{background:#000}
+.edit-aspect select{min-height:28px;padding:2px 6px;font-size:.75rem;background:var(--surface)}
+.stage[data-panel="4"] .stage-body{display:grid !important;grid-template-columns:min(30%,380px) minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
+.stage[data-panel="4"] .qc{grid-column:1;grid-row:1}
+.stage[data-panel="4"] #captionHost{grid-column:2;grid-row:1}
+.caption-dock{grid-column:1/-1;grid-row:2;display:grid;gap:var(--space-xs);padding:var(--space-sm) var(--space-md);border-top:1px solid var(--line);min-width:0}
+.caption-dock[hidden]{display:none}
+.caption-ai{gap:var(--space-sm);flex-wrap:wrap}.caption-ai .caption{flex:1;min-width:16em}
+#captionTransport{display:grid;gap:var(--space-xs);min-width:0}
+#editor .edit-lane{height:96px}#editor .edit-mark::before{height:86px}#editor .edit-lane::after,#editor .edit-word{display:none}
+#captionTransport .edit-grip,#captionTransport .edit-toggle,#captionTransport .edit-show-cut,#captionTransport .edit-aspect{display:none}
 </style>
 </head>
 <body data-loading="true">
@@ -568,6 +583,7 @@ textarea{font-size:.75rem}
 <dialog id="planDialog" class="plan-dialog" aria-labelledby="planTitle"><form method="dialog"><h2 id="planTitle">วางคำตอบจาก AI</h2><p class="caption">คัดลอกคำตอบทั้งหมดจากแชท AI แล้ววางในช่องนี้</p>
 <label class="field plan-field"><span class="sr-only">คำตอบจาก AI</span><textarea id="plan" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label>
 <div class="row plan-dialog-actions"><button value="close">ปิด</button><button value="close" class="primary">ใช้คำตอบนี้</button></div></form></dialog>
+<dialog id="emphasisDialog" class="plan-dialog" aria-labelledby="emphasisTitle"><form method="dialog"><h2 id="emphasisTitle">วางคำตอบคำเน้นจาก AI</h2><p class="caption">คัดลอกคำตอบทั้งหมดจากแชท AI แล้ววางในช่องนี้</p><label class="field plan-field"><span class="sr-only">คำตอบคำเน้นจาก AI</span><textarea id="emphasisAnswer" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><p id="emphasisCheck" class="badge plan-status" role="status" hidden></p><div class="row plan-dialog-actions"><button value="close">ปิด</button><button id="emphasisApply" value="close" class="primary" data-icon="check" disabled>ใช้คำตอบนี้</button></div></form></dialog>
 <dialog id="refineDialog" class="plan-dialog" aria-labelledby="refineTitle"><form method="dialog"><h2 id="refineTitle">ตัดต่อเรียบเรียง</h2><ol class="refine-steps caption"><li><span id="refineCopyNote">กำลังคัดลอก</span> <button type="button" id="refineCopy" data-icon="copy">คัดลอกอีกครั้ง</button></li><li>คัดลอกคำตอบทั้งหมดจากแชท แล้ววางในช่องนี้</li></ol><label class="field plan-field"><span class="sr-only">คำตอบจาก AI สำหรับเรื่องนี้</span><textarea id="refineAnswer" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><p id="refineStatus" class="badge plan-status" role="status" hidden></p><div class="row plan-dialog-actions"><button value="close">ปิด</button><button id="refineApply" value="close" class="primary" data-icon="check" disabled>ใช้คำตอบนี้</button></div></form></dialog>
 </div>
 <div class="stage-foot"><button class="back" data-go="1" data-icon="back">ย้อนกลับ</button><div class="actions"><button data-go="3">ถัดไป</button></div></div>
@@ -577,8 +593,8 @@ textarea{font-size:.75rem}
 <div class="stage-body">
 <p id="editEmpty" class="caption">วางคำตอบจาก AI ในขั้น 2 แล้วเลือกเรื่องที่จะตัดต่อ</p>
 <div id="editor" class="editor" hidden>
-<div id="editStyleHost" class="editor-style"></div><video id="editVideo" class="frame-video" playsinline preload="metadata" title="ลากภาพเพื่อเลื่อนตำแหน่งครอป"></video><p id="editVideoNote" class="caption" role="status"></p>
-<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><span class="caption">คลิกเส้นเวลาเพื่อเลือกจุดเล่น · ลากท่อนเพื่อสลับ · เว้นวรรคเล่น/หยุด</span><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
+<div class="edit-stage"><div class="frame-surround"><div id="editFrame" class="text-frame edit-frame"></div></div></div><video id="editVideo" class="frame-video" playsinline preload="metadata" title="ลากภาพเพื่อเลื่อนตำแหน่งครอป"></video><p id="editVideoNote" class="caption" role="status"></p>
+<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><span class="caption">คลิกเส้นเวลาเพื่อเลือกจุดเล่น · ลากท่อนเพื่อสลับ · เว้นวรรคเล่น/หยุด</span><label class="edit-aspect"><span class="sr-only">ขนาดคลิป</span><select id="editAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
 <div id="editTrack" class="edit-track"></div>
 </div>
 </div>
@@ -588,7 +604,7 @@ textarea{font-size:.75rem}
 <div class="stage-head"><div><h1 id="captionsTitle">ซับ</h1><p>เลือกสิ่งที่จะขึ้นจอ แล้วลากวางตำแหน่ง</p></div></div>
 <div class="stage-body">
 <section class="qc" aria-labelledby="textQcTitle"><h2 id="textQcTitle">ตรวจซับ</h2><p id="textQcSummary" class="caption" role="status"></p><button id="textQcGo" data-go="1" hidden>ไปขั้น 1</button><ol id="textQcList" class="qc-list"></ol></section>
-<div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
+<div id="captionDock" class="caption-dock"><div class="row caption-ai"><span class="caption">คำเน้น: ให้ AI เลือกจากท่อนที่ใช้ทุกเรื่อง แล้ววางคำตอบกลับ หรือคลิกคำในชั้นล่างของเส้นเวลาเอง</span><button id="emphasisCopy" type="button" data-icon="copy">คัดลอกให้ AI</button><button id="emphasisOpen" type="button" data-icon="paste">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status" role="status" hidden></p></div><div id="captionTransport"></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
 <div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><label class="frame-aspect"><span class="sr-only">ขนาดคลิป</span><select id="frameAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
 <aside class="text-inspector" aria-label="ปรับข้อความ">
 <fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำเน้น</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">อังกฤษ</button></div></fieldset>

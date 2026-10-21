@@ -146,7 +146,7 @@ export function createStyleEditor(read,write,layout,writeItems){
   const ids=new Set(layout().items.map(v=>'hl:'+v.id));
   for(const [key,node] of nodes){if(key.startsWith('hl:') && !ids.has(key)){if(drag?.key===key)endDrag();node.remove();nodes.delete(key);}}
   for(const key of ids){if(!nodes.has(key))createNode(key);}
-  const headline=layout().stage===5,host=$(headline?'headlineHost':layout().stage===3?'editStyleHost':'captionHost');
+  const headline=layout().stage===5,host=$(headline?'headlineHost':'captionHost');
   const workspace=$('textStyleWorkspace');if(workspace.parentElement!==host){endDrag();host.append(workspace);}
   const visible=visibleRoles();if(!visible.includes(selected)){endDrag();selected=visible[0] || null;}
   $('textComponents').hidden=headline;$('headlineActions').hidden=!headline;$('addHeadline').disabled=!enabled || layout().items.length>=100;$('removeHeadline').hidden=!selected?.startsWith('hl:');$('removeHeadline').disabled=!enabled;
