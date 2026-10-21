@@ -75,6 +75,24 @@ fn stories_follow_the_plan_order_across_files_with_corrections() {
 }
 
 #[test]
+fn trims_move_a_lines_in_and_out_points_within_limits() {
+    let base = plan(&document(json!({"stories": [{"segment_ids": ["a0"]}]})), &jobs()).unwrap();
+    let (s, e) = (base[0].pieces[0].start_ms, base[0].pieces[0].end_ms);
+    let doc = document(json!({"stories": [{"segment_ids": ["a0"], "trims": {"a0": {"start_ms": s + 300, "end_ms": e + 9000}}}]}));
+    let p = &plan(&doc, &jobs()).unwrap()[0].pieces[0];
+    assert_eq!(p.start_ms, s + 300);
+    assert_eq!(p.end_ms, e + 2000, "extension is capped at 2 s");
+    let doc = document(json!({"stories": [{"segment_ids": ["a0"], "trims": {"a0": {"start_ms": e + 5000}}}]}));
+    let p = &plan(&doc, &jobs()).unwrap()[0].pieces[0];
+    assert!(p.end_ms >= p.start_ms + 200, "a span never collapses");
+    let both = plan(&document(json!({"stories": [{"segment_ids": ["a0", "a1"]}]})), &jobs()).unwrap();
+    let a1 = both[0].pieces[1].start_ms;
+    let doc = document(json!({"stories": [{"segment_ids": ["a0", "a1"], "trims": {"a0": {"end_ms": a1 + 500}}}]}));
+    let pieces = &plan(&doc, &jobs()).unwrap()[0].pieces;
+    assert_eq!(pieces[1].start_ms, pieces[0].end_ms, "an overlap is not played twice");
+}
+
+#[test]
 fn a_bare_list_of_stories_is_a_plan_whose_wrapper_was_dropped() {
     let doc = document(json!([{"title": "One", "segment_ids": ["a0", "a1"]}]));
     let stories = plan(&doc, &jobs()).unwrap();

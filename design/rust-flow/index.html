@@ -385,6 +385,10 @@ textarea{font-size:.75rem}
 .edit-text:focus-visible{outline:2px solid var(--focus)}
 .edit-toggle::before{width:12px;height:12px}
 .edit-toggle{align-self:flex-end;min-height:0;height:18px;width:18px;padding:0;font-size:.6875rem;line-height:1;border-radius:4px}
+.edit-grip{position:absolute;top:0;bottom:0;width:8px;min-height:0;padding:0;border:0;border-radius:0;background:var(--acc);opacity:.35;cursor:ew-resize;touch-action:none}
+.edit-grip[data-edge=start_ms]{left:0}.edit-grip[data-edge=end_ms]{right:0}
+.edit-grip:hover,.edit-grip:focus-visible{opacity:1}
+.edit-seg{padding-inline:8px}
 .edit-head{position:absolute;top:0;bottom:0;width:2px;background:var(--txt);pointer-events:none;left:0}
 
 /* icons: a mask in currentColor, so JS can rewrite a button's text and the icon stays */
@@ -506,7 +510,7 @@ textarea{font-size:.75rem}
 <p id="editEmpty" class="caption">วางคำตอบจาก AI ในขั้น 2 แล้วเลือกเรื่องที่จะตัดต่อ</p>
 <div id="editor" class="editor" hidden>
 <div id="editStyleHost" class="editor-style"></div><video id="editVideo" class="frame-video" playsinline preload="metadata"></video><p id="editVideoNote" class="caption" role="status"></p>
-<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="60" value="12"></label></div>
+<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
 <div id="editTrack" class="edit-track"></div>
 </div>
 </div>

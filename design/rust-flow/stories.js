@@ -40,11 +40,21 @@ export function createStories({project,read,lines,write,go,editable,caption}){
  const video=$('editVideo');
  const reviews=()=>read().story_reviews || {};
  const length=list=>list.reduce((sum,l)=>sum+l.end_ms-l.start_ms,0);
+ // a kept line's in/out points, moved by dragging its edges: at most 2 s past the line, at least 0.2 s long
+ const REACH=2000,SHORTEST=200;
+ function trimmed(line,trim){
+  const n=v=>Number.isFinite(v)?Math.round(v/100)*100:null;
+  const start=Math.max(0,line.start_ms-REACH,Math.min(n(trim?.start_ms) ?? line.start_ms,line.end_ms-SHORTEST));
+  const end=Math.max(start+SHORTEST,Math.min(n(trim?.end_ms) ?? line.end_ms,line.end_ms+REACH));
+  return {start_ms:start,end_ms:end};
+ }
  function model(){
   const plan=parsePlan(read().plan);if(!plan)return null;
   const all=lines(),bySegment=new Map(all.map(l=>[l.segment_id,l]));
   const stories=plan.stories.map((s,index)=>{
-   const kept=(Array.isArray(s?.segment_ids)?s.segment_ids:[]).map(id=>bySegment.get(id)).filter(Boolean);
+   const trims=s?.trims && typeof s.trims==='object' ? s.trims : {};
+   const kept=(Array.isArray(s?.segment_ids)?s.segment_ids:[]).map(id=>bySegment.get(id)).filter(Boolean)
+    .map(l=>({...l,from_ms:l.start_ms,to_ms:l.end_ms,...trimmed(l,trims[l.segment_id])}));
    const counts=new Map();for(const l of kept)counts.set(l.source_id,(counts.get(l.source_id) || 0)+1);
    // chat AIs rename fields (Gemini answered story_id and no title); take the usual synonyms, else the summary's opening
    const summary=String(s?.summary || s?.description || '').trim();
@@ -153,22 +163,52 @@ export function createStories({project,read,lines,write,go,editable,caption}){
   const frame=$('textFrame');if(frame&&video.parentElement!==frame)frame.prepend(video);
   const src=`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(story.source_id)}/preview`;
   if(video.dataset.src!==src){video.dataset.src=src;$('editVideoNote').textContent='กำลังเตรียมพรีวิว 360p ครั้งแรกอาจรอสักครู่';video.src=src;video.load();}
-  const zoom=Number($('editZoom').value),order=lines().filter(l=>l.source_id===story.source_id),keep=new Set(story.kept.map(l=>l.segment_id));
-  const end=order.at(-1)?.end_ms || 0,lane=document.createElement('div');lane.className='edit-lane';lane.style.width=Math.ceil(end/1000*zoom+40)+'px';
+  // the clip as it plays: kept lines end to end in story order; the switch adds the cut lines back at their own time
+  const zoom=Number($('editZoom').value),showCut=$('editShowCut').checked,px=ms=>ms/1000*zoom;
+  const order=lines().filter(l=>l.source_id===story.source_id),keep=new Map(story.kept.map(l=>[l.segment_id,l]));
+  const boxes=showCut ? order.map(l=>({line:l,kept:keep.get(l.segment_id),at:(keep.get(l.segment_id) || l).start_ms}))
+   : story.kept.reduce((list,k)=>{const at=list.length?list.at(-1).at+list.at(-1).kept.end_ms-list.at(-1).kept.start_ms:0;list.push({line:k,kept:k,at});return list;},[]);
+  const end=showCut ? Math.max(0,...order.map(l=>l.end_ms),...story.kept.map(k=>k.end_ms)) : length(story.kept);
+  const lane=document.createElement('div');lane.className='edit-lane';lane.style.width=Math.ceil(px(end)+40)+'px';
   const every=zoom>=30?5:zoom>=10?15:zoom>=4?30:60;
-  for(let s=0;s<=end/1000;s+=every){const mark=document.createElement('span');mark.className='edit-mark caption';mark.style.left=(s*zoom)+'px';mark.textContent=clock(s*1000);lane.append(mark);}
-  for(const line of order){
-   const kept=keep.has(line.segment_id),box=document.createElement('div');box.className='edit-seg';box.dataset.keep=kept;
-   box.style.left=(line.start_ms/1000*zoom)+'px';box.style.width=Math.max(6,(line.end_ms-line.start_ms)/1000*zoom-2)+'px';box.title=line.text;
-   const text=document.createElement('button');text.type='button';text.className='edit-text';text.textContent=line.text;text.onclick=()=>{queue=[line];start();};
+  for(let s=0;s<=end/1000;s+=every){const mark=document.createElement('span');mark.className='edit-mark caption';mark.style.left=px(s*1000)+'px';mark.textContent=clock(s*1000);lane.append(mark);}
+  for(const {line,kept,at} of boxes){
+   const span=kept || line,box=document.createElement('div');box.className='edit-seg';box.dataset.keep=!!kept;
+   box.style.left=px(at)+'px';box.style.width=Math.max(6,px(span.end_ms-span.start_ms)-2)+'px';box.title=line.text;
+   const text=document.createElement('button');text.type='button';text.className='edit-text';text.textContent=line.text;text.onclick=()=>{queue=[span];start();};
    const toggle=document.createElement('button');toggle.type='button';toggle.className='edit-toggle';toggle.dataset.icon=kept?'x':'plus';
    toggle.title=kept?'ตัดท่อนนี้ทิ้ง':'เก็บท่อนนี้';toggle.setAttribute('aria-label',toggle.title);toggle.disabled=!editable()||(kept&&story.kept.length===1);
    toggle.onclick=()=>flip(story,line);
-   box.append(toggle,text);lane.append(box);
+   box.append(toggle,text);
+   if(kept&&editable())box.append(handle(story,kept,'start_ms',box,zoom),handle(story,kept,'end_ms',box,zoom));
+   lane.append(box);
   }
   const head=document.createElement('div');head.className='edit-head';head.id='editHead';lane.append(head);
   const track=$('editTrack'),scroll=track.scrollLeft;track.replaceChildren(lane);track.scrollLeft=scroll;
+  editView={story,showCut,boxes,zoom};
   $('editClock').textContent=`ใช้ ${story.kept.length} บรรทัด · ${pieces(story)} ท่อน · ยาว ${clock(length(story.kept))}`;
+ }
+ let editView=null;
+ function handle(story,kept,edge,box,zoom){
+  const grip=document.createElement('button');grip.type='button';grip.className='edit-grip';grip.dataset.edge=edge;
+  grip.title=edge==='start_ms'?'ลากเพื่อยืดหรือหดต้นท่อน':'ลากเพื่อยืดหรือหดท้ายท่อน';grip.setAttribute('aria-label',grip.title+' ใช้ลูกศรซ้ายขวาทีละ 0.1 วินาที');
+  let from=null,value=kept[edge];
+  const preview=v=>{value=trimmed({start_ms:kept.from_ms,end_ms:kept.to_ms},{start_ms:edge==='start_ms'?v:kept.start_ms,end_ms:edge==='end_ms'?v:kept.end_ms})[edge];
+   const span=edge==='start_ms'?kept.end_ms-value:value-kept.start_ms;box.style.width=Math.max(6,span/1000*zoom-2)+'px';
+   $('editClock').textContent=`${edge==='start_ms'?'ต้น':'ท้าย'}ท่อน ${clock(value)}.${Math.floor(value/100)%10} · ท่อนนี้ยาว ${(span/1000).toFixed(1)} วินาที`;};
+  grip.onpointerdown=e=>{from=e.clientX;grip.setPointerCapture(e.pointerId);e.preventDefault();};
+  grip.onpointermove=e=>{if(from!==null)preview(kept[edge]+(e.clientX-from)/zoom*1000);};
+  grip.onpointerup=()=>{if(from===null)return;from=null;save(story,kept,edge,value);};
+  grip.onkeydown=e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;e.preventDefault();save(story,kept,edge,kept[edge]+(e.key==='ArrowLeft'?-100:100));};
+  return grip;
+ }
+ function save(story,kept,edge,value){
+  write(d=>{
+   const plan=parsePlan(d.plan),entry=plan?.stories[story.index];if(!entry)return;
+   const trims={...(entry.trims || {})},next={start_ms:kept.start_ms,end_ms:kept.end_ms,[edge]:value},fit=trimmed({start_ms:kept.from_ms,end_ms:kept.to_ms},next);
+   if(fit.start_ms===kept.from_ms&&fit.end_ms===kept.to_ms)delete trims[kept.segment_id];else trims[kept.segment_id]=fit;
+   entry.trims=trims;d.plan=JSON.stringify(plan,null,2);
+  });
  }
  // keep or drop one line; a line brought back goes where its time puts it among the lines already kept
  function flip(story,line){
@@ -180,19 +220,34 @@ export function createStories({project,read,lines,write,go,editable,caption}){
    entry.segment_ids=ids;d.plan=JSON.stringify(plan,null,2);
   });
  }
- function start(){const line=queue[0];if(!line)return;video.currentTime=line.start_ms/1000;video.play().catch(()=>{});}
- video.addEventListener('timeupdate',()=>{
+ let ticking=0;
+ function start(){const line=queue[0];if(!line)return;video.currentTime=line.start_ms/1000;video.play().catch(()=>{});cancelAnimationFrame(ticking);ticking=requestAnimationFrame(tick);}
+ // timeupdate fires about 4 times a second, late enough to play the start of a cut line; a frame callback is on time
+ function tick(){
   const now=video.currentTime*1000,line=queue[0];
-  if(line&&now>=line.end_ms){queue.shift();if(queue.length)video.currentTime=queue[0].start_ms/1000;else video.pause();}
+  if(line&&now>=line.end_ms){
+   queue.shift();const next=queue[0];
+   // seek only for a real jump: a next line that starts here, or overlaps this one after a trim, just plays on
+   if(!next)video.pause();else if(next.start_ms>now+40 || next.start_ms<line.start_ms)video.currentTime=next.start_ms/1000;
+  }
   const story=current(),said=story&&lines().find(l=>l.source_id===story.source_id&&now>=l.start_ms&&now<l.end_ms);
   caption(said?.text || '');
-  const head=$('editHead');if(head)head.style.left=(now/1000*Number($('editZoom').value))+'px';
- });
+  const head=$('editHead');
+  if(head&&editView){
+   let x=now;
+   if(!editView.showCut){const box=editView.boxes.find(b=>now>=b.kept.start_ms&&now<b.kept.end_ms);x=box?box.at+now-box.kept.start_ms:-1;}
+   head.hidden=x<0;if(x>=0)head.style.left=(x/1000*editView.zoom)+'px';
+  }
+  ticking=queue.length&&!video.paused?requestAnimationFrame(tick):0;
+ }
+ video.addEventListener('play',()=>{cancelAnimationFrame(ticking);ticking=requestAnimationFrame(tick);});
+ video.addEventListener('seeked',()=>{if(video.paused)tick();});
  video.addEventListener('loadeddata',()=>{$('editVideoNote').textContent='';});
  // the first open of a video waits for its preview to be made; if the browser gives up, ask again
  video.addEventListener('error',()=>{$('editVideoNote').textContent='กำลังเตรียมพรีวิว ลองใหม่อัตโนมัติ';setTimeout(()=>{if(!video.closest('[hidden]'))video.load();},5000);});
  $('editPlay').onclick=()=>{const story=current();if(!story)return;queue=story.kept.slice();start();};
  $('editZoom').oninput=renderEditor;
+ $('editShowCut').onchange=renderEditor;
  $('editReviewed').onclick=()=>{const story=current();if(!story)return;write(d=>{const next={...(d.story_reviews || {})};if(next[story.id])delete next[story.id];else next[story.id]=true;d.story_reviews=next;});};
  // make each video's preview as soon as it is in the project, so step 3 opens without waiting
  const warmed=new Set();

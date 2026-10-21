@@ -130,6 +130,17 @@ pub fn transcript(document: &Value, jobs: &[Job]) -> Vec<(PathBuf, Vec<Line>)> {
     files
 }
 
+/// A line's trimmed span: the same limits as the step 3 editor, so a bad value cannot reach ffmpeg.
+fn trim(t: &Value, start: u64, end: u64) -> (u64, u64) {
+    const REACH: u64 = 2000;
+    const SHORTEST: u64 = 200;
+    let round = |v: u64| (v + 50) / 100 * 100;
+    let from = t["start_ms"].as_u64().map(round).unwrap_or(start);
+    let from = from.clamp(start.saturating_sub(REACH), end.saturating_sub(SHORTEST).max(start.saturating_sub(REACH)));
+    let to = t["end_ms"].as_u64().map(round).unwrap_or(end);
+    (from, to.clamp(from + SHORTEST, (end + REACH).max(from + SHORTEST)))
+}
+
 /// The stories to render, in plan order. Any unknown segment is an error, never a silent skip.
 pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
     let raw = document["plan"].as_str().unwrap_or("").trim();
@@ -167,13 +178,30 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
                     sources.len() - 1
                 }
             };
+            // step 3 can move a line's in/out points (up to 2 s past it); only words inside the new span are shown
+            let (start_ms, end_ms) = trim(&story["trims"][id], s.start_ms, s.end_ms);
             pieces.push(Piece {
                 source,
-                start_ms: s.start_ms,
-                end_ms: s.end_ms,
+                start_ms,
+                end_ms,
                 text: s.text.clone(),
-                words: s.words.clone(),
+                words: s
+                    .words
+                    .iter()
+                    .filter(|(_, from, to)| (from + to) / 2 >= start_ms && (from + to) / 2 < end_ms)
+                    .cloned()
+                    .collect(),
             });
+        }
+        // a trim that runs into the next kept line of the same video would play that stretch twice
+        for i in 1..pieces.len() {
+            let (prev, cur) = (&pieces[i - 1], &pieces[i]);
+            if prev.source == cur.source && cur.start_ms >= prev.start_ms && cur.start_ms < prev.end_ms {
+                let end = prev.end_ms;
+                let cur = &mut pieces[i];
+                cur.start_ms = end.min(cur.end_ms.saturating_sub(1));
+                cur.words.retain(|(_, from, to)| (from + to) / 2 >= end);
+            }
         }
         if pieces.is_empty() {
             return Err(format!("story_empty:{}", n + 1));
