@@ -546,23 +546,29 @@ pub fn emphasis_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)
     }
     let mut at = 0;
     for p in &story.pieces {
-        let words = picks(p, document);
-        if let Some(first) = words.first() {
-            // neighbouring words read as one phrase: no space between them unless both sides are Latin
-            let latin = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
+        // one event per group of picks as it is said (neighbouring picks read as one), shown until the
+        // next group starts or the piece ends; the preview does the same (emphasisNow in stories.js)
+        let mut groups: Vec<Vec<(u64, String, u64)>> = Vec::new();
+        for w in picks(p, document) {
+            match groups.last_mut() {
+                Some(g) if w.0 <= g.last().map_or(0, |l| l.2) + 1 => g.push(w),
+                _ => groups.push(vec![w]),
+            }
+        }
+        let latin = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
+        for (n, words) in groups.iter().enumerate() {
             let mut text = String::new();
             for (i, w) in words.iter().enumerate() {
-                if i > 0 {
-                    let prev = &words[i - 1];
-                    let tight = w.0 <= prev.2 + 1 && !(latin(prev.1.chars().last()) && latin(w.1.chars().next()));
-                    if !tight {
-                        text.push(' ');
-                    }
+                if i > 0 && latin(words[i - 1].1.chars().last()) && latin(w.1.chars().next()) {
+                    text.push(' ');
                 }
                 text.push_str(&w.1);
             }
-            let start = first.0.clamp(p.start_ms, p.end_ms) - p.start_ms;
-            out.push((at + start, at + p.end_ms - p.start_ms, text));
+            let from = words[0].0.clamp(p.start_ms, p.end_ms) - p.start_ms;
+            let to = groups.get(n + 1).map_or(p.end_ms, |g| g[0].0.clamp(p.start_ms, p.end_ms)) - p.start_ms;
+            if to > from {
+                out.push((at + from, at + to, text));
+            }
         }
         at += p.end_ms - p.start_ms;
     }
