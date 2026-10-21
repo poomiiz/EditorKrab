@@ -164,7 +164,8 @@ function renderTimeline(){
 const ratios={'9:16':'9/16','1:1':'1/1','16:9':'16/9'};
 function fitPreview(){
   for(const ws of document.querySelectorAll('#captionHost .text-workspace')){
-    const stage=ws.querySelector('.text-stage'),[w,h]=(draft?.output?.aspect || '9:16').split(':').map(Number);
+    // the preview area is always a 16:9 box (P'Ohm 21 Oct): a 9:16 clip sits in it, the panel keeps its width
+    const stage=ws.querySelector('.text-stage'),[w,h]=[16,9];
     if(!stage || !ws.clientHeight){ws.style.gridTemplateColumns='';continue;}
     const want=Math.round((ws.clientHeight-16)*w/h+16);
     ws.style.gridTemplateColumns=`minmax(0,${want}px) minmax(360px,1fr)`;
