@@ -78,6 +78,9 @@ struct EngineToken {
     text: String,
     p: f64,
     offsets: Option<Offsets>,
+    // present (centiseconds, -1 for none) when whisper-cli ran with -dtw
+    #[serde(default)]
+    t_dtw: Option<i64>,
 }
 #[derive(Deserialize)]
 struct EngineSegment {
@@ -186,7 +189,13 @@ pub fn parse(bytes: &[u8], context: &Context) -> Result<Transcript, String> {
             if token.id >= eot {
                 continue;
             }
+            // DTW (cross-attention alignment) gives the moment a token is said, in centiseconds;
+            // the plain token offsets put a word that follows a pause at the pause's start, so the
+            // subtitle came up before the voice (P'Ohm 21 Oct 2026). Each DTW token runs until the
+            // next one starts (filled in below), kept inside its segment.
+            let dtw = token.t_dtw.filter(|&t| t >= 0).map(|t| (t * 10).clamp(clock.from, clock.to));
             let (start_ms, end_ms, timing) = match &token.offsets {
+                _ if dtw.is_some() => (dtw.map(|t| context.start_ms + t as u64), None, "engine_dtw"),
                 None => (None, None, "unavailable"),
                 Some(t)
                     if t.from < -1 || t.to < -1 || (t.from >= 0 && t.to >= 0 && t.to < t.from) =>
@@ -227,6 +236,15 @@ pub fn parse(bytes: &[u8], context: &Context) -> Result<Transcript, String> {
         }
         let start_ms = context.start_ms + clock.from as u64;
         let end_ms = context.start_ms + clock.to as u64;
+        for i in 0..tokens.len() {
+            if tokens[i].timing == "engine_dtw" {
+                let next = tokens[i + 1..]
+                    .iter()
+                    .find_map(|t| if t.timing == "engine_dtw" { t.start_ms } else { None })
+                    .unwrap_or(end_ms);
+                tokens[i].end_ms = tokens[i].start_ms.map(|s| next.max(s));
+            }
+        }
         let words = place_words(&segment.text, &tokens, start_ms, end_ms)?;
         segments.push(Segment {
             id,
@@ -259,8 +277,10 @@ fn place_words(
 ) -> Result<Vec<Word>, String> {
     let lengths: Vec<usize> = tokens.iter().map(|t| t.text.chars().count()).collect();
     let total: usize = lengths.iter().sum();
-    // Anchors map a 0..1 position in the text to a clock; segment edges always anchor.
-    let mut anchors = vec![(0.0, start_ms as f64)];
+    // Anchors map a 0..1 position in the text to a clock; segment edges anchor unless a token
+    // already clocks that edge (a DTW first word said after a pause starts there, not at the
+    // segment start).
+    let mut anchors = Vec::new();
     let mut seen = 0;
     for (token, length) in tokens.iter().zip(&lengths) {
         if let (Some(a), Some(b), true) = (token.start_ms, token.end_ms, total > 0) {
@@ -268,6 +288,9 @@ fn place_words(
             anchors.push(((seen + length) as f64 / total as f64, b as f64));
         }
         seen += length;
+    }
+    if !anchors.iter().any(|a: &(f64, f64)| a.0 == 0.0) {
+        anchors.push((0.0, start_ms as f64));
     }
     anchors.push((1.0, end_ms as f64));
     anchors.sort_by(|x, y| x.0.total_cmp(&y.0));
