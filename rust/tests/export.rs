@@ -236,10 +236,10 @@ fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
     assert_eq!(editorkrab::export::emphasis_lines(&story, &doc), vec![(1000, 3000, "สอง".to_owned())]);
     // a dictionary word split out of a timed phrase is stored with its own text and start
     let split = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "สาม", "start_ms": 3100, "end_ms": 3400}, 2000]}});
-    // picks apart in time show one at a time, each as it is said, until the next one starts
+    // picks apart in time show one at a time, each as it is said (clocked from the words), until the next one starts
     assert_eq!(
         editorkrab::export::emphasis_lines(&story, &split),
-        vec![(1000, 2100, "สอง".to_owned()), (2100, 3000, "สาม".to_owned())]
+        vec![(1000, 2000, "สอง".to_owned()), (2000, 3000, "สาม".to_owned())]
     );
     // neighbouring dictionary words read as one name: no space between Thai words, a space between Latin ones
     let name = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "มอน", "start_ms": 3000, "end_ms": 3300}, {"text": "สเตอร์", "start_ms": 3300, "end_ms": 3600}]}});
@@ -349,4 +349,24 @@ fn capcut_style_text_settings_become_ass_tags() {
     doc["text_styles"]["speech"]["box_opacity"] = json!(50);
     let (ass, _) = subtitles(story, &doc);
     assert!(ass.contains(r"\3a&H80&"), "{ass}");
+}
+
+#[test]
+fn retimed_words_and_the_subtitle_shift_move_speech_and_emphasis() {
+    let mut doc = document(json!({"stories": [{"segment_ids": ["a1"]}]}));
+    doc["text_styles"]["speech"]["enter"] = json!("none");
+    let base = plan(&doc, &jobs()).unwrap()[0].pieces[0].words.clone();
+    // re-timed clocks replace the transcript's, one pair per word in order
+    let times: Vec<_> = base.iter().map(|w| json!([w.1 + 100, w.2 + 100])).collect();
+    doc["word_times"] = json!({"a1": times});
+    let moved = plan(&doc, &jobs()).unwrap()[0].pieces[0].words.clone();
+    assert_eq!(moved.iter().map(|w| w.1).collect::<Vec<_>>(), base.iter().map(|w| w.1 + 100).collect::<Vec<_>>());
+    // the whole-project shift adds on top
+    doc["subtitle_offset_ms"] = json!(-50);
+    let shifted = plan(&doc, &jobs()).unwrap()[0].pieces[0].words.clone();
+    assert_eq!(shifted.iter().map(|w| w.1).collect::<Vec<_>>(), base.iter().map(|w| w.1 + 50).collect::<Vec<_>>());
+    // a list that does not match the words one for one is ignored
+    doc["word_times"] = json!({"a1": [[0, 1]]});
+    doc["subtitle_offset_ms"] = json!(0);
+    assert_eq!(plan(&doc, &jobs()).unwrap()[0].pieces[0].words, base);
 }

@@ -180,7 +180,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   if(frame&&video.parentElement!==frame)frame.prepend(video);
   const controls=$('editPlay').closest('.editor-controls'),dock=textMode?$('captionTransport'):$('editor');
   if(controls.parentElement!==dock){dock.append(controls,$('editTrack'));}
-  if(textMode)controls.querySelector('.editor-zoom').before(document.querySelector('.frame-aspect'),document.querySelector('.caption-ai'));
+  if(textMode)controls.querySelector('.editor-zoom').before(document.querySelector('.frame-aspect'),document.querySelector('.caption-ai'),document.querySelector('.sub-timing'));
   const title=$(textMode?'captionsTitle':'editTitle');if(pick.parentElement!==title)title.append(pick);
   cropSource=story.source_id;showCrop();
   const src=`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(story.source_id)}/preview`;
@@ -383,7 +383,13 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  }
  // picked words read as one phrase: neighbours join without a space unless both sides are Latin
  const joinPicks=list=>list.reduce((out,w,i)=>{const prev=list[i-1];const tight=prev&&w.start_ms<=prev.end_ms+1&&!(latin.test(prev.text.at(-1))&&latin.test(w.text[0]));return out+(i&&!tight?' ':'')+w.text;},'');
- function picks(line){
+ function relocate(line,p){
+  const {text,from,to}=timedText(line);const letters=[...text].map((c,i)=>({c,i})).filter(x=>!/\s/.test(x.c)),flat=letters.map(x=>x.c).join(''),want=p.text.replace(/\s+/g,'');
+  let best=-1,gap=Infinity;for(let i=flat.indexOf(want);i>=0&&want;i=flat.indexOf(want,i+1)){const d=Math.abs(from[letters[i].i]-p.start_ms);if(d<gap){gap=d;best=i;}}
+  return best<0?p:{...p,start_ms:from[letters[best].i],end_ms:to[letters[best+want.length-1].i]};
+ }
+ function picks(line){return rawPicks(line).map(p=>relocate(line,p)).sort((a,b)=>a.start_ms-b.start_ms);}
+ function rawPicks(line){
   return (read().emphasis?.[line?.segment_id] || []).map(p=>typeof p==='number'?(()=>{const w=(line.words || []).find(w=>w.start_ms===p);return w&&{text:w.text.trim(),start_ms:w.start_ms,end_ms:w.end_ms};})():p)
    .filter(p=>p&&typeof p.text==='string'&&Number.isFinite(p.start_ms)).sort((a,b)=>a.start_ms-b.start_ms);
  }
