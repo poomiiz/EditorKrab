@@ -75,7 +75,7 @@ function error(message) { $('error').textContent = message; $('error').hidden = 
 function editing(enabled) {
   editingAllowed = enabled;
   textEditor.editing(enabled);
-  for (const input of document.querySelectorAll('[data-step],[data-go],#title,#language,#plan,#pick,#folder,#open,.source-remove,#headlineReply,#applyHeadline,#headlinePacket')) input.disabled = !enabled;
+  for (const input of document.querySelectorAll('[data-step],[data-go],#title,#projectName,#language,#plan,#pick,#folder,#open,.source-remove,#headlineReply,#applyHeadline,#headlinePacket')) input.disabled = !enabled;
   renderHeadline();speech.refresh();
   $('undo').disabled = !enabled || !session?.record?.undo.length || !!session?.blocked || !!session?.volatile;
   $('redo').disabled = !enabled || !session?.record?.redo.length || !!session?.blocked || !!session?.volatile;
@@ -186,6 +186,7 @@ function render() {
   renderFiles();
   textEditor.render();
   for (const id of ['title', 'language', 'plan']) $(id).value = draft[id];
+  $('projectName').value=draft.title;
   $('headlineReply').value=draft.headline_reply || '';
   renderHeadline();speech.refresh(true);renderTimeline();stories.renderCards();stories.warm();if([3,4].includes(activeStep(draft)))stories.renderEditor();
   validate();
@@ -271,6 +272,7 @@ function renderFiles() {
   renderSteps();speech.refresh();
 }
 for (const b of document.querySelectorAll('[data-step]')) b.onclick = () => { upgradeFlow();draft.step = Number(b.dataset.step); rememberStep(); render(); };
+$('projectName').addEventListener('input',()=>{$('title').value=$('projectName').value;$('title').dispatchEvent(new Event('input'));});
 for (const id of ['title', 'language', 'plan']) $(id).addEventListener('input', () => { draft[id] = $(id).value;
   // a pasted answer the check could repair is stored repaired, so step 3 and export read the same stories
   if (id === 'plan') { const check=planCheck(); if (check.fixed) $(id).value = draft.plan = JSON.stringify(check.plan, null, 2); if (check.plan) { draft.story_reviews = {}; delete draft.edit_story; } }
