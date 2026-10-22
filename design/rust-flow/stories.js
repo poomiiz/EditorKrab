@@ -45,7 +45,7 @@ export function checkPlan(text,lines){
 }
 export function parsePlan(text){return checkPlan(text).plan || null;}
 
-export function createStories({project,read,lines,write,go,editable,caption,emphasis=()=>{}}){
+export function createStories({project,read,lines,write,go,editable,caption,emphasis=()=>{},editLine=()=>{},listen=()=>{}}){
  let queue=[];
  const video=$('editVideo');
  const reviews=()=>read().story_reviews || {};
@@ -180,7 +180,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   if(frame&&video.parentElement!==frame)frame.prepend(video);
   const controls=$('editPlay').closest('.editor-controls'),dock=textMode?$('captionTransport'):$('editor');
   if(controls.parentElement!==dock){dock.append(controls,$('editTrack'));}
-  if(textMode)controls.querySelector('.editor-zoom').before(document.querySelector('.frame-aspect'),document.querySelector('.caption-ai'));
+  if(textMode)controls.querySelector('.editor-zoom').before(document.querySelector('.frame-aspect'),document.querySelector('.caption-ai'),document.querySelector('.sub-timing'));
   const title=$(textMode?'captionsTitle':'editTitle');if(pick.parentElement!==title)title.append(pick);
   cropSource=story.source_id;showCrop();
   const src=`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(story.source_id)}/preview`;
@@ -197,7 +197,10 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   for(const {line,kept,at} of boxes){
    const span=kept || line,box=document.createElement('div');box.className='edit-seg';box.dataset.keep=!!kept;
    box.style.left=px(at)+'px';box.style.width=Math.max(6,px(span.end_ms-span.start_ms)-2)+'px';box.title=line.text;
-   const text=document.createElement('button');text.type='button';text.className='edit-text';text.textContent=line.text;text.onclick=()=>{if(showCut)playRaw(line.start_ms,true);else seekTo(story,kept.start_ms,kept.segment_id,true);};
+   const text=document.createElement('button');text.type='button';text.className='edit-text';
+   text.textContent=textMode&&(line.words || []).length?speechText(line,null) || '·':line.text;
+   text.onclick=()=>{if(scrubbed)return;if(textMode){if(kept)seekTo(story,kept.start_ms,kept.segment_id,false);wordLine=lines().find(l=>l.segment_id===line.segment_id) || line;drawWords();showLine();return;}if(showCut)playRaw(line.start_ms,true);else seekTo(story,kept.start_ms,kept.segment_id,true);};
+   const full=lines().find(l=>l.segment_id===line.segment_id) || line,verdict=textMode&&qcBy.get(full.id);if(verdict){box.dataset.qc=verdict.worst;box.title=line.text+'\n'+verdict.problems.join('\n');}
    const toggle=document.createElement('button');toggle.type='button';toggle.className='edit-toggle';toggle.dataset.icon=kept?'x':'plus';
    toggle.title=kept?'ตัดท่อนนี้ทิ้ง':'เก็บท่อนนี้';toggle.setAttribute('aria-label',toggle.title);toggle.disabled=!editable()||(kept&&story.kept.length===1);
    toggle.onclick=()=>flip(story,line);
@@ -218,16 +221,38 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const track=$('editTrack'),scroll=track.scrollLeft;track.replaceChildren(lane);track.scrollLeft=scroll;
   editView={story,showCut,boxes,zoom};
   wordLine=wordLine?lines().find(l=>l.segment_id===wordLine.segment_id) || null:null;drawWords();if(textMode)drawHeads();
-  lane.onclick=e=>{
-   if(e.target!==lane&&!e.target.classList.contains('edit-mark'))return;
-   const at=(e.clientX-lane.getBoundingClientRect().left)/zoom*1000;
+  const seekAt=x=>{
+   const at=Math.max(0,(x-lane.getBoundingClientRect().left)/zoom*1000);
    if(showCut){playRaw(at,false);return;}
    const box=boxes.find(b=>at<b.at+b.kept.end_ms-b.kept.start_ms) || boxes.at(-1);
-   if(box)seekTo(story,box.kept.start_ms+Math.max(0,at-box.at),box.kept.segment_id,false);
+   if(box)seekTo(story,box.kept.start_ms+Math.min(Math.max(0,at-box.at),box.kept.end_ms-box.kept.start_ms-1),box.kept.segment_id,false);
+  };
+  lane.onclick=e=>{if(scrubbed)return;if(e.target!==lane&&!e.target.classList.contains('edit-mark'))return;seekAt(e.clientX);};
+  lane.onpointerdown=e=>{
+   if(e.button!==0 || e.target.closest('.edit-grip,.edit-toggle,.edit-emph') || (!textMode&&e.target.closest('.edit-seg[draggable=true]')))return;
+   const from=e.clientX;let moving=false;scrubbed=false;
+   const move=m=>{if(!moving&&Math.abs(m.clientX-from)<4)return;moving=true;scrubbed=true;seekAt(m.clientX);};
+   const up=()=>{removeEventListener('pointermove',move);removeEventListener('pointerup',up);setTimeout(()=>{scrubbed=false;},0);};
+   addEventListener('pointermove',move);addEventListener('pointerup',up);
   };
   $('editClock').textContent=`ใช้ ${story.kept.length} บรรทัด · ${pieces(story)} ท่อน · ยาว ${clock(length(story.kept))}`;
  }
- let editView=null,refocus=null,cropSource=null,wordLine=null;
+ let editView=null,refocus=null,cropSource=null,wordLine=null,scrubbed=false,qcBy=new Map();
+ // the line picked on the step 4 timeline in the panel's text box, with the check's notes for it
+ function showLine(){
+  const box=$('lineBox');if(!box)return;
+  const line=wordLine,inStep4=!!$('editTrack').closest('#captionTransport');box.hidden=!inStep4 || !line;if(box.hidden)return;
+  const verdict=qcBy.get(line.id);
+  $('lineText').value=line.text;$('lineText').disabled=!editable();$('lineSave').disabled=true;
+  // the words of this line that show as emphasis, so the full text in the box does not read as a repeat
+  const shown=(read().text_roles || []).includes('emphasis')?picks(line):[];
+  $('lineEmph').hidden=!shown.length;$('lineEmph').textContent=shown.length?`⭐ คำเน้น: ${joinPicks(shown)} · บนจอขึ้นตัวใหญ่แยก ไม่ซ้ำในซับ`:'';
+  $('lineTime').textContent=`${clock(line.start_ms)}–${clock(line.end_ms)}`;
+  $('lineProblems').replaceChildren(...(verdict?.problems || []).map(p=>{const li=document.createElement('li');li.textContent=p;li.dataset.severity=verdict.worst;return li;}));
+ }
+ $('lineText')?.addEventListener('input',()=>{$('lineSave').disabled=!wordLine || $('lineText').value.trim()===wordLine.text || !$('lineText').value.trim();});
+ $('lineSave')?.addEventListener('click',()=>{if(!wordLine)return;const text=$('lineText').value.trim();if(!text)return;try{editLine(wordLine,text);$('lineSave').disabled=true;}catch(_){}});
+ $('lineListen')?.addEventListener('click',()=>{if(wordLine)listen(wordLine);});
  // the words row: the line under the playhead (or the one clicked); each word toggles as emphasis
  function showWords(line){
   const same=(wordLine?.segment_id || null)===(line?.segment_id || null);wordLine=line || null;if(!same)drawWords();
@@ -307,15 +332,33 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  }
  // the speech line as shown: words said by `now`, without the ones on screen as emphasis (option 1, P'Ohm
  // 21 Oct: the same word twice reads as a stutter); each pick is cut where it is said closest to its time
- function speechText(line,now=Infinity){
+ function speechText(line,now=Infinity,reveal=true){
   const {text,from,said}=timedText(line);if(!text)return line?.text || '';
   const keep=[...text].map(()=>true),list=(read().text_roles || []).includes('emphasis')?picks(line):[];
+  // matched on letters only, so "Customer Experience" is found though the line holds a space between them
+  const letters=[...text].map((c,i)=>({c,i})).filter(x=>!/\s/.test(x.c)),flat=letters.map(x=>x.c).join('');
   for(const p of list){
    const want=p.text.replace(/\s+/g,'');let best=-1,gap=Infinity;
-   for(let i=text.indexOf(want);i>=0;i=text.indexOf(want,i+1)){const d=Math.abs(from[i]-p.start_ms);if(d<gap){gap=d;best=i;}}
-   if(best>=0)for(let k=best;k<best+want.length;k++)keep[k]=false;
+   for(let i=flat.indexOf(want);i>=0&&want;i=flat.indexOf(want,i+1)){const d=Math.abs(from[letters[i].i]-p.start_ms);if(d<gap){gap=d;best=i;}}
+   if(best>=0)for(let k=letters[best].i;k<=letters[best+want.length-1].i;k++)keep[k]=false;
   }
-  return [...text].filter((c,i)=>keep[i]&&said[i]<=now).join('').replace(/\s+/g,' ').trim();
+  // the kept letters of each timed word, then display lines that fit the frame, broken like the export
+  // (lines() in export.rs): a line holds words while their letters fit `limit`
+  const words=[];[...text].forEach((c,i)=>{if(!keep[i])return;const last=words.at(-1);if(last&&last.at===said[i])last.text+=c;else words.push({at:said[i],text:c});});
+  const size=Number(read().text_styles?.speech?.size) || 64,limit=Math.max(4,Math.floor(0.86*1080/(size*0.55)));
+  const units=t=>[...t].filter(c=>!/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/.test(c)).length;
+  const rows=[];for(const w of words.map(w=>({...w,text:w.text.trim()})).filter(w=>w.text)){const row=rows.at(-1);
+   if(row&&units(row.map(x=>x.text).join(''))+1+units(w.text)<=limit)row.push(w);else rows.push([w]);}
+  if(!rows.length)return '';
+  if(now===null)return rows.flat().map(w=>w.text).reduce((out,t)=>out+(out&&/[A-Za-z0-9]$/.test(out)&&/^[A-Za-z0-9]/.test(t)?' ':'')+t,'');
+  const row=[...rows].reverse().find((r,n)=>n===rows.length-1 || r[0].at<=now) || rows[0];
+  return row.filter(w=>!reveal || w.at<=now).map(w=>w.text).reduce((out,t)=>out+(out&&/[A-Za-z0-9]$/.test(out)&&/^[A-Za-z0-9]/.test(t)?' ':'')+t,'');
+ }
+ // emphasis on screen: the group being said (neighbouring picks read as one), until the next group starts
+ function emphasisNow(line,now){
+  const groups=[];for(const p of picks(line)){const g=groups.at(-1),prev=g?.at(-1);if(prev&&p.start_ms<=prev.end_ms+1)g.push(p);else groups.push([p]);}
+  const current=[...groups].reverse().find(g=>g[0].start_ms<=now);
+  return current?joinPicks(current):'';
  }
  // chips: each timed word, split only when the dictionary cuts it cleanly ("ยกตัวอย่าง" -> "ยก|ตัวอย่าง");
  // splitting the whole line cut loan words apart ("เจน|เทิ|ลม|อนส|เต|อร์")
@@ -340,7 +383,13 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  }
  // picked words read as one phrase: neighbours join without a space unless both sides are Latin
  const joinPicks=list=>list.reduce((out,w,i)=>{const prev=list[i-1];const tight=prev&&w.start_ms<=prev.end_ms+1&&!(latin.test(prev.text.at(-1))&&latin.test(w.text[0]));return out+(i&&!tight?' ':'')+w.text;},'');
- function picks(line){
+ function relocate(line,p){
+  const {text,from,to}=timedText(line);const letters=[...text].map((c,i)=>({c,i})).filter(x=>!/\s/.test(x.c)),flat=letters.map(x=>x.c).join(''),want=p.text.replace(/\s+/g,'');
+  let best=-1,gap=Infinity;for(let i=flat.indexOf(want);i>=0&&want;i=flat.indexOf(want,i+1)){const d=Math.abs(from[letters[i].i]-p.start_ms);if(d<gap){gap=d;best=i;}}
+  return best<0?p:{...p,start_ms:from[letters[best].i],end_ms:to[letters[best+want.length-1].i]};
+ }
+ function picks(line){return rawPicks(line).map(p=>relocate(line,p)).sort((a,b)=>a.start_ms-b.start_ms);}
+ function rawPicks(line){
   return (read().emphasis?.[line?.segment_id] || []).map(p=>typeof p==='number'?(()=>{const w=(line.words || []).find(w=>w.start_ms===p);return w&&{text:w.text.trim(),start_ms:w.start_ms,end_ms:w.end_ms};})():p)
    .filter(p=>p&&typeof p.text==='string'&&Number.isFinite(p.start_ms)).sort((a,b)=>a.start_ms-b.start_ms);
  }
@@ -452,8 +501,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const story=current(),said=story&&(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept).find(l=>now>=l.start_ms&&now<l.end_ms);
   const words=said?.words || [],wordByWord=(read().text_styles?.speech?.enter ?? 'words')==='words'&&words.length;
   // while a line plays, an empty box stays empty (a no-break space) instead of falling back to the sample text
-  caption(!said?'':(words.length?speechText(said,wordByWord?now:Infinity):said.text) || '\u00a0');
-  emphasis(said?joinPicks(picks(said).filter(w=>w.start_ms<=now)) || '\u00a0':'');
+  caption(!said?'':(words.length?speechText(said,now,wordByWord):said.text) || '\u00a0');
+  emphasis(said?emphasisNow(said,now) || '\u00a0':'');
   if(said&&said.segment_id!==wordLine?.segment_id&&!video.paused)showWords(said);
   const head=$('editHead');
   if(head&&editView){
@@ -509,12 +558,21 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function allReviewed(){const m=model();return !!m&&m.stories.length>0&&m.stories.every(s=>reviews()[s.id]);}
  // emphasis round: every story's kept lines go to an AI, which names the words worth emphasising per line
  function keptLines(){const m=model();if(!m)return [];const seen=new Set();return m.stories.flatMap(s=>s.kept.map(l=>({story:s,line:lines().find(x=>x.segment_id===l.segment_id) || l}))).filter(({line})=>!seen.has(line.segment_id)&&seen.add(line.segment_id));}
+ // the AI gets each kept line's text only (the engine's word chunks cut words apart, "เทิ|ลม", and the AI
+ // copied those fragments); it answers with whole words copied from the text, and few of them
  function emphasisText(){
-  const packet={schema_version:1,step:'emphasis',project_id:project,
-   stories:(model()?.stories || []).filter(s=>s.kept.length).map(s=>({title:s.title,lines:s.kept.map(k=>{const l=lines().find(x=>x.segment_id===k.segment_id) || k;return {id:l.segment_id,text:l.text,words:subWords(l).map(w=>w.text)};})})),
+  const packet={schema_version:2,step:'emphasis',project_id:project,
+   stories:(model()?.stories || []).filter(s=>s.kept.length).map(s=>({title:s.title,lines:s.kept.map(k=>{const l=lines().find(x=>x.segment_id===k.segment_id) || k;return {id:l.segment_id,text:l.text};})})),
    response_schema:{emphasis:{'<line id>':['คำที่เน้น']}}};
-  return 'เลือกคำเน้นสำหรับซับ: แต่ละท่อนเลือกได้ 0-2 คำที่สำคัญที่สุด (ชื่อแบรนด์ ตัวเลข คำที่ให้อารมณ์ หรือใจความหลัก) ท่อนที่ไม่มีอะไรเด่นไม่ต้องใส่ '
-   +'ใช้คำตาม words ของท่อนนั้นเท่านั้น ถ้าเป็นชื่อที่ยาวหลายคำ ให้เขียนคำที่ติดกันใน words ต่อกันเป็นคำตอบเดียว อ้างท่อนด้วย id ที่ให้\nตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,1);
+  return ['เลือก "คำเน้น" สำหรับซับคลิปสั้น คือคำที่จะขึ้นตัวใหญ่บนจอตอนคนพูดคำนั้น',
+   'กติกา:',
+   '1. เลือกเฉพาะท่อนที่มีใจความเด่นจริง ประมาณ 1 ใน 3 ของท่อนทั้งหมด ท่อนอื่นไม่ต้องใส่ในคำตอบ',
+   '2. ท่อนละ 1 คำ (มากสุด 2) แต่ละคำยาวไม่เกิน 12 ตัวอักษร',
+   '3. เลือกคำที่มีความหมายครบในตัว: ชื่อแบรนด์หรือชื่อเฉพาะ (เอาทั้งชื่อ ไม่ตัดครึ่ง) ตัวเลข ราคา คำที่ให้อารมณ์ หรือใจความหลักของท่อน',
+   '4. ห้ามเลือกคำเติมหรือคำเชื่อม เช่น แบบ คือ อ่ะ อืม เออ ที่ ว่า แล้ว ก็ มัน นี้ เนี้ย ใช่ ปะ',
+   '5. คัดลอกคำให้ตรงกับข้อความใน text ของท่อนนั้นทุกตัวอักษร ถ้า text สะกดผิดก็ใช้ตามนั้น ห้ามแก้ ห้ามแปล',
+   '6. อ้างท่อนด้วย id ที่ให้',
+   'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย',''].join('\n')+'\n'+JSON.stringify(packet,null,1);
  }
  function checkEmphasis(){
   const raw=$('emphasisAnswer').value.trim();if(!raw)return {error:''};
@@ -542,7 +600,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    if(joined.length){picked[id]=joined;words+=joined.length;}
   }
   if(!words)return {error:'คำตอบไม่ตรงกับท่อนหรือคำที่ส่งไป ลองให้ AI ตอบใหม่'};
-  return {picked,note:`เน้น ${words} คำ ใน ${Object.keys(picked).length} ท่อน`};
+  return {picked,note:`เน้นคำใน ${Object.keys(picked).length} ท่อน`};
  }
  function checkEmphasisUi(){const c=checkEmphasis();$('emphasisCheck').textContent=c.picked?c.note:c.error;$('emphasisCheck').dataset.state=c.picked?'ok':'error';$('emphasisCheck').hidden=!$('emphasisCheck').textContent;$('emphasisApply').disabled=!c.picked || !editable();}
  $('emphasisCopy').onclick=async()=>{
@@ -554,8 +612,10 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  $('emphasisAnswer').oninput=checkEmphasisUi;
  $('emphasisApply').onclick=event=>{
   const c=checkEmphasis();if(!c.picked){event.preventDefault();return;}
-  // the AI's picks replace the emphasis of the lines it answered for; other lines keep theirs
-  write(d=>{d.emphasis={...(d.emphasis || {}),...c.picked};});
+  // the answer covers every line that was sent: lines it left out lose their old emphasis (the AI now picks
+  // only the stand-out lines); lines that were not sent keep theirs
+  const sent=new Set(keptLines().map(({line})=>line.segment_id));
+  write(d=>{const all=Object.fromEntries(Object.entries(d.emphasis || {}).filter(([id])=>!sent.has(id)));d.emphasis={...all,...c.picked};});
   $('emphasisStatus').textContent=c.note;$('emphasisStatus').dataset.state='ok';$('emphasisStatus').hidden=false;
  };
  // leaving step 3: stop the preview and take its line off the subtitle frame
@@ -567,5 +627,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   for(const s of m?.stories || []){const v=out.get(s.source_id) || {stories:0,refined:0,reviewed:0};v.stories++;if(s.refined)v.refined++;if(reviews()[s.id])v.reviewed++;out.set(s.source_id,v);}
   return out;
  }
- return {renderCards,renderEditor,allReviewed,warm,stop,summary};
+ // the subtitle check's verdicts by line id, shown on the step 4 timeline
+ function qc(groups){qcBy=groups;if(editView)renderEditor();showLine();}
+ return {renderCards,renderEditor,allReviewed,warm,stop,summary,qc};
 }

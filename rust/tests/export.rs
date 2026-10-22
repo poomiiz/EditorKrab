@@ -139,9 +139,9 @@ fn subtitles_place_speech_in_output_time_and_headline_for_the_whole_clip() {
     let story = &plan(&doc, &jobs()).unwrap()[0];
     let (ass, skipped) = subtitles(story, &doc);
     assert!(ass.contains("PlayResX: 1080\nPlayResY: 1920"));
-    assert!(ass.contains("Dialogue: 1,0:00:00.00,0:00:01.00,Text,,0,0,0,,{\\an5\\pos(540,1325)\\fnLeelawadee UI\\fs64\\1c&H0B9EF5&\\bord4\\shad1\\3c&H000000&\\4c&H000000&}ตอนจบ"));
+    assert!(ass.contains("Dialogue: 1,0:00:00.00,0:00:01.00,Text,,0,0,0,,{\\an5\\pos(540,1325)\\fnLeelawadee UI\\fs64\\1c&H0B9EF5&\\bord0\\shad0\\3c&H000000&\\4c&H000000&}ตอนจบ"));
     assert!(ass.contains("Dialogue: 1,0:00:01.00,0:00:03.50,Text"));
-    assert!(ass.contains("Dialogue: 3,0:00:00.00,0:00:03.50,Text,,0,0,0,,{\\an5\\pos(540,307)\\fnKanit\\fs80\\1c&HFFFFFF&\\bord4\\shad1\\3c&H000000&\\4c&H000000&}หัวข้อ (สำคัญ)"));
+    assert!(ass.contains("Dialogue: 3,0:00:00.00,0:00:03.50,Text,,0,0,0,,{\\an5\\pos(540,307)\\fnKanit\\fs80\\1c&HFFFFFF&\\bord0\\shad0\\3c&H000000&\\4c&H000000&}หัวข้อ (สำคัญ)"));
     assert_eq!(skipped, ["english"]);
     let mut quiet = doc.clone();
     quiet["text_roles"] = json!([]);
@@ -188,12 +188,12 @@ fn text_effects_become_ass_tags_and_the_box_style() {
     let story = &plan(&doc, &jobs()).unwrap()[0];
     let (plain, _) = subtitles(story, &doc);
     assert!(plain.contains(",Text,,0,0,0,,{\\an5"), "no effect fields keep the old look: {plain}");
-    assert!(plain.contains("\\bord4\\shad1\\3c&H000000&\\4c&H000000&"));
+    assert!(plain.contains("\\bord0\\shad0\\3c&H000000&\\4c&H000000&"));
     doc["text_styles"]["speech"]["outline"] = json!(8);
     doc["text_styles"]["speech"]["outline_color"] = json!("#ff0000");
     doc["text_styles"]["speech"]["enter"] = json!("pop");
     let (ass, _) = subtitles(story, &doc);
-    assert!(ass.contains("\\bord8\\shad1\\3c&H0000FF&\\4c&H000000&\\fscx70\\fscy70\\t(0,180,\\fscx100\\fscy100)"), "{ass}");
+    assert!(ass.contains("\\bord8\\shad0\\3c&H0000FF&\\4c&H000000&\\fscx70\\fscy70\\t(0,180,\\fscx100\\fscy100)"), "{ass}");
     doc["text_styles"]["speech"]["box_on"] = json!(true);
     doc["text_styles"]["speech"]["box_color"] = json!("#112233");
     doc["text_styles"]["speech"]["enter"] = json!("wipe");
@@ -236,7 +236,11 @@ fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
     assert_eq!(editorkrab::export::emphasis_lines(&story, &doc), vec![(1000, 3000, "สอง".to_owned())]);
     // a dictionary word split out of a timed phrase is stored with its own text and start
     let split = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "สาม", "start_ms": 3100, "end_ms": 3400}, 2000]}});
-    assert_eq!(editorkrab::export::emphasis_lines(&story, &split), vec![(1000, 3000, "สอง สาม".to_owned())]);
+    // picks apart in time show one at a time, each as it is said (clocked from the words), until the next one starts
+    assert_eq!(
+        editorkrab::export::emphasis_lines(&story, &split),
+        vec![(1000, 2000, "สอง".to_owned()), (2000, 3000, "สาม".to_owned())]
+    );
     // neighbouring dictionary words read as one name: no space between Thai words, a space between Latin ones
     let name = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "มอน", "start_ms": 3000, "end_ms": 3300}, {"text": "สเตอร์", "start_ms": 3300, "end_ms": 3600}]}});
     assert_eq!(editorkrab::export::emphasis_lines(&story, &name), vec![(2000, 3000, "มอนสเตอร์".to_owned())]);
@@ -306,4 +310,63 @@ fn shadow_opacity_becomes_ass_alpha() {
     doc["text_styles"]["speech"]["shadow_opacity"] = json!(25);
     let (ass, _) = subtitles(story, &doc);
     assert!(ass.contains(r"&H000000&\4a&HBF&"), "{ass}");
+}
+
+#[test]
+fn box_padding_across_and_up_down() {
+    let mut doc = document(json!({"stories": [{"segment_ids": ["a1"]}]}));
+    let story = &plan(&doc, &jobs()).unwrap()[0];
+    doc["text_styles"]["speech"]["box_on"] = json!(true);
+    doc["text_styles"]["speech"]["box_pad_x"] = json!(30);
+    doc["text_styles"]["speech"]["box_pad_y"] = json!(8);
+    let (ass, _) = subtitles(story, &doc);
+    assert!(ass.contains(r"\xbord30\ybord8"), "{ass}");
+}
+
+#[test]
+fn capcut_style_text_settings_become_ass_tags() {
+    let mut doc = document(json!({"stories": [{"segment_ids": ["a1"]}]}));
+    let story = &plan(&doc, &jobs()).unwrap()[0];
+    let s = &mut doc["text_styles"]["speech"];
+    s["enter"] = json!("none");
+    s["bold"] = json!(false);
+    s["italic"] = json!(true);
+    s["underline"] = json!(true);
+    s["spacing"] = json!(6);
+    s["align"] = json!("left");
+    s["shadow"] = json!(4);
+    s["shadow_angle"] = json!(90);
+    s["glow_on"] = json!(true);
+    s["glow_color"] = json!("#00ff00");
+    s["glow_range"] = json!(20);
+    s["glow_strength"] = json!(100);
+    let (ass, _) = subtitles(story, &doc);
+    assert!(ass.contains(r"\an4\pos("), "{ass}");
+    assert!(ass.contains(r"\xshad0.0\yshad5.7\b0\i1\u1\fsp6"), "{ass}");
+    assert!(ass.contains(r"\1a&HFF&\shad0\bord20\3c&H00FF00&\3a&H00&\blur10"), "glow under the text: {ass}");
+    doc["text_styles"]["speech"]["case"] = json!("upper");
+    doc["text_styles"]["speech"]["box_on"] = json!(true);
+    doc["text_styles"]["speech"]["box_opacity"] = json!(50);
+    let (ass, _) = subtitles(story, &doc);
+    assert!(ass.contains(r"\3a&H80&"), "{ass}");
+}
+
+#[test]
+fn retimed_words_and_the_subtitle_shift_move_speech_and_emphasis() {
+    let mut doc = document(json!({"stories": [{"segment_ids": ["a1"]}]}));
+    doc["text_styles"]["speech"]["enter"] = json!("none");
+    let base = plan(&doc, &jobs()).unwrap()[0].pieces[0].words.clone();
+    // re-timed clocks replace the transcript's, one pair per word in order
+    let times: Vec<_> = base.iter().map(|w| json!([w.1 + 100, w.2 + 100])).collect();
+    doc["word_times"] = json!({"a1": times});
+    let moved = plan(&doc, &jobs()).unwrap()[0].pieces[0].words.clone();
+    assert_eq!(moved.iter().map(|w| w.1).collect::<Vec<_>>(), base.iter().map(|w| w.1 + 100).collect::<Vec<_>>());
+    // the whole-project shift adds on top
+    doc["subtitle_offset_ms"] = json!(-50);
+    let shifted = plan(&doc, &jobs()).unwrap()[0].pieces[0].words.clone();
+    assert_eq!(shifted.iter().map(|w| w.1).collect::<Vec<_>>(), base.iter().map(|w| w.1 + 50).collect::<Vec<_>>());
+    // a list that does not match the words one for one is ignored
+    doc["word_times"] = json!({"a1": [[0, 1]]});
+    doc["subtitle_offset_ms"] = json!(0);
+    assert_eq!(plan(&doc, &jobs()).unwrap()[0].pieces[0].words, base);
 }

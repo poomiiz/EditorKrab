@@ -69,6 +69,10 @@ struct Spoken {
     words: Vec<(String, u64, u64)>,
 }
 
+/// The whole-project subtitle shift in ms (+ later, - earlier), kept within ±5 s.
+pub fn subtitle_offset(document: &Value) -> i64 {
+    document["subtitle_offset_ms"].as_i64().unwrap_or(0).clamp(-5000, 5000)
+}
 /// Every segment of every finished transcription in the project, with hand corrections applied.
 fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
     // same rule as the step 1 editor: a correction applies only to the exact text it was made on
@@ -120,6 +124,22 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
                     })
                     .collect(),
             };
+            // re-timed word clocks ("จัดเวลาคำใหม่", one [start, end] per word in order), then the
+            // whole-project subtitle shift; both live in the draft, the transcript stays as it was
+            let mut words = words;
+            if let Some(times) = document["word_times"][id].as_array().filter(|t| t.len() == words.len()) {
+                for (w, t) in words.iter_mut().zip(times) {
+                    if let (Some(a), Some(b)) = (t[0].as_u64(), t[1].as_u64()) {
+                        if b >= a {
+                            (w.1, w.2) = (a, b);
+                        }
+                    }
+                }
+            }
+            let offset = subtitle_offset(document);
+            for w in &mut words {
+                (w.1, w.2) = ((w.1 as i64 + offset).max(0) as u64, (w.2 as i64 + offset).max(0) as u64);
+            }
             let text = edited.map_or(text, |(_, fixed)| fixed);
             found.insert(
                 id.to_owned(),
@@ -287,7 +307,21 @@ fn escape(text: &str) -> String {
 }
 /// One positioned text event; size and position use the same 1080-wide frame as the step 4/5 preview.
 fn event(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
-    event_raw(frame, layer, start, end, style, &escape(text))
+    // letter case from step 4 (TT / tt / Tt); Thai has no case and passes through
+    let text = match style["case"].as_str() {
+        Some("upper") => text.to_uppercase(),
+        Some("lower") => text.to_lowercase(),
+        Some("title") => text
+            .split(' ')
+            .map(|w| {
+                let mut c = w.chars();
+                c.next().map_or(String::new(), |f| f.to_uppercase().collect::<String>() + &c.as_str().to_lowercase())
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => text.to_owned(),
+    };
+    event_raw(frame, layer, start, end, style, &escape(&text))
 }
 /// `text` is already escaped ASS (it may hold override tags such as karaoke).
 fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
@@ -295,9 +329,15 @@ fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, 
     let y = style["y"].as_f64().unwrap_or(50.0) / 100.0 * frame.1 as f64;
     let scale = frame.0 as f64 / 1080.0;
     let size = (style["size"].as_f64().unwrap_or(64.0) * scale).round() as u64;
+    // left / right alignment anchors that side of the text at the position, as the preview does
+    let an = match style["align"].as_str() {
+        Some("left") => 4,
+        Some("right") => 6,
+        _ => 5,
+    };
     let line = |layer: u8, extra: &str| {
         format!(
-            "Dialogue: {layer},{},{},{},,0,0,0,,{{\\an5\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}{}{extra}}}{}\n",
+            "Dialogue: {layer},{},{},{},,0,0,0,,{{\\an{an}\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}{}{extra}}}{}\n",
             clock(start),
             clock(end),
             if style["box_on"].as_bool() == Some(true) { "Box" } else { "Text" },
@@ -309,11 +349,26 @@ fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, 
         )
     };
     let blur = (style["shadow_blur"].as_f64().unwrap_or(0.0) * scale * 10.0).round() / 10.0;
-    let shadowed = style["box_on"].as_bool() != Some(true) && style["shadow"].as_f64().unwrap_or(1.0) > 0.0;
+    let shadowed = style["box_on"].as_bool() != Some(true) && style["shadow"].as_f64().unwrap_or(0.0) > 0.0;
+    // glow: a wide, soft outline of the glow colour under the text (no fill, no shadow)
+    let mut out = String::new();
+    if style["glow_on"].as_bool() == Some(true) && style["box_on"].as_bool() != Some(true) {
+        let range = (style["glow_range"].as_f64().unwrap_or(20.0) * scale * 10.0).round() / 10.0;
+        let strength = style["glow_strength"].as_f64().unwrap_or(60.0).clamp(0.0, 100.0);
+        out += &line(
+            layer * 2,
+            &format!(
+                "\\1a&HFF&\\shad0\\bord{range}\\3c{}\\3a&H{:02X}&\\blur{}",
+                colour(style["glow_color"].as_str().unwrap_or("#ffffff")),
+                (255.0 * (1.0 - strength / 100.0)).round() as u8,
+                (range / 2.0).max(1.0)
+            ),
+        );
+    }
     if shadowed && blur > 0.0 {
-        line(layer * 2, &format!("\\1a&HFF&\\3a&HFF&\\blur{blur}")) + &line(layer * 2 + 1, "\\shad0")
+        out + &line(layer * 2, &format!("\\1a&HFF&\\3a&HFF&\\blur{blur}")) + &line(layer * 2 + 1, "\\shad0")
     } else {
-        line(layer * 2 + 1, "")
+        out + &line(layer * 2 + 1, "")
     }
 }
 
@@ -324,11 +379,19 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
     if style["box_on"].as_bool() == Some(true) {
         // in the Box style the outline is the box: its colour, and its width is the padding round the text
         tags += &format!("\\bord{}\\shad0\\3c{}", px("outline", 12.0).max(4.0), colour(style["box_color"].as_str().unwrap_or("#000000")));
+        // its own room across and up/down, when set (libass draws \xbord/\ybord as the box padding)
+        if style["box_pad_x"].is_u64() || style["box_pad_y"].is_u64() {
+            let pad = |key: &str| style[key].as_f64().map_or(px("outline", 12.0).max(4.0), |v| (v * scale * 10.0).round() / 10.0);
+            tags += &format!("\\xbord{}\\ybord{}", pad("box_pad_x"), pad("box_pad_y"));
+        }
+        if let Some(opacity) = style["box_opacity"].as_f64() {
+            tags += &format!("\\3a&H{:02X}&", (255.0 * (1.0 - opacity.clamp(0.0, 100.0) / 100.0)).round() as u8);
+        }
     } else {
         tags += &format!(
             "\\bord{}\\shad{}\\3c{}\\4c{}",
-            px("outline", 4.0),
-            px("shadow", 1.0),
+            px("outline", 0.0),
+            px("shadow", 0.0),
             colour(style["outline_color"].as_str().unwrap_or("#000000")),
             colour(style["shadow_color"].as_str().unwrap_or("#000000"))
         );
@@ -336,6 +399,25 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
         if let Some(opacity) = style["shadow_opacity"].as_f64() {
             tags += &format!("\\4a&H{:02X}&", (255.0 * (1.0 - opacity.clamp(0.0, 100.0) / 100.0)).round() as u8);
         }
+        // a shadow cast at an angle: the distance is the old diagonal offset, so 45° matches \shad
+        if let Some(angle) = style["shadow_angle"].as_f64() {
+            let d = px("shadow", 0.0) * std::f64::consts::SQRT_2;
+            let a = angle.to_radians();
+            tags += &format!("\\xshad{:.1}\\yshad{:.1}", d * a.cos(), d * a.sin());
+        }
+    }
+    // weight, slant, underline and letter spacing
+    if style["bold"].as_bool() == Some(false) {
+        tags += "\\b0";
+    }
+    if style["italic"].as_bool() == Some(true) {
+        tags += "\\i1";
+    }
+    if style["underline"].as_bool() == Some(true) {
+        tags += "\\u1";
+    }
+    if let Some(spacing) = style["spacing"].as_f64() {
+        tags += &format!("\\fsp{}", (spacing * scale * 10.0).round() / 10.0);
     }
     match style["enter"].as_str() {
         Some("fade") => tags += "\\fad(250,0)",
@@ -546,23 +628,29 @@ pub fn emphasis_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)
     }
     let mut at = 0;
     for p in &story.pieces {
-        let words = picks(p, document);
-        if let Some(first) = words.first() {
-            // neighbouring words read as one phrase: no space between them unless both sides are Latin
-            let latin = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
+        // one event per group of picks as it is said (neighbouring picks read as one), shown until the
+        // next group starts or the piece ends; the preview does the same (emphasisNow in stories.js)
+        let mut groups: Vec<Vec<(u64, String, u64)>> = Vec::new();
+        for w in picks(p, document) {
+            match groups.last_mut() {
+                Some(g) if w.0 <= g.last().map_or(0, |l| l.2) + 1 => g.push(w),
+                _ => groups.push(vec![w]),
+            }
+        }
+        let latin = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
+        for (n, words) in groups.iter().enumerate() {
             let mut text = String::new();
             for (i, w) in words.iter().enumerate() {
-                if i > 0 {
-                    let prev = &words[i - 1];
-                    let tight = w.0 <= prev.2 + 1 && !(latin(prev.1.chars().last()) && latin(w.1.chars().next()));
-                    if !tight {
-                        text.push(' ');
-                    }
+                if i > 0 && latin(words[i - 1].1.chars().last()) && latin(w.1.chars().next()) {
+                    text.push(' ');
                 }
                 text.push_str(&w.1);
             }
-            let start = first.0.clamp(p.start_ms, p.end_ms) - p.start_ms;
-            out.push((at + start, at + p.end_ms - p.start_ms, text));
+            let from = words[0].0.clamp(p.start_ms, p.end_ms) - p.start_ms;
+            let to = groups.get(n + 1).map_or(p.end_ms, |g| g[0].0.clamp(p.start_ms, p.end_ms)) - p.start_ms;
+            if to > from {
+                out.push((at + from, at + to, text));
+            }
         }
         at += p.end_ms - p.start_ms;
     }
@@ -583,10 +671,34 @@ fn picks(p: &Piece, document: &Value) -> Vec<(u64, String, u64)> {
                 Some((at, v["text"].as_str()?.trim().to_owned(), v["end_ms"].as_u64().unwrap_or(at)))
             }
         })
+        // a pick keeps its letters but takes its clock from the piece's words as they are now
+        // (re-timed or shifted since it was picked)
+        .map(|(at, text, end)| locate(p, &text, at).map_or((at, text.clone(), end), |(a, b)| (a, text, b)))
         .filter(|(at, text, _)| !text.is_empty() && *at < p.end_ms && *at + 1 > p.start_ms)
         .collect();
     words.sort();
     words
+}
+/// Where `text` is said in the piece: the run of letters matching it closest to `near`, timed by the
+/// letters' share of their words.
+fn locate(p: &Piece, text: &str, near: u64) -> Option<(u64, u64)> {
+    let mut letters: Vec<(char, u64, u64)> = Vec::new();
+    for (word, from, to) in &p.words {
+        let word = word.trim();
+        let count = word.chars().count().max(1) as u64;
+        for (k, c) in word.chars().enumerate() {
+            let span = to.saturating_sub(*from);
+            letters.push((c, from + span * k as u64 / count, from + span * (k as u64 + 1) / count));
+        }
+    }
+    let want: Vec<char> = text.chars().filter(|c| !c.is_whitespace()).collect();
+    if want.is_empty() || want.len() > letters.len() {
+        return None;
+    }
+    (0..=letters.len() - want.len())
+        .filter(|&i| letters[i..i + want.len()].iter().zip(&want).all(|(l, w)| l.0 == *w))
+        .min_by_key(|&i| letters[i].1.abs_diff(near))
+        .map(|i| (letters[i].1, letters[i + want.len() - 1].2))
 }
 /// The piece with its emphasised words taken out of the speech, so a word is not on screen twice
 /// (P'Ohm 21 Oct 2026). Each pick is cut where its letters are said closest to its time; a timed

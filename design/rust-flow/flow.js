@@ -127,7 +127,7 @@ function renderSteps() {
     note.textContent=hint;note.style.visibility=ready ? 'hidden' : '';
   }
 }
-const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('textQcList'),listen:id=>speech.listen(id),
+const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('textQcList'),listen:id=>speech.listen(id),verdicts:groups=>stories.qc(groups),
  texts:()=>{
   const subtitles=speech.texts(),end=Math.max(0,...subtitles.map(t=>t.end_ms));
   return [...headlineItems().filter(h=>h.text?.trim()).map(h=>({kind:'headline',id:'headline:'+h.id,text:h.text,start_ms:0,end_ms:end})),...subtitles];
@@ -137,7 +137,8 @@ const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('t
   if(finding.kind!=='headline'){speech.edit(finding.id,text);return;}
   const id=finding.id.slice('headline:'.length);draft.headline_items=headlineItems().map(h=>h.id===id?{...h,text}:h);save();textEditor.render();renderHeadline();
  }});
-const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,caption:text=>textEditor.live('speech',text),emphasis:text=>textEditor.live('emphasis',text),
+const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,
+ editLine:(line,text)=>{if(!editingAllowed)throw Error('not_editable');speech.edit(line.id,text);textQc.run(true);},listen:line=>speech.listen(line.id),caption:text=>textEditor.live('speech',text),emphasis:text=>textEditor.live('emphasis',text),
  write:change=>{if(!editingAllowed)return;change(draft);save();render();},
  go:step=>document.querySelector(`[data-step="${step}"]`).click()});
 const shortClock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
@@ -173,7 +174,7 @@ function fitPreview(){
 }
 new ResizeObserver(fitPreview).observe(document.getElementById('captionHost'));
 for(const d of document.querySelectorAll('.text-inspector details')){d.open=true;d.querySelector('summary')?.addEventListener('click',e=>e.preventDefault());}
-function applyAspect(){const aspect=ratios[draft.output?.aspect]?draft.output.aspect:'9:16';$('frameAspect').value=aspect;$('editAspect').value=aspect;document.documentElement.style.setProperty('--frame-ratio',ratios[aspect]);setTimeout(fitPreview);}
+function applyAspect(){showOffset();const aspect=ratios[draft.output?.aspect]?draft.output.aspect:'9:16';$('frameAspect').value=aspect;$('editAspect').value=aspect;document.documentElement.style.setProperty('--frame-ratio',ratios[aspect]);setTimeout(fitPreview);}
 for(const id of ['frameAspect','editAspect'])$(id).onchange=()=>{if(!editingAllowed){applyAspect();return;}draft.output={...(draft.output || {}),aspect:$(id).value};save();applyAspect();requestAnimationFrame(()=>textEditor.render());};
 function render() {
   renderSteps();
@@ -181,7 +182,7 @@ function render() {
   for (const p of document.querySelectorAll('[data-panel]')) p.hidden = Number(p.dataset.panel) !== activeStep(draft);
   // Placing subtitles runs the text check; only flagged lines ask to be heard.
   if (![3,4].includes(activeStep(draft))) stories.stop();
-  if (activeStep(draft)===4) textQc.run();
+  if (activeStep(draft)===4){const panel=document.querySelector('.text-inspector');if(panel)panel.dataset.tab='style';textQc.run();}
   renderFiles();
   textEditor.render();
   for (const id of ['title', 'language', 'plan']) $(id).value = draft[id];
@@ -279,6 +280,47 @@ for(const button of document.querySelectorAll('[data-role-pick]'))button.onclick
  textEditor.select(role);
 };
 $('planOpen').onclick=()=>{$('planDialog').showModal();$('plan').focus();};
+// whole-project subtitle shift, 0.1 s a step (+ later, - earlier); stored in the draft, used by preview and export
+function showOffset(){const ms=Number(draft.subtitle_offset_ms) || 0;$('subOffsetValue').textContent=(ms>0?'+':'')+(ms/1000).toFixed(1)+' วิ';$('subOffsetLess').disabled=$('subOffsetMore').disabled=$('retime').disabled=!editingAllowed;}
+for(const [id,step] of [['subOffsetLess',-100],['subOffsetMore',100]])$(id).onclick=()=>{if(!editingAllowed)return;draft.subtitle_offset_ms=Math.max(-5000,Math.min(5000,(Number(draft.subtitle_offset_ms) || 0)+step));save();showOffset();stories.renderEditor();};
+// re-time words: transcribe each finished piece again with aligned clocks and map the new words onto the
+// existing lines by their letters; the lines, stories, emphasis and cuts stay as they are
+function alignWords(oldWords,fresh,start,end){
+ const old=[];oldWords.forEach((w,n)=>{for(const c of [...w.text.replace(/\s+/g,'')])old.push({c,n});});
+ const now=[];for(const w of fresh){const t=[...w.text.replace(/\s+/g,'')],span=w.end_ms-w.start_ms;t.forEach((c,k)=>now.push({c,a:w.start_ms+span*k/t.length,b:w.start_ms+span*(k+1)/t.length}));}
+ if(!old.length || !now.length)return null;
+ const n=old.length,m=now.length,dp=Array.from({length:n+1},()=>new Uint16Array(m+1));
+ for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)dp[i][j]=old[i].c===now[j].c?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+ if(dp[0][0]<n*0.6)return null;
+ const at=new Array(n).fill(null);for(let i=0,j=0;i<n&&j<m;){if(old[i].c===now[j].c){at[i]=now[j];i++;j++;}else if(dp[i+1][j]>=dp[i][j+1])i++;else j++;}
+ // a word takes the clock of its first and last matched letters; an unmatched one sits between its
+ // neighbours; clocks stay in the line and never run backwards
+ const clamp=v=>Math.round(Math.min(Math.max(v,start),end));
+ const got=oldWords.map((w,k)=>{const hits=old.map((o,i)=>o.n===k?at[i]:null).filter(Boolean);return hits.length?[clamp(hits[0].a),clamp(hits.at(-1).b)]:null;});
+ for(let k=0;k<got.length;k++)if(!got[k]){const s=k?got[k-1]?.[1] ?? start:start,next=got.slice(k+1).find(Boolean)?.[0] ?? end;got[k]=[Math.min(s,next),next];}
+ let last=start;return got.map(([s,e])=>{s=Math.max(s,last);e=Math.max(e,s);last=s;return [s,e];});
+}
+$('retime').onclick=async()=>{
+ if(!editingAllowed)return;const pieces=speech.pieces();if(!pieces.length)return;
+ $('retime').disabled=true;const times={...(draft.word_times || {})};let done=0,skipped=0;
+ try{
+  for(const [n,job] of pieces.entries()){
+   $('toast').textContent=`จัดเวลาคำใหม่ ชิ้นที่ ${n+1}/${pieces.length} …`;$('toast').hidden=false;
+   const response=await fetch(`/api/v1/jobs/${encodeURIComponent(job.id)}/retime`,{method:'POST'});const value=await response.json();
+   if(!response.ok)throw Error(value.error || 'retime_failed');
+   for(const segment of job.result?.transcript?.segments || []){
+    if(!segment.words?.length)continue;
+    // the new words said within this line's span (by their middle), so a neighbour's letters are not borrowed
+    const near=value.words.filter(w=>{const mid=(w.start_ms+w.end_ms)/2;return mid>segment.start_ms-300&&mid<segment.end_ms+300;});
+    const mapped=alignWords(segment.words,near,segment.start_ms,segment.end_ms);
+    if(mapped){times[segment.id]=mapped;done++;}else skipped++;
+   }
+  }
+  draft.word_times=times;await save();render();
+  $('toast').textContent=`จัดเวลาคำใหม่แล้ว ${done} ท่อน`+(skipped?` · ${skipped} ท่อนข้อความไม่ตรง คงเวลาเดิม`:'');$('toast').hidden=false;
+ }catch(error){$('toast').textContent='จัดเวลาคำใหม่ไม่ได้ ('+error.message+')';$('toast').hidden=false;}
+ finally{$('retime').disabled=!editingAllowed;}
+};
 // step 4's right panel: text tools or the subtitle check
 for(const tab of document.querySelectorAll('.inspector-tabs [data-tab]'))tab.onclick=()=>{
  const panel=tab.closest('.text-inspector');panel.dataset.tab=tab.dataset.tab;panel.scrollTop=0;if(tab.dataset.tab==='qc')textQc.run();

@@ -734,6 +734,102 @@ label[for="fx-blend"]::before{content:"🌗 "}
 .text-inspector input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .text-inspector input[type=number]::-webkit-inner-spin-button,.text-inspector input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .fx-grid>*{min-width:0}
+
+/* text tools, one grid: a fixed label column and compact controls; two columns when the panel is wide
+   (letters on the left, shadow, blend and entrance on the right); nothing folds */
+#textControls.tc{display:grid;gap:var(--space-sm);align-content:start}
+#textControls.tc{grid-template-columns:minmax(0,1fr) !important}#textControls.tc>*{grid-column:1/-1 !important;grid-row:auto !important;float:none}
+#textControls.tc>*+*{margin-top:0}
+.tc-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-md)}
+.tc-col{display:grid;gap:var(--space-sm);align-content:start;min-width:0}
+.tc-row{display:grid;grid-template-columns:6em minmax(0,1fr);align-items:center;gap:var(--space-sm);min-height:34px}
+.tc-row>*{min-width:0}
+.tc-row.tc-stack{grid-template-columns:minmax(0,1fr);gap:4px}
+#textControls .tc-row>label,.tc-label{font-size:.8125rem;color:var(--txt-sub);white-space:nowrap}
+#textControls .tc-row label::before{content:none}
+.tc input,.tc select{min-height:34px;padding-block:4px}
+.tc-num{width:5.5em}
+.tc-pair{display:flex;align-items:center;gap:6px;min-width:0}
+.tc-pair input[type=color]{width:44px;height:34px;padding:2px;flex:none}
+.tc-pair input:not([type=color]):not([type=checkbox]){flex:1;min-width:0}
+.tc-pair input.tc-num{flex:0 0 5.5em}
+.tc-pair input[type=checkbox]{width:20px;height:20px;min-height:20px;margin:0 12px 0 0;accent-color:var(--acc)}
+.tc-font{display:flex;gap:6px;min-width:0}.tc-font input{flex:1;min-width:0}
+.tc-font button{flex:none;width:36px;min-width:36px;min-height:34px;padding:0;font-size:0;gap:0}
+.tc .fx-shadow-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.tc .enter-tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.tc .enter-tile{padding:4px 2px;min-height:0;gap:0}
+.tc .enter-sample{height:22px;line-height:22px;font-size:.9375rem}
+.tc .enter-tile small{font-size:.6875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+@container (min-width:540px){
+ #textControls.tc{display:grid}
+ .tc-cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-xl)}
+ .tc-col+.tc-col{border-left:1px solid var(--line);padding-left:var(--space-lg)}
+}
+
+/* font dropdown: floats over the panel, rows tall enough for any face, nothing clipped */
+.font-list{position:fixed;z-index:60;box-shadow:0 12px 32px oklch(0% 0 0 / .45);background:var(--surface)}
+.font-list button{padding:10px 12px;line-height:1.6;align-items:center;font-size:1.0625rem;min-height:44px;overflow:visible}
+.font-list button small{flex:none}
+
+.tc .fx-mini input[type=checkbox]{width:20px;height:20px;min-height:20px;margin:7px 0;accent-color:var(--acc)}
+.tc .fx-mini input[type=color]{width:100%;height:34px;padding:2px}
+
+/* CapCut-like text tools: slider + number on one row, segmented B/U/I, case and alignment, and effect
+   sections (stroke, background, glow, shadow) each switched by its own tick; an off section is dimmed */
+.slide{display:grid;grid-template-columns:minmax(0,1fr) 4.5em auto;align-items:center;gap:8px;min-width:0}
+.slide input[type=range]{width:100%;min-height:0;accent-color:var(--txt);padding:0}
+.slide input[type=number]{width:100%;text-align:center}
+.slide small{font-size:.75rem;color:var(--mut)}
+.seg{display:inline-flex;gap:4px;padding:3px;border-radius:var(--radius-sm);background:var(--raised);width:max-content}
+.seg>button,.seg>.tog{display:inline-grid;place-items:center;min-width:40px;min-height:30px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--txt-sub);font-weight:700;cursor:pointer}
+.seg>button[aria-pressed=true],.seg>.tog:has(input:checked){background:var(--surface);color:var(--txt);box-shadow:0 0 0 1px var(--line-strong)}
+.seg>.tog input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.seg>.tog:has(input:focus-visible){outline:2px solid var(--acc)}
+.fx-sec{display:grid;gap:var(--space-xs);padding-bottom:var(--space-sm);border-bottom:1px solid var(--line)}
+.fx-sec:last-child{border-bottom:0}
+.fx-head{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--txt);font-size:.875rem;cursor:pointer;min-height:32px}
+.fx-head input{width:18px;height:18px;min-height:18px;margin:0;accent-color:var(--acc)}
+.fx-sec[data-off=true]>.tc-row{opacity:.45}
+.tc-col input[type=color]{width:56px;height:30px;padding:2px;min-height:0}
+.tc .tc-row{grid-template-columns:7.5em minmax(0,1fr)}
+
+/* an effect section shows its settings only while ticked */
+.fx-sec[data-off=true]>.tc-row{display:none}
+.fx-sec[data-off=true]{padding-bottom:0}
+
+/* step 4: no check tab (its notes live on the timeline clips and in the line box); the picked line is
+   edited at the top of the panel */
+.stage[data-panel="4"] .inspector-tabs{display:none}
+.stage[data-panel="4"] .text-inspector .qc{display:none !important}
+.line-box{display:grid;gap:6px;padding-bottom:var(--space-sm);border-bottom:1px solid var(--line)}
+.line-box[hidden]{display:none}
+.line-box-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.line-box-head label{font-weight:600;font-size:.875rem;color:var(--txt)}
+.line-box textarea{width:100%;min-height:56px;resize:vertical;font-size:.9375rem}
+.line-box-actions{display:flex;gap:6px;justify-content:flex-end}
+.line-box-actions button{min-height:32px;padding-inline:12px;font-size:.8125rem}
+.line-problems{margin:0;padding:0;list-style:none;display:grid;gap:4px}
+.line-problems li{font-size:.8125rem;padding:4px 8px;border-radius:6px;border:1px solid var(--line)}
+.line-problems li[data-severity=critical]{border-color:var(--danger);color:var(--danger)}
+.line-problems li[data-severity=moderate]{border-color:var(--warn);color:var(--warn)}
+.line-problems li[data-severity=minor]{border-color:var(--ok);color:var(--ok)}
+#captionTransport .edit-seg[data-qc]{box-shadow:inset 0 3px 0 var(--qc)}
+#captionTransport .edit-seg[data-qc=critical]{--qc:var(--danger)}
+#captionTransport .edit-seg[data-qc=moderate]{--qc:var(--warn)}
+#captionTransport .edit-seg[data-qc=minor]{--qc:var(--ok)}
+#captionTransport .edit-lane{cursor:ew-resize}
+
+.line-emph{margin:0;color:var(--warn);font-size:.8125rem}
+
+/* step 4: re-time words and the whole-project subtitle shift, above the play row */
+.sub-timing{display:flex;align-items:center;gap:6px}
+#editor .sub-timing{display:none}
+#captionTransport>.editor-controls{flex-wrap:wrap;row-gap:6px}
+.sub-timing button{min-height:30px;padding-inline:10px;font-size:.8125rem}
+.sub-timing .icon-only{min-width:30px;font-weight:700}
+.sub-timing output{min-width:4.5em;text-align:center;font-variant-numeric:tabular-nums;font-size:.8125rem}
+.sub-timing .caption{margin-left:var(--space-md)}
 </style>
 </head>
 <body data-loading="true">
@@ -816,19 +912,15 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <div class="stage-head"><div><h1 id="captionsTitle"><span>ซับ</span></h1><p>เลือกสิ่งที่จะขึ้นจอ แล้วลากวางตำแหน่ง</p></div></div>
 <div class="stage-body">
 
-<div id="captionDock" class="caption-dock"><div class="row caption-ai"><button id="emphasisCopy" type="button" data-icon="copy" title="คัดลอกท่อนที่ใช้ทุกเรื่องไปให้ AI เลือกคำเน้น">AI เลือกคำเน้น</button><button id="emphasisOpen" type="button" data-icon="paste" title="วางคำตอบจาก AI">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status toast" role="status" hidden></p></div><div id="captionTransport"><div id="layerHeads" class="layer-heads"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
+<div id="captionDock" class="caption-dock"><div class="row caption-ai"><button id="emphasisCopy" type="button" data-icon="copy" title="คัดลอกท่อนที่ใช้ทุกเรื่องไปให้ AI เลือกคำเน้น">AI เลือกคำเน้น</button><button id="emphasisOpen" type="button" data-icon="paste" title="วางคำตอบจาก AI">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status toast" role="status" hidden></p></div><div id="captionTransport"><div class="row sub-timing"><button id="retime" type="button" data-icon="retry" title="ถอดเสียงใหม่แบบจับเวลาละเอียด แล้วใส่เวลาคำให้ท่อนเดิม (เรื่อง คำเน้น การตัดต่อ อยู่ครบ)">จัดเวลาคำใหม่</button><span class="caption">เลื่อนซับ</span><button id="subOffsetLess" type="button" class="icon-only" title="ซับขึ้นเร็วขึ้น 0.1 วิ" aria-label="ซับขึ้นเร็วขึ้น 0.1 วิ">−</button><output id="subOffsetValue">0.0 วิ</output><button id="subOffsetMore" type="button" class="icon-only" title="ซับขึ้นช้าลง 0.1 วิ" aria-label="ซับขึ้นช้าลง 0.1 วิ">+</button></div><div id="layerHeads" class="layer-heads"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
 <div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><label class="frame-aspect"><span class="sr-only">ขนาดคลิป</span><select id="frameAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
-<aside class="text-inspector" aria-label="ปรับข้อความ"><div class="inspector-tabs" role="tablist"><button type="button" role="tab" data-tab="style" aria-selected="true">ปรับข้อความ</button><button type="button" role="tab" data-tab="qc" aria-selected="false">ตรวจซับ</button></div><div id="lineWords" class="line-words" hidden></div>
+<aside class="text-inspector" aria-label="ปรับข้อความ"><div class="inspector-tabs" role="tablist"><button type="button" role="tab" data-tab="style" aria-selected="true">ปรับข้อความ</button><button type="button" role="tab" data-tab="qc" aria-selected="false">ตรวจซับ</button></div><div id="lineWords" class="line-words" hidden></div><div id="lineBox" class="line-box" hidden><div class="line-box-head"><label for="lineText">✏️ ข้อความท่อนนี้</label><span id="lineTime" class="caption"></span></div><textarea id="lineText" rows="2" maxlength="2000"></textarea><p id="lineEmph" class="caption line-emph" hidden></p><div class="line-box-actions"><button id="lineListen" type="button" data-icon="play">ฟัง</button><button id="lineSave" type="button" class="primary" data-icon="check" disabled>บันทึก</button></div><ul id="lineProblems" class="line-problems"></ul></div>
 <fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำเน้น</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">อังกฤษ</button></div></fieldset>
 <div id="headlineActions" class="row" hidden><button id="addHeadline" class="primary" data-icon="plus">เพิ่มข้อความ</button><button id="removeHeadline" data-icon="trash">ลบข้อความนี้</button></div>
 <p id="textSelectionHint" class="selection-hint">ติ๊กอย่างน้อย 1 อย่าง</p>
-<div id="textControls" class="text-controls" hidden><h2 id="textRoleTitle">ข้อความพูด</h2><details class="fx"><summary>เอฟเฟกต์ (ขอบ เงา แถบหลัง ตอนขึ้น)</summary><div class="fx-grid"><label for="fx-outline">ขอบ</label><span class="fx-pair"><input id="fx-outline" type="number" min="0" max="20" step="1" inputmode="numeric"><input id="fx-outline-color" type="color" aria-label="สีขอบ"></span><label for="fx-shadow">เงา</label><span class="fx-shadow-row"><span class="fx-mini"><small>ขนาด</small><input id="fx-shadow" type="number" min="0" max="20" step="1" inputmode="numeric"></span><span class="fx-mini"><small>เบลอ</small><input id="fx-shadow-blur" type="number" min="0" max="20" step="1" inputmode="numeric" aria-label="เบลอเงา"></span><span class="fx-mini"><small>สี</small><input id="fx-shadow-color" type="color" aria-label="สีเงา"></span><span class="fx-mini"><small>ทึบ %</small><input id="fx-shadow-opacity" type="number" min="0" max="100" step="5" inputmode="numeric" aria-label="ความทึบของเงา"></span></span><label for="fx-blend">โหมดผสม</label><select id="fx-blend"><option value="normal">ปกติ</option><option value="add">Add (สว่างขึ้น)</option><option value="screen">Screen (สว่างนุ่ม)</option><option value="multiply">Multiply (เข้มขึ้น)</option></select><label for="fx-box">แถบหลัง</label><span class="fx-pair"><input id="fx-box" type="checkbox"><input id="fx-box-color" type="color" aria-label="สีแถบพื้นหลัง"></span><label>ตอนขึ้น</label><div class="enter-tiles" role="group" aria-label="ตอนขึ้น"><button type="button" class="enter-tile" data-enter-pick="none" aria-pressed="false"><span class="enter-sample" data-sample="none">Aa</span><small>ไม่มี</small></button><button type="button" class="enter-tile" data-enter-pick="fade" aria-pressed="false"><span class="enter-sample" data-sample="fade">Aa</span><small>จางเข้า</small></button><button type="button" class="enter-tile" data-enter-pick="pop" aria-pressed="false"><span class="enter-sample" data-sample="pop">Aa</span><small>เด้ง</small></button><button type="button" class="enter-tile" data-enter-pick="wipe" aria-pressed="false"><span class="enter-sample" data-sample="wipe">Aa</span><small>กวาดเปิด</small></button><button type="button" class="enter-tile" data-enter-pick="words" aria-pressed="false"><span class="enter-sample" data-sample="words">ก ข ค</span><small>คำต่อคำ</small></button></div><select id="fx-enter" hidden><option value="none">ไม่มี</option><option value="fade">จางเข้า</option><option value="pop">เด้ง</option><option value="wipe">กวาดเปิด</option><option value="words">คำต่อคำ</option></select></div></details>
+<div id="textControls" class="text-controls tc" hidden><h2 id="textRoleTitle">ข้อความพูด</h2>
 <label class="field" for="text-text"><span id="sampleLabel">ข้อความตัวอย่าง</span><input id="text-text" maxlength="80" autocomplete="off"></label>
-<div class="tool-row"><label for="text-font">🔤 ฟอนต์</label><div class="font-pick"><input id="text-font" list="textFonts" maxlength="128" autocomplete="off" aria-describedby="fontStatus" aria-controls="fontList"><datalist id="textFonts"><option value="ฟอนต์ระบบ"></option><option value="Tahoma"></option><option value="Leelawadee UI"></option></datalist><button id="localFonts" type="button" data-icon="font" title="อ่านรายชื่อฟอนต์ที่ติดตั้งในเครื่องนี้">ฟอนต์ในเครื่อง</button></div></div>
-<div id="fontList" class="font-list" role="listbox" aria-label="ฟอนต์ในเครื่อง" hidden></div>
-<p id="fontStatus" class="preview-hint" role="status"></p>
-<div class="tool-row"><label for="text-size">📏 ขนาด</label><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"></div>
-<div class="tool-row"><label id="colorLabel" for="text-color">สี</label><div class="colour-pick"><input id="text-color" type="color" aria-labelledby="colorLabel"><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false" aria-label="รหัสสี เช่น #FFFFFF" placeholder="#FFFFFF"></div></div>
+<div class="tc-cols"><div class="tc-col"><div class="tc-row"><label for="text-font">🔤 ฟอนต์</label><div class="tc-font"><input id="text-font" list="textFonts" maxlength="128" autocomplete="off" aria-describedby="fontStatus" aria-controls="fontList"><datalist id="textFonts"><option value="ฟอนต์ระบบ"></option><option value="Tahoma"></option><option value="Leelawadee UI"></option></datalist><button id="localFonts" type="button" data-icon="font" title="อ่านรายชื่อฟอนต์ที่ติดตั้งในเครื่องนี้" aria-label="ฟอนต์ในเครื่อง">ฟอนต์ในเครื่อง</button></div></div><div id="fontList" class="font-list" role="listbox" aria-label="ฟอนต์ในเครื่อง" hidden></div><p id="fontStatus" class="preview-hint" role="status"></p><div class="tc-row"><label for="text-size">📏 ขนาด</label><div class="slide"><input type="range" data-for="text-size" min="24" max="160" step="1" aria-hidden="true" tabindex="-1"><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"></div></div><div class="tc-row"><span class="tc-label">รูปแบบ</span><div class="seg"><label class="tog" title="ตัวหนา"><input id="fx-bold" type="checkbox"><b>B</b></label><label class="tog" title="ขีดเส้นใต้"><input id="fx-underline" type="checkbox"><u>U</u></label><label class="tog" title="ตัวเอียง"><input id="fx-italic" type="checkbox"><i>I</i></label></div></div><div class="tc-row"><span class="tc-label">ตัวพิมพ์</span><div class="seg" role="group" aria-label="ตัวพิมพ์"><button type="button" data-for="fx-case" data-pick="none" aria-pressed="false" title="ตามเดิม">Aa</button><button type="button" data-for="fx-case" data-pick="upper" aria-pressed="false" title="ตัวใหญ่ทั้งหมด">TT</button><button type="button" data-for="fx-case" data-pick="lower" aria-pressed="false" title="ตัวเล็กทั้งหมด">tt</button><button type="button" data-for="fx-case" data-pick="title" aria-pressed="false" title="ขึ้นต้นตัวใหญ่">Tt</button></div><select id="fx-case" hidden><option value="none">ตามเดิม</option><option value="upper">ตัวใหญ่ทั้งหมด</option><option value="lower">ตัวเล็กทั้งหมด</option><option value="title">ขึ้นต้นตัวใหญ่</option></select></div><div class="tc-row"><label for="fx-spacing">ระยะห่างตัวอักษร</label><div class="slide"><input type="range" data-for="fx-spacing" min="-20" max="100" step="1" aria-hidden="true" tabindex="-1"><input id="fx-spacing" type="number" min="-20" max="100" step="1" inputmode="numeric"></div></div><div class="tc-row"><span class="tc-label">วางแนว</span><div class="seg" role="group" aria-label="วางแนว"><button type="button" data-for="fx-align" data-pick="left" aria-pressed="false" title="ชิดซ้าย">⫷</button><button type="button" data-for="fx-align" data-pick="center" aria-pressed="false" title="กึ่งกลาง">≡</button><button type="button" data-for="fx-align" data-pick="right" aria-pressed="false" title="ชิดขวา">⫸</button></div><select id="fx-align" hidden><option value="left">ชิดซ้าย</option><option value="center">กึ่งกลาง</option><option value="right">ชิดขวา</option></select></div><div class="tc-row"><label id="colorLabel" for="text-color">🎨 สี</label><div class="tc-pair"><input id="text-color" type="color" aria-labelledby="colorLabel"><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false" aria-label="รหัสสี เช่น #FFFFFF" placeholder="#FFFFFF"></div></div><div class="tc-row"><label for="fx-blend">🌗 โหมดผสม</label><select id="fx-blend"><option value="normal">ปกติ</option><option value="add">Add (สว่างขึ้น)</option><option value="screen">Screen (สว่างนุ่ม)</option><option value="multiply">Multiply (เข้มขึ้น)</option></select></div><div class="tc-row tc-stack"><span class="tc-label">🎬 ตอนขึ้น</span><div class="enter-tiles" role="group" aria-label="ตอนขึ้น"><button type="button" class="enter-tile" data-enter-pick="none" aria-pressed="false"><span class="enter-sample" data-sample="none">Aa</span><small>ไม่มี</small></button><button type="button" class="enter-tile" data-enter-pick="fade" aria-pressed="false"><span class="enter-sample" data-sample="fade">Aa</span><small>จางเข้า</small></button><button type="button" class="enter-tile" data-enter-pick="pop" aria-pressed="false"><span class="enter-sample" data-sample="pop">Aa</span><small>เด้ง</small></button><button type="button" class="enter-tile" data-enter-pick="wipe" aria-pressed="false"><span class="enter-sample" data-sample="wipe">Aa</span><small>กวาดเปิด</small></button><button type="button" class="enter-tile" data-enter-pick="words" aria-pressed="false"><span class="enter-sample" data-sample="words">ก ข ค</span><small>คำต่อคำ</small></button></div><select id="fx-enter" hidden><option value="none">ไม่มี</option><option value="fade">จางเข้า</option><option value="pop">เด้ง</option><option value="wipe">กวาดเปิด</option><option value="words">คำต่อคำ</option></select></div></div><div class="tc-col"><section class="fx-sec"><label class="fx-head"><input id="fx-stroke-on" type="checkbox"><span>สโตรก (ขอบ)</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-outline-color" type="color" aria-label="สีขอบ"></div><div class="tc-row"><label for="fx-outline">ความหนา</label><div class="slide"><input type="range" data-for="fx-outline" min="0" max="20" step="1" aria-hidden="true" tabindex="-1"><input id="fx-outline" type="number" min="0" max="20" step="1" inputmode="numeric"></div></div></section><section class="fx-sec"><label class="fx-head"><input id="fx-box" type="checkbox"><span>พื้นหลัง</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-box-color" type="color" aria-label="สีพื้นหลัง"></div><div class="tc-row"><label for="fx-box-opacity">ความทึบ</label><div class="slide"><input type="range" data-for="fx-box-opacity" min="0" max="100" step="5" aria-hidden="true" tabindex="-1"><input id="fx-box-opacity" type="number" min="0" max="100" step="5" inputmode="numeric"><small>%</small></div></div><div class="tc-row"><label for="fx-box-x">ความกว้าง</label><div class="slide"><input type="range" data-for="fx-box-x" min="0" max="120" step="1" aria-hidden="true" tabindex="-1"><input id="fx-box-x" type="number" min="0" max="120" step="1" inputmode="numeric"></div></div><div class="tc-row"><label for="fx-box-y">ความสูง</label><div class="slide"><input type="range" data-for="fx-box-y" min="0" max="120" step="1" aria-hidden="true" tabindex="-1"><input id="fx-box-y" type="number" min="0" max="120" step="1" inputmode="numeric"></div></div></section><section class="fx-sec"><label class="fx-head"><input id="fx-glow" type="checkbox"><span>เรืองแสง</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-glow-color" type="color" aria-label="สีเรืองแสง"></div><div class="tc-row"><label for="fx-glow-strength">ความเข้ม</label><div class="slide"><input type="range" data-for="fx-glow-strength" min="0" max="100" step="5" aria-hidden="true" tabindex="-1"><input id="fx-glow-strength" type="number" min="0" max="100" step="5" inputmode="numeric"><small>%</small></div></div><div class="tc-row"><label for="fx-glow-range">ช่วง</label><div class="slide"><input type="range" data-for="fx-glow-range" min="0" max="60" step="1" aria-hidden="true" tabindex="-1"><input id="fx-glow-range" type="number" min="0" max="60" step="1" inputmode="numeric"></div></div></section><section class="fx-sec"><label class="fx-head"><input id="fx-shadow-on" type="checkbox"><span>เงา</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-shadow-color" type="color" aria-label="สีเงา"></div><div class="tc-row"><label for="fx-shadow-opacity">ความทึบ</label><div class="slide"><input type="range" data-for="fx-shadow-opacity" min="0" max="100" step="5" aria-hidden="true" tabindex="-1"><input id="fx-shadow-opacity" type="number" min="0" max="100" step="5" inputmode="numeric"><small>%</small></div></div><div class="tc-row"><label for="fx-shadow-blur">ความเบลอ</label><div class="slide"><input type="range" data-for="fx-shadow-blur" min="0" max="20" step="1" aria-hidden="true" tabindex="-1"><input id="fx-shadow-blur" type="number" min="0" max="20" step="1" inputmode="numeric"></div></div><div class="tc-row"><label for="fx-shadow">ระยะทาง</label><div class="slide"><input type="range" data-for="fx-shadow" min="0" max="20" step="1" aria-hidden="true" tabindex="-1"><input id="fx-shadow" type="number" min="0" max="20" step="1" inputmode="numeric"></div></div><div class="tc-row"><label for="fx-shadow-angle">มุม</label><div class="slide"><input type="range" data-for="fx-shadow-angle" min="-180" max="180" step="5" aria-hidden="true" tabindex="-1"><input id="fx-shadow-angle" type="number" min="-180" max="180" step="5" inputmode="numeric"><small>°</small></div></div></section></div></div>
 <p id="textFieldError" class="field-warning" role="status" hidden></p></div>
 <section class="qc" aria-labelledby="textQcTitle"><h2 id="textQcTitle">ตรวจซับ</h2><p id="textQcSummary" class="caption" role="status"></p><button id="textQcGo" data-go="1" hidden>ไปขั้น 1</button><ol id="textQcList" class="qc-list"></ol></section></aside></div></div>
 </div>

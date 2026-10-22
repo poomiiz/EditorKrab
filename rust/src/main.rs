@@ -972,6 +972,41 @@ async fn retry_job(
         .await
         .map(Json)
 }
+/// Transcribes a finished transcription job's piece again with today's aligned word clocks and
+/// returns only the timed words; the job, its segments and everything keyed to them stay as they
+/// are. The step 4 "re-time words" action maps these onto the existing lines (word_times).
+async fn retime_job(
+    State(runtime): State<Runtime>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let job = database(runtime.clone(), move |store| store.job(&id)).await?;
+    let Task::Transcribe { path, context, .. } = &job.task else {
+        return Err((StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":"not_a_transcription"}))));
+    };
+    let asr = runtime.asr().ok_or((
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({"error":"transcription_not_configured"})),
+    ))?;
+    let mut context = context.clone();
+    context.run_id = format!("retime-{}", context.run_id);
+    let (_cancel, signal) = watch::channel(false);
+    // whisper.cpp with DTW only: the CT2 sidecar also starts a word said after a pause at the pause
+    // (on the 18-36 s test, "อะไร" at 20.6 s while the audio is quiet from 21.1 to 22.8 s and the
+    // word is said at 22.9 s; DTW put it at 23.0 s)
+    let mut config = asr.0.clone();
+    config.ct2 = None;
+    let chunk = editorkrab::native_asr::run(&config, std::path::Path::new(path), &context, signal)
+        .await
+        .map_err(|error| (StatusCode::CONFLICT, Json(json!({"error":error}))))?;
+    let words: Vec<Value> = chunk
+        .transcript
+        .segments
+        .iter()
+        .flat_map(|s| s.words.iter())
+        .map(|w| json!({"text":w.text,"start_ms":w.start_ms,"end_ms":w.end_ms}))
+        .collect();
+    Ok(Json(json!({"start_ms":context.start_ms,"end_ms":context.end_ms,"words":words})))
+}
 
 #[derive(Deserialize)]
 struct Cursor {
@@ -1894,6 +1929,7 @@ async fn serve(
         .route("/api/v1/projects/{project}/events", get(events))
         .route("/api/v1/jobs/{id}/cancel", post(cancel_job))
         .route("/api/v1/jobs/{id}/retry", post(retry_job))
+        .route("/api/v1/jobs/{id}/retime", post(retime_job))
         // agents (Claude, ChatGPT, ...) drive the same project through MCP; `--mcp` bridges stdio here
         .route("/mcp", post(agent::endpoint))
         .layer(axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024))
