@@ -63,6 +63,7 @@ h1{margin:0 0 var(--space-xl);font-size:1.5rem;line-height:1.25;letter-spacing:-
 .actions button:hover{background:var(--sunken)}.actions .danger:hover{color:var(--danger)}
 .rename{width:100%;min-height:36px;padding:4px 8px;font-weight:600}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);display:flex;align-items:center;gap:var(--space-md);padding:var(--space-sm) var(--space-sm) var(--space-sm) var(--space-lg);border:1px solid var(--line);border-radius:var(--radius);background:var(--raised);box-shadow:0 8px 24px oklch(10% .02 var(--h) / .4);max-width:calc(100% - 32px)}
+.toast[hidden]{display:none}
 .toast span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toast button{min-height:36px;font-weight:600;color:var(--acc);background:none;border-color:transparent}
 @media (max-width:560px){#projects{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-lg) var(--space-md)}}
