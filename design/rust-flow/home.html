@@ -55,6 +55,16 @@ h1{margin:0 0 var(--space-xl);font-size:1.5rem;line-height:1.25;letter-spacing:-
 .state{padding:var(--space-xl) 0;color:var(--mut)}
 .state button{margin-left:var(--space-sm)}
 .skeleton{display:grid;gap:var(--space-sm)}.skeleton i{display:block;background:var(--raised);border-radius:var(--radius)}.skeleton i:first-child{aspect-ratio:16/9}.skeleton i:last-child{height:12px;width:60%;border-radius:6px}
+#projects>li{position:relative}
+.actions{position:absolute;top:6px;right:6px;display:flex;gap:4px;opacity:0;transition:opacity .15s var(--ease)}
+#projects>li:hover .actions,#projects>li:focus-within .actions{opacity:1}
+@media (hover:none){.actions{opacity:1}}
+.actions button{min-height:36px;min-width:36px;padding:0;display:grid;place-items:center;border:0;border-radius:999px;background:oklch(16% .03 var(--h) / .82);color:var(--txt)}
+.actions button:hover{background:var(--sunken)}.actions .danger:hover{color:var(--danger)}
+.rename{width:100%;min-height:36px;padding:4px 8px;font-weight:600}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);display:flex;align-items:center;gap:var(--space-md);padding:var(--space-sm) var(--space-sm) var(--space-sm) var(--space-lg);border:1px solid var(--line);border-radius:var(--radius);background:var(--raised);box-shadow:0 8px 24px oklch(10% .02 var(--h) / .4);max-width:calc(100% - 32px)}
+.toast span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast button{min-height:36px;font-weight:600;color:var(--acc);background:none;border-color:transparent}
 @media (max-width:560px){#projects{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-lg) var(--space-md)}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -71,6 +81,7 @@ h1{margin:0 0 var(--space-xl);font-size:1.5rem;line-height:1.25;letter-spacing:-
 <li class="skeleton" aria-hidden="true"><i></i><i></i></li><li class="skeleton" aria-hidden="true"><i></i><i></i></li>
 </ul>
 <p id="state" class="state" role="status" hidden></p>
+<div id="toast" class="toast" role="status" hidden><span id="toastText"></span><button type="button" id="undo">เลิกทำ</button></div>
 </main>
 <script>try{const t=localStorage.getItem("editorkrab-theme");if(t)document.documentElement.dataset.theme=t}catch{}</script>
 <script type="module" src="home.js"></script>

@@ -74,6 +74,9 @@ impl Store {
                  project_id TEXT NOT NULL REFERENCES drafts(project_id), operation_id TEXT NOT NULL,
                  request TEXT NOT NULL, revision INTEGER NOT NULL, document TEXT NOT NULL,
                  PRIMARY KEY(project_id,operation_id)
+             );
+             CREATE TABLE IF NOT EXISTS hidden_projects (
+                 project_id TEXT PRIMARY KEY REFERENCES drafts(project_id)
              );",
         )?;
         let store = Self(connection);
@@ -105,6 +108,7 @@ impl Store {
     pub fn list(&self) -> Result<Vec<Value>, Error> {
         let mut statement = self.0.prepare(
             "SELECT d.project_id, d.document FROM drafts d
+             WHERE d.project_id NOT IN (SELECT project_id FROM hidden_projects)
              ORDER BY (SELECT MAX(o.rowid) FROM draft_operations o WHERE o.project_id=d.project_id) DESC",
         )?;
         let rows = statement.query_map([], |r| {
@@ -124,6 +128,21 @@ impl Store {
             }));
         }
         Ok(projects)
+    }
+
+    /// Deleting a project on the project screen only hides it: its draft, videos and
+    /// transcripts stay, so "undo" brings it back whole.
+    pub fn hide(&self, project: &str, hidden: bool) -> Result<(), Error> {
+        if self.read(project)?.is_none() {
+            return Err(Error::NotFound);
+        }
+        let sql = if hidden {
+            "INSERT OR IGNORE INTO hidden_projects(project_id) VALUES (?1)"
+        } else {
+            "DELETE FROM hidden_projects WHERE project_id=?1"
+        };
+        self.0.execute(sql, [project])?;
+        Ok(())
     }
 
     pub fn save(
@@ -346,5 +365,11 @@ mod tests {
         assert_eq!(projects[0]["step"], 4);
         assert_eq!(projects[1]["title"], "ใหม่");
         assert_eq!(projects[1]["cover"], Value::Null);
+        store.hide("old", true).unwrap();
+        assert_eq!(store.list().unwrap().len(), 1);
+        assert!(store.read("old").unwrap().is_some(), "a deleted project keeps its draft");
+        store.hide("old", false).unwrap();
+        assert_eq!(store.list().unwrap().len(), 2);
+        assert!(matches!(store.hide("missing", true), Err(Error::NotFound)));
     }
 }

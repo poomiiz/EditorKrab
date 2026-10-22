@@ -686,6 +686,22 @@ async fn list_drafts(State(runtime): State<Runtime>) -> Result<Json<Value>, ApiE
     Ok(Json(json!(projects)))
 }
 
+async fn hide_draft(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    database(runtime, move |store| store.hide(&project, true)).await?;
+    Ok(Json(json!({"hidden":true})))
+}
+
+async fn restore_draft(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    database(runtime, move |store| store.hide(&project, false)).await?;
+    Ok(Json(json!({"hidden":false})))
+}
+
 async fn save(
     State(runtime): State<Runtime>,
     Path(project): Path<String>,
@@ -1783,6 +1799,8 @@ async fn serve(
             }),
         )
         .route("/api/v1/drafts", get(list_drafts))
+        .route("/api/v1/drafts/{project}/hide", post(hide_draft))
+        .route("/api/v1/drafts/{project}/restore", post(restore_draft))
         .route(
             "/home.js",
             get(|| async {
