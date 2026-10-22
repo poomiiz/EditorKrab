@@ -205,7 +205,16 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  });
  queueMicrotask(loadSettings);queueMicrotask(()=>gpuCall('/api/v1/transcription/gpu'));
  // Every subtitle line as it will show (hand edit if any), timed on its own source file.
- function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name,words:correction(job,segment)?[]:(segment.words || [])})));}
+ // a segment's words with the draft's re-timed clocks (one [start,end] per word) and the whole-project
+ // subtitle shift; the transcript itself never changes (export.rs spoken() does the same)
+ function timedWords(segment){
+  const words=segment.words || [],times=read().word_times?.[segment.id],offset=Math.max(-5000,Math.min(5000,Number(read().subtitle_offset_ms) || 0));
+  return words.map((w,i)=>{const t=Array.isArray(times)&&times.length===words.length&&Array.isArray(times[i])&&times[i][1]>=times[i][0]?times[i]:[w.start_ms,w.end_ms];
+   return {...w,start_ms:Math.max(0,t[0]+offset),end_ms:Math.max(0,t[1]+offset)};});
+ }
+ function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name,words:correction(job,segment)?[]:timedWords(segment)})));}
+ // the finished transcription pieces, for re-timing their words
+ function pieces(){return eligible().flatMap(file=>chunks(file).filter(j=>j?.status==='succeeded'));}
  function find(id){for(const file of eligible())for(const row of segments(file))if(row.job.id+'|'+row.segment.id===id)return {file,...row};throw Error('line_not_found');}
  // For checking lines from the subtitle step: hear one line, or replace its text (kept as a hand edit and learned).
  function listen(id){const {file,segment}=find(id);return play(file,segment);}
@@ -217,5 +226,5 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  }
  // one video's speech is all transcribed
  function fileDone(file){const list=chunks(file);return list.length>0&&list.every(j=>j?.status==='succeeded');}
- return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit,fileDone};
+ return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit,fileDone,pieces};
 }

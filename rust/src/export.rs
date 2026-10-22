@@ -69,6 +69,10 @@ struct Spoken {
     words: Vec<(String, u64, u64)>,
 }
 
+/// The whole-project subtitle shift in ms (+ later, - earlier), kept within ±5 s.
+pub fn subtitle_offset(document: &Value) -> i64 {
+    document["subtitle_offset_ms"].as_i64().unwrap_or(0).clamp(-5000, 5000)
+}
 /// Every segment of every finished transcription in the project, with hand corrections applied.
 fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
     // same rule as the step 1 editor: a correction applies only to the exact text it was made on
@@ -120,6 +124,22 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
                     })
                     .collect(),
             };
+            // re-timed word clocks ("จัดเวลาคำใหม่", one [start, end] per word in order), then the
+            // whole-project subtitle shift; both live in the draft, the transcript stays as it was
+            let mut words = words;
+            if let Some(times) = document["word_times"][id].as_array().filter(|t| t.len() == words.len()) {
+                for (w, t) in words.iter_mut().zip(times) {
+                    if let (Some(a), Some(b)) = (t[0].as_u64(), t[1].as_u64()) {
+                        if b >= a {
+                            (w.1, w.2) = (a, b);
+                        }
+                    }
+                }
+            }
+            let offset = subtitle_offset(document);
+            for w in &mut words {
+                (w.1, w.2) = ((w.1 as i64 + offset).max(0) as u64, (w.2 as i64 + offset).max(0) as u64);
+            }
             let text = edited.map_or(text, |(_, fixed)| fixed);
             found.insert(
                 id.to_owned(),
@@ -651,10 +671,34 @@ fn picks(p: &Piece, document: &Value) -> Vec<(u64, String, u64)> {
                 Some((at, v["text"].as_str()?.trim().to_owned(), v["end_ms"].as_u64().unwrap_or(at)))
             }
         })
+        // a pick keeps its letters but takes its clock from the piece's words as they are now
+        // (re-timed or shifted since it was picked)
+        .map(|(at, text, end)| locate(p, &text, at).map_or((at, text.clone(), end), |(a, b)| (a, text, b)))
         .filter(|(at, text, _)| !text.is_empty() && *at < p.end_ms && *at + 1 > p.start_ms)
         .collect();
     words.sort();
     words
+}
+/// Where `text` is said in the piece: the run of letters matching it closest to `near`, timed by the
+/// letters' share of their words.
+fn locate(p: &Piece, text: &str, near: u64) -> Option<(u64, u64)> {
+    let mut letters: Vec<(char, u64, u64)> = Vec::new();
+    for (word, from, to) in &p.words {
+        let word = word.trim();
+        let count = word.chars().count().max(1) as u64;
+        for (k, c) in word.chars().enumerate() {
+            let span = to.saturating_sub(*from);
+            letters.push((c, from + span * k as u64 / count, from + span * (k as u64 + 1) / count));
+        }
+    }
+    let want: Vec<char> = text.chars().filter(|c| !c.is_whitespace()).collect();
+    if want.is_empty() || want.len() > letters.len() {
+        return None;
+    }
+    (0..=letters.len() - want.len())
+        .filter(|&i| letters[i..i + want.len()].iter().zip(&want).all(|(l, w)| l.0 == *w))
+        .min_by_key(|&i| letters[i].1.abs_diff(near))
+        .map(|i| (letters[i].1, letters[i + want.len() - 1].2))
 }
 /// The piece with its emphasised words taken out of the speech, so a word is not on screen twice
 /// (P'Ohm 21 Oct 2026). Each pick is cut where its letters are said closest to its time; a timed
