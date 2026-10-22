@@ -249,9 +249,11 @@ function renderFiles() {
     li.append(info);
     const facts=progressOf(file),stages=document.createElement('ol');stages.className='file-stages';stages.setAttribute('aria-label','ทำถึงขั้นไหน');
     for(const [label,value] of facts.stages){const dot=document.createElement('li');dot.dataset.done=String(value>=1);dot.dataset.part=String(value>0&&value<1);dot.title=`${label}${value>0&&value<1?' (บางเรื่อง)':''}`;dot.textContent=label;stages.append(dot);}
-    const bar=document.createElement('div');bar.className='file-progress';bar.innerHTML='<span></span>';bar.firstChild.style.width=facts.percent+'%';
-    const percent=document.createElement('p');percent.className='file-percent';percent.textContent=(facts.stories?`${facts.stories} เรื่อง · `:'')+`เสร็จ ${facts.percent}%`;
-    li.append(stages,bar,percent);
+    const percent=document.createElement('p');percent.className='file-percent';
+    const share=document.createElement('b');share.textContent=`${facts.percent}%`;
+    const count=document.createElement('span');count.textContent=facts.stories?`${facts.stories} เรื่อง`:'ยังไม่แบ่งเรื่อง';
+    percent.append(share,count);percent.setAttribute('aria-label',`เสร็จ ${facts.percent}% · ${count.textContent}`);
+    li.append(stages,percent);
     const remove=document.createElement('button');remove.className='source-remove icon-only';remove.dataset.icon='x';remove.title='เอาออก';remove.disabled=!editingAllowed;
     remove.setAttribute('aria-label',`เอา ${file.name} ออกจากรายการ`);
     remove.onclick=()=>{if (!editingAllowed) return;draft.files.splice(index,1);save();renderFiles();};

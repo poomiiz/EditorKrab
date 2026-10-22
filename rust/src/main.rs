@@ -20,7 +20,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc,
 };
-use std::{convert::Infallible, path::PathBuf, time::Duration};
+use std::{collections::HashMap, convert::Infallible, path::PathBuf, time::Duration};
 use tokio::sync::watch;
 
 mod agent;
@@ -679,6 +679,11 @@ async fn read(
     })
     .await?;
     Ok(Json(json!(draft)))
+}
+
+async fn list_drafts(State(runtime): State<Runtime>) -> Result<Json<Value>, ApiError> {
+    let projects = database(runtime, |store| store.list()).await?;
+    Ok(Json(json!(projects)))
 }
 
 async fn save(
@@ -1768,7 +1773,24 @@ async fn serve(
     let app = Router::new()
         .route(
             "/",
-            get(|| async { Html(include_str!("../../design/rust-flow/index.html")) }),
+            // no project in the address: the project screen comes first
+            get(|Query(query): Query<HashMap<String, String>>| async move {
+                Html(if query.contains_key("project") {
+                    include_str!("../../design/rust-flow/index.html")
+                } else {
+                    include_str!("../../design/rust-flow/home.html")
+                })
+            }),
+        )
+        .route("/api/v1/drafts", get(list_drafts))
+        .route(
+            "/home.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/home.js"),
+                )
+            }),
         )
         .route(
             "/flow.js",

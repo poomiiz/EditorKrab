@@ -57,7 +57,7 @@ p{max-width:70ch;color:var(--txt-sub)}small,.caption{font-size:.8125rem;color:va
 .app{display:grid;grid-template-rows:auto auto minmax(0,1fr);height:100%}
 .topbar{background:var(--surface);border-bottom:1px solid var(--line)}
 .topbar-inner{display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-xs) var(--space-lg);min-height:52px}
-.brand{display:flex;align-items:center;gap:var(--space-sm);font-size:.9375rem;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
+.brand{color:inherit;text-decoration:none;display:flex;align-items:center;gap:var(--space-sm);font-size:.9375rem;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
 .brand svg{color:var(--acc)}
 .project-field{display:flex;align-items:center;flex:1;max-width:420px;min-width:0}
 .project-field{gap:var(--space-xs)}.project-field label{font-size:.8125rem;color:var(--mut);white-space:nowrap}
@@ -118,14 +118,14 @@ main{min-height:0;display:grid;grid-template-rows:minmax(0,1fr) auto;padding:var
 #fileTotal{margin-left:auto;font-size:.8125rem;color:var(--mut);font-variant-numeric:tabular-nums}
 .empty{max-width:none;padding:var(--space-md) 0;color:var(--mut);font-size:.875rem}
 #fileList{list-style:none;padding:0;margin:0}
-#fileList li{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;column-gap:var(--space-md);padding:var(--space-sm) 0;border-bottom:1px solid var(--line)}
-#fileList li:last-child{border-bottom:0}
+#fileList>li{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;column-gap:var(--space-md);padding:var(--space-sm) 0;border-bottom:1px solid var(--line)}
+#fileList>li:last-child{border-bottom:0}
 .file-icon{grid-row:1/3;display:grid;place-items:center;background:var(--raised);color:var(--txt-sub);border-radius:var(--radius-sm);height:40px;font-size:.6875rem;letter-spacing:.02em}
 .file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.875rem;font-weight:500}
 .file-info{grid-column:2;font-size:.8125rem;font-variant-numeric:tabular-nums;color:var(--mut);max-width:none}
 .source-remove{grid-column:3;grid-row:1/3;font-size:.8125rem;background:transparent;border-color:transparent;color:var(--mut)}
 .source-remove:hover:not(:disabled){color:var(--danger)}
-#fileList li[data-state=failed] .file-info{color:var(--danger)}
+#fileList>li[data-state=failed] .file-info{color:var(--danger)}
 .stage-controls{display:flex;align-items:center;gap:var(--space-xl);padding-top:var(--space-md)}
 .field{display:grid;gap:6px;min-width:0}.field>span,.field>label{font-size:.8125rem;color:var(--txt-sub)}
 .language-field{grid-template-columns:auto 200px;align-items:center;gap:var(--space-md)}
@@ -264,9 +264,9 @@ main{padding:0;gap:0}
 .stage[data-has-files] .drop{flex-direction:row;min-height:72px;padding:var(--space-md) var(--space-lg);gap:var(--space-lg)}
 .stage[data-has-files] .drop .row{margin-left:auto}
 .library-head{padding:var(--space-2xl) 0 var(--space-sm)}
-#fileList li{padding:var(--space-md) var(--space-sm);border-radius:var(--radius-sm);border-bottom:0}
-#fileList li+li{border-top:1px solid var(--line)}
-#fileList li:hover{background:var(--raised)}
+#fileList>li{padding:var(--space-md) var(--space-sm);border-radius:var(--radius-sm);border-bottom:0}
+#fileList>li+li{border-top:1px solid var(--line)}
+#fileList>li:hover{background:var(--raised)}
 /* stage 2: numbered route, the active row carries the action */
 .ai-steps{list-style:none;margin:var(--space-lg) 0 0;padding:0;counter-reset:a;max-width:760px;display:grid}
 .ai-steps li{counter-increment:a;display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:var(--space-lg);padding:var(--space-xl) 0;border-top:1px solid var(--line)}
@@ -310,7 +310,7 @@ h1{font-size:1.0625rem}h2{font-size:.8125rem}small,.caption{font-size:.75rem}
 .drop{min-height:150px;gap:var(--space-sm)}.drop svg{width:26px;height:26px}.drop strong{font-size:.9375rem}
 .stage[data-has-files] .drop{min-height:52px;padding:var(--space-sm) var(--space-md)}
 .library-head{padding:var(--space-lg) 0 var(--space-xs)}
-#fileList li{grid-template-columns:32px minmax(0,1fr) auto;padding:6px var(--space-sm)}.file-icon{height:32px}.file-name{font-size:.8125rem}
+#fileList>li{grid-template-columns:32px minmax(0,1fr) auto;padding:6px var(--space-sm)}.file-icon{height:32px}.file-name{font-size:.8125rem}
 .ai-steps li{padding:var(--space-md) 0;grid-template-columns:32px minmax(0,1fr) auto}.ai-steps li::before{width:26px;height:26px;font-size:.75rem}
 .qc{flex-basis:300px;padding:var(--space-lg)}
 .text-stage{padding:var(--space-md) var(--space-lg)}.text-inspector{padding:var(--space-lg);gap:var(--space-lg)}
@@ -432,9 +432,9 @@ textarea{font-size:.75rem}
 #editTitle{display:flex;align-items:center;gap:var(--space-sm)}#editTitle span::after{content:' ·'}
 .edit-story{font:inherit;font-weight:650;max-width:min(60vw,720px);min-height:36px;padding:2px 8px;background:var(--surface)}
 .select-all{display:flex;align-items:center;gap:6px;font-size:.8125rem;color:var(--txt-sub);margin-left:auto}
-#fileList li{grid-template-columns:24px 40px minmax(0,1fr) auto}#fileList li .file-pick{grid-row:1/3;width:18px;height:18px;margin:0;accent-color:var(--acc)}
-#fileList li .file-info{grid-column:3}#fileList li .source-remove{grid-column:4}
-#fileList li{grid-template-columns:24px 32px minmax(0,1fr) auto}
+#fileList>li{grid-template-columns:24px 40px minmax(0,1fr) auto}#fileList>li .file-pick{grid-row:1/3;width:18px;height:18px;margin:0;accent-color:var(--acc)}
+#fileList>li .file-info{grid-column:3}#fileList>li .source-remove{grid-column:4}
+#fileList>li{grid-template-columns:24px 32px minmax(0,1fr) auto}
 .plan-dialog{width:min(720px,92vw);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);color:var(--txt);padding:var(--space-xl)}
 .plan-dialog::backdrop{background:rgb(0 0 0 / .55)}.plan-dialog form{display:grid;gap:var(--space-md)}.plan-dialog textarea{min-height:45vh;width:100%}
 .plan-dialog-actions{justify-content:flex-end;gap:var(--space-sm)}
@@ -520,24 +520,38 @@ textarea{font-size:.75rem}
 #editor .edit-lane{height:96px}#editor .edit-mark::before{height:86px}
 #captionTransport .edit-grip,#captionTransport .edit-toggle,#captionTransport .edit-show-cut,#captionTransport .edit-aspect{display:none}
 
-/* step 1: a card per video with what came of it; narrower tool panels */
-#fileList{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--space-md);align-items:start}
-#fileList li.file-card{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-xs) var(--space-sm);padding:0 0 var(--space-md);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);overflow:hidden}
-#fileList li.file-card+li{border-top:1px solid var(--line)}
-#fileList li.file-card:hover{background:var(--raised)}
-.file-cover{grid-column:1/-1;position:relative;aspect-ratio:16/9;background:var(--sunken);display:grid;place-items:center;overflow:hidden}
+/* step 1: one row per video, like a media list: cover, name and facts, a five-step track, how far along.
+   Rows scale to any number of videos; nothing wraps a word onto two lines. */
+#fileList{display:grid;gap:0}
+#fileList>li.file-card{position:relative;display:grid;grid-template-columns:20px 160px minmax(0,1fr) auto 32px;
+ grid-template-areas:"pick cover name percent remove" "pick cover info percent remove" "pick cover stages percent remove";
+ grid-template-rows:auto auto 1fr;align-items:center;gap:2px var(--space-lg);padding:var(--space-md) var(--space-sm);border:0;border-radius:var(--radius-sm);background:none}
+#fileList>li.file-card+li{border-top:1px solid var(--line)}
+#fileList>li.file-card:hover{background:var(--raised)}
+#fileList>li.file-card .file-pick{grid-row:auto;grid-column:auto;grid-area:pick;width:18px;height:18px;min-height:18px;margin:0;accent-color:var(--acc)}
+.file-cover{grid-area:cover;position:relative;aspect-ratio:16/9;border-radius:var(--radius-sm);background:var(--sunken);display:grid;place-items:center;overflow:hidden}
 .file-cover video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.file-cover .file-icon{grid-row:auto;height:auto;padding:4px 8px;background:transparent}
-.file-card .file-pick{position:absolute;top:8px;left:8px;z-index:1;width:20px;height:20px;min-height:20px;accent-color:var(--acc)}
-.file-card .source-remove{position:absolute;top:4px;right:4px;z-index:1;background:oklch(0% 0 0 / .45);color:#fff;border-radius:999px;min-width:32px;min-height:32px}
-.file-card .file-name,.file-card .file-info,.file-card .file-stages,.file-card .file-progress,.file-card .file-percent{grid-column:1/-1;margin:0 var(--space-md)}
-.file-card .file-name{margin-top:var(--space-sm)}
-.file-stages{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:4px}
-.file-stages li{font-size:.6875rem;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--mut)}
-.file-stages li[data-part=true]{border-color:var(--warn);color:var(--warn)}
-.file-stages li[data-done=true]{border-color:var(--ok);color:var(--ok)}
-.file-progress{height:6px;border-radius:999px;background:var(--sunken);overflow:hidden}.file-progress span{display:block;height:100%;background:var(--ok)}
-.file-percent{font-size:.75rem;color:var(--txt-sub);font-variant-numeric:tabular-nums}
+.file-cover .file-icon{grid-row:auto;height:auto;padding:2px 6px;background:transparent;font-size:.6875rem}
+.file-card .file-name{grid-area:name;align-self:end;font-size:.9375rem;font-weight:600;margin:0}
+#fileList>li.file-card .file-info{grid-column:auto;grid-area:info;margin:0;font-size:.8125rem}
+.file-stages{grid-area:stages;align-self:start;list-style:none;margin:var(--space-sm) 0 0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-xs);max-width:520px}
+.file-stages li{display:grid;gap:4px;font-size:.75rem;line-height:1.3;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-stages li::before{content:"";height:4px;border-radius:2px;background:var(--line)}
+.file-stages li[data-part=true]{color:var(--txt-sub)}.file-stages li[data-part=true]::before{background:linear-gradient(90deg,var(--warn) 50%,var(--line) 50%)}
+.file-stages li[data-done=true]{color:var(--txt-sub)}.file-stages li[data-done=true]::before{background:var(--ok)}
+.file-card .file-progress{display:none}
+.file-percent{grid-area:percent;margin:0;display:grid;justify-items:end;gap:2px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.file-percent b{font-size:1.125rem;font-weight:600;color:var(--txt)}.file-percent span{font-size:.8125rem;color:var(--mut)}
+#fileList>li.file-card .source-remove{grid-column:auto;grid-area:remove;min-width:32px;min-height:32px;padding:0;border-color:transparent;background:none;color:var(--mut)}
+#fileList>li.file-card .source-remove:hover:not(:disabled){color:var(--danger);background:var(--sunken)}
+/* no video yet: the drop area already says what to do */
+.stage:not([data-has-files]) .library-head,.stage:not([data-has-files]) #empty{display:none}
+@media (max-width:760px){
+ #fileList>li.file-card{grid-template-columns:20px 96px minmax(0,1fr) 32px;
+  grid-template-areas:"pick cover name remove" "pick cover info remove" "pick cover percent remove" "stages stages stages stages"}
+ .file-percent{justify-items:start;grid-auto-flow:column;gap:var(--space-sm);align-items:baseline}.file-percent b{font-size:.875rem}
+ .file-stages{max-width:none}
+}
 :root{--side:250px}
 .stage[data-panel="4"] .stage-body{grid-template-columns:min(24%,300px) minmax(0,1fr) !important}
 
@@ -837,7 +851,7 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <p id="toast" class="badge toast" role="status" hidden></p>
 <div class="app">
 <header class="topbar"><div class="topbar-inner">
-<strong class="brand"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9 5 3-5 3Z"/></svg>EditorKrab</strong>
+<a class="brand" href="/" title="กลับหน้าโปรเจกต์"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9 5 3-5 3Z"/></svg>EditorKrab</a>
 <div class="project-field"><label for="title" class="sr-only">ชื่องาน</label><input id="title" maxlength="120" placeholder="ตั้งชื่องานนี้" autocomplete="off"></div>
 <nav class="steps" aria-label="ขั้นตอนทำคลิป">
 <button data-step="1"><span class="step-number">01</span><small>ใส่วิดีโอ</small></button><button data-step="2"><span class="step-number">02</span><small>สรุปเนื้อหา</small></button><button data-step="3"><span class="step-number">03</span><small>ตัดต่อ</small></button><button data-step="4"><span class="step-number">04</span><small>ตรวจซับ</small></button><button data-step="5"><span class="step-number">05</span><small>หัวคลิป</small></button><button data-step="6"><span class="step-number">06</span><small>รับคลิป</small></button>
