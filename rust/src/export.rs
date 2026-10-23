@@ -25,10 +25,12 @@ pub fn crop(document: &Value, path: &Path) -> (f64, f64) {
     let at = |v: &Value| v.as_f64().filter(|v| v.is_finite()).unwrap_or(0.5).clamp(0.0, 1.0);
     (at(&c["x"]), at(&c["y"]))
 }
-/// The crop at `ms` of the video: with the camera following the speaker (`follow_speaker`), the window that
-/// person was given (`crops[id].speakers[n]`), else the video's own window.
-pub fn crop_at(document: &Value, path: &Path, ms: u64) -> (f64, f64) {
-    let base = crop(document, path);
+/// The crop at `ms` of the video as (x, y, zoom): with the camera following the speaker (`follow_speaker`), the
+/// window that person was given (`crops[id].speakers[n]`, zoom 1-3 so a clip that fits the frame exactly can
+/// still move in on them), else the video's own window at zoom 1.
+pub fn crop_at(document: &Value, path: &Path, ms: u64) -> (f64, f64, f64) {
+    let (x, y) = crop(document, path);
+    let base = (x, y, 1.0);
     if document["follow_speaker"] != true {
         return base;
     }
@@ -36,7 +38,8 @@ pub fn crop_at(document: &Value, path: &Path, ms: u64) -> (f64, f64) {
     let Some(who) = speaker_at(document, id, ms) else { return base };
     let c = &document["crops"][id]["speakers"][who.to_string()];
     let at = |v: &Value, d: f64| v.as_f64().filter(|v| v.is_finite()).unwrap_or(d).clamp(0.0, 1.0);
-    if c.is_object() { (at(&c["x"], base.0), at(&c["y"], base.1)) } else { base }
+    let zoom = c["zoom"].as_f64().filter(|v| v.is_finite()).unwrap_or(1.0).clamp(1.0, 3.0);
+    if c.is_object() { (at(&c["x"], x), at(&c["y"], y), zoom) } else { base }
 }
 /// The draft's source id for the video at `path`.
 pub fn source_id<'a>(document: &'a Value, path: &Path) -> Option<&'a str> {
@@ -1038,10 +1041,12 @@ pub fn ffmpeg_args(story: &Story, document: &Value, output: &Path) -> Vec<String
     for (n, p) in story.pieces.iter().enumerate() {
         let (a, b) = (p.start_ms as f64 / 1000.0, p.end_ms as f64 / 1000.0);
         // the largest window of the clip's shape, slid to where step 3 put it, then scaled to the frame
-        let (cx, cy) = crop_at(document, &story.sources[p.source], p.start_ms);
+        let (cx, cy, zoom) = crop_at(document, &story.sources[p.source], p.start_ms);
+        // zooming in on a speaker is a smaller window; no zoom keeps the plain one
+        let zoom = if zoom > 1.0001 { format!("/{zoom:.4}") } else { String::new() };
         graph.push_str(&format!(
             "[{s}:v]trim=start={a:.3}:end={b:.3},setpts=PTS-STARTPTS,\
-crop=w='min(iw,ih*{shape:.6})':h='min(ih,iw/{shape:.6})':x='(iw-ow)*{cx:.4}':y='(ih-oh)*{cy:.4}',\
+crop=w='min(iw,ih*{shape:.6}){zoom}':h='min(ih,iw/{shape:.6}){zoom}':x='(iw-ow)*{cx:.4}':y='(ih-oh)*{cy:.4}',\
 scale={width}:{height},setsar=1,fps=30,format=yuv420p[v{n}];\
 [{s}:a]atrim=start={a:.3}:end={b:.3},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,afade=t=in:d=0.008,\
 afade=t=out:st={fade:.3}:d=0.008[a{n}];",

@@ -501,7 +501,9 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
 
  // crop: where the clip-shaped window sits on the video, 0..1 across the slack each way (0.5 = centred)
  const cropOf=id=>{const c=read().crops?.[id] || {};const f=v=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):0.5;return {x:f(c.x),y:f(c.y)};};
- function showCrop(at=cropAt(cropSource,video.currentTime*1000)){video.style.objectPosition=`${at.x*100}% ${at.y*100}%`;}
+ // zoom scales the picture about the same point the window sits at, which is the export's smaller crop window
+ function showCrop(at=cropAt(cropSource,video.currentTime*1000)){const z=at.zoom || 1;video.style.objectPosition=`${at.x*100}% ${at.y*100}%`;
+  video.style.transformOrigin=`${at.x*100}% ${at.y*100}%`;video.style.transform=z>1?`scale(${z})`:'';}
  // who talks when, from the stored diarization (voice[id].turns); a turn under FOLLOW_MIN does not move the camera
  // (the export does the same: speaker_at in export.rs)
  const FOLLOW_MIN=1000;
@@ -516,7 +518,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function cropAt(source,ms){
   const base=cropOf(source),who=following()?speakerAt(source,ms):null,c=who===null?null:read().crops?.[source]?.speakers?.[String(who)];
   const f=(v,d)=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):d;
-  return c?{x:f(c.x,base.x),y:f(c.y,base.y)}:base;
+  return c?{x:f(c.x,base.x),y:f(c.y,base.y),zoom:Number.isFinite(c.zoom)?Math.min(3,Math.max(1,c.zoom)):1}:{...base,zoom:1};
  }
  // the people heard in a video, by how long each talks, with whether their talk is kept from the dead-air cut
  const keepOf=source=>{const k=(read().speakers_keep || {})[source];const main=(read().voice || {})[source]?.main;return Array.isArray(k)?k:Number.isInteger(main)?[main]:[];};
@@ -537,8 +539,12 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    const dot=document.createElement('span');dot.className='speaker-dot';dot.setAttribute('aria-hidden','true');
    const name=document.createElement('span');name.textContent=`คนที่ ${p.n+1}${p.main?' (หลัก)':''} · พูด ${clock(p.ms)}`;
    const framed=read().crops?.[source]?.speakers?.[String(p.id)];
-   const frame=document.createElement('span');frame.className='caption';frame.textContent=framed?'ตั้งกรอบแล้ว':'ยังไม่ตั้งกรอบ';
-   row.append(box,dot,name,frame);return row;
+   // how close the camera goes on this person; a clip that fits the frame exactly can only follow by zooming
+   const zoom=document.createElement('select');zoom.title='ซูมเข้าหาคนนี้';zoom.setAttribute('aria-label',`ซูมเข้าหาคนที่ ${p.n+1}`);zoom.disabled=!editable() || !following();
+   for(const z of [1,1.25,1.5,2]){const o=document.createElement('option');o.value=String(z);o.textContent=z===1?'ไม่ซูม':`ซูม ${z}x`;zoom.append(o);}
+   zoom.value=String(framed?.zoom || 1);
+   zoom.onchange=()=>write(d=>{const c={...(d.crops?.[source] || {x:0.5,y:0.5})};c.speakers={...(c.speakers || {}),[String(p.id)]:{x:0.5,y:0.5,...(c.speakers?.[String(p.id)] || {}),zoom:Number(zoom.value)}};d.crops={...(d.crops || {}),[source]:c};});
+   row.append(box,dot,name,zoom);return row;
   }));
   if($('followSpeaker')){$('followSpeaker').checked=following();$('followSpeaker').disabled=!editable();}
  }
@@ -551,13 +557,14 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    if(e.target!==video || !cropSource || !editable() || e.button!==0)return;
    const fw=frame.clientWidth,fh=frame.clientHeight,vw=video.videoWidth,vh=video.videoHeight;if(!vw || !vh)return;
    const scale=Math.max(fw/vw,fh/vh);
-   drag={id:e.pointerId,x0:e.clientX,y0:e.clientY,start:cropOf(cropSource),ox:vw*scale-fw,oy:vh*scale-fh,at:null};
+   const now=cropAt(cropSource,video.currentTime*1000),z=now.zoom || 1;
+   drag={id:e.pointerId,x0:e.clientX,y0:e.clientY,start:now,zoom:z,ox:vw*scale*z-fw,oy:vh*scale*z-fh,at:null};
    frame.setPointerCapture(e.pointerId);frame.dataset.cropping='true';e.preventDefault();
   });
   frame.addEventListener('pointermove',e=>{
    if(!drag || e.pointerId!==drag.id)return;
    const f=v=>Math.min(1,Math.max(0,v));
-   drag.at={x:drag.ox>1?f(drag.start.x-(e.clientX-drag.x0)/drag.ox):0.5,y:drag.oy>1?f(drag.start.y-(e.clientY-drag.y0)/drag.oy):0.5};
+   drag.at={x:drag.ox>1?f(drag.start.x-(e.clientX-drag.x0)/drag.ox):0.5,y:drag.oy>1?f(drag.start.y-(e.clientY-drag.y0)/drag.oy):0.5,zoom:drag.zoom};
    showCrop(drag.at);
   });
   const end=e=>{
@@ -566,7 +573,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    // with the camera following, the window dragged is the one of the person talking now
    const who=following()?speakerAt(id,video.currentTime*1000):null,r=v=>Math.round(v*1000)/1000;
    if(at&&id)write(d=>{const c={...(d.crops?.[id] || {x:0.5,y:0.5})};
-    if(who===null){c.x=r(at.x);c.y=r(at.y);}else c.speakers={...(c.speakers || {}),[String(who)]:{x:r(at.x),y:r(at.y)}};
+    if(who===null){c.x=r(at.x);c.y=r(at.y);}else c.speakers={...(c.speakers || {}),[String(who)]:{...(c.speakers?.[String(who)] || {}),x:r(at.x),y:r(at.y)}};
     d.crops={...(d.crops || {}),[id]:c};});
   };
   frame.addEventListener('pointerup',end);frame.addEventListener('pointercancel',end);
