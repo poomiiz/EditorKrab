@@ -456,14 +456,37 @@ $('pick').onclick = () => pickNative('files'); $('folder').onclick = () => pickN
 for (const id of ['files', 'folders']) $(id).onchange = e => addFiles(e.target.files);
 $('drop').ondragover = e => { e.preventDefault(); $('drop').classList.add('over'); };
 $('drop').ondragleave = () => $('drop').classList.remove('over');
-// a dropped file reaches the page without its location, so taking it would copy it into the app;
-// open the system picker instead, so the video is used where it already is
-$('drop').ondrop = e => {
+// a dropped file reaches the page without its location; the app finds it on disk by its exact
+// name, size and modified time and uses it where it is. Only a file it cannot find for sure
+// (or a dropped folder) opens the system picker.
+$('drop').ondrop = async e => {
   e.preventDefault(); $('drop').classList.remove('over');
-  const items=[...e.dataTransfer.items].map(i=>i.webkitGetAsEntry?.()).filter(Boolean),names=[...e.dataTransfer.files].map(f=>f.name);
-  if (!items.length && !names.length) return;
-  const folder=items.some(i=>i.isDirectory);
-  pickNative(folder ? 'folder' : 'files',`เลือก${folder ? 'โฟลเดอร์' : ' '+names.slice(0,3).join(', ')+(names.length>3 ? ' …' : '')} อีกครั้งในหน้าต่างที่เปิด แอปจะใช้ไฟล์จากที่เดิม ไม่ก๊อปเข้าแอป`);
+  if (!editingAllowed) return;
+  const items=[...e.dataTransfer.items].map(i=>i.webkitGetAsEntry?.()).filter(Boolean);
+  const files=[...e.dataTransfer.files].filter(f=>/\.(mp4|mov|m4v|mkv|avi|webm|mts|m2ts|wav|mp3|m4a|aac|flac|ogg|opus)$/i.test(f.name));
+  if (items.some(i=>i.isDirectory)) {pickNative('folder','เลือกโฟลเดอร์นี้อีกครั้งในหน้าต่างที่เปิด');return;}
+  if (!files.length) {error('เลือกไฟล์วิดีโอหรือเสียง');return;}
+  editing(false);error('');$('sourceStatus').textContent=`กำลังหาไฟล์ ${files.length} ไฟล์ในเครื่อง`;
+  let missing=files.map(f=>f.name);
+  try {
+    const response=await fetch('/api/v1/sources/locate',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(60000),
+      body:JSON.stringify({files:files.map(f=>({name:f.name,size:f.size,last_modified:f.lastModified}))})});
+    const answer=await response.json();
+    if (!response.ok || !Array.isArray(answer.files)) throw Error(answer.error || 'locate_failed');
+    if (session.blocked || session.volatile) return;
+    const found=answer.files.filter(Boolean);
+    for (const file of found) {
+      const index=draft.files.findIndex(old=>old.path===file.path);
+      if (index<0) draft.files.push(file);
+      else if (draft.files[index].size!==file.size || draft.files[index].modified_ns!==file.modified_ns) draft.files[index]=file;
+    }
+    if (found.length) {await save();renderFiles();}
+    missing=files.filter((_,i)=>!answer.files[i]).map(f=>f.name);
+    $('sourceStatus').textContent=`ใส่แล้ว ${found.length} ไฟล์`;
+  } catch (_) {
+    $('sourceStatus').textContent='หาไฟล์ในเครื่องไม่สำเร็จ';
+  } finally {editing(!session.blocked && !session.volatile);renderFiles();}
+  if (missing.length) pickNative('files',`หา ${missing.slice(0,3).join(', ')}${missing.length>3?' …':''} ในเครื่องไม่เจอ เลือกไฟล์นี้ในหน้าต่างที่เปิด`);
 };
 function downloadDraft() {
   const url = URL.createObjectURL(new Blob([JSON.stringify({schema_version:1,project_id:projectId,document:draft}, null, 2)], {type: 'application/json'}));

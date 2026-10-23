@@ -616,6 +616,50 @@ async fn pick_sources(
         .map_err(source_failure)
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LocateBody {
+    files: Vec<editorkrab::sources::Dropped>,
+}
+
+/// A dropped video carries no location, so look for it where videos usually are: the folders
+/// of videos already used, the person's own folders, and the top of each drive.
+async fn locate_sources(
+    State(runtime): State<Runtime>,
+    Json(body): Json<LocateBody>,
+) -> Result<Json<Value>, ApiError> {
+    if body.files.is_empty() || body.files.len() > 1000 {
+        return Err(failure(Error::InvalidInput));
+    }
+    let used = database(runtime, |store| store.source_folders()).await?;
+    let found = tokio::task::spawn_blocking(move || {
+        let mut roots: Vec<PathBuf> = used.into_iter().map(PathBuf::from).collect();
+        let near = editorkrab::sources::locate(&body.files, &roots, 1, 2_000);
+        if near.iter().all(Option::is_some) {
+            return near;
+        }
+        if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
+            let home = PathBuf::from(home);
+            for folder in ["Desktop", "Downloads", "Videos", "Movies", "Documents", "Pictures"] {
+                roots.push(home.join(folder));
+            }
+        }
+        for drive in b'C'..=b'Z' {
+            let root = PathBuf::from(format!("{}:\\", drive as char));
+            if root.exists() {
+                roots.push(root);
+            }
+        }
+        if cfg!(not(windows)) {
+            roots.push(PathBuf::from("/Volumes"));
+        }
+        editorkrab::sources::locate(&body.files, &roots, 5, 40_000)
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))?;
+    Ok(Json(json!({ "files": found })))
+}
+
 async fn database<T: Send + 'static>(
     runtime: Runtime,
     operation: impl FnOnce(&mut Store) -> Result<T, Error> + Send + 'static,
@@ -1949,6 +1993,7 @@ async fn serve(
         .route("/api/v1/spelling/fix", post(spelling_fix))
         .route("/api/v1/text-qc", post(text_qc))
         .route("/api/v1/sources/pick", post(pick_sources))
+        .route("/api/v1/sources/locate", post(locate_sources))
         .route("/api/v1/sources/uploads", post(begin_upload))
         .route("/api/v1/sources/uploads/{id}", post(upload_chunk))
         .route("/api/v1/sources/uploads/{id}/finish", post(finish_upload))

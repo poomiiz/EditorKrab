@@ -130,6 +130,22 @@ impl Store {
         Ok(projects)
     }
 
+    /// Folders holding the videos every project already uses, where a dropped video most likely sits.
+    pub fn source_folders(&self) -> Result<Vec<String>, Error> {
+        let mut statement = self.0.prepare("SELECT document FROM drafts")?;
+        let rows = statement.query_map([], |r| r.get::<_, String>(0))?;
+        let mut folders = std::collections::BTreeSet::new();
+        for row in rows {
+            let document: Value = serde_json::from_str(&row?)?;
+            for file in document["files"].as_array().into_iter().flatten() {
+                if let Some(parent) = file["path"].as_str().and_then(|p| Path::new(p).parent()) {
+                    folders.insert(parent.to_string_lossy().into_owned());
+                }
+            }
+        }
+        Ok(folders.into_iter().collect())
+    }
+
     /// Deleting a project on the project screen only hides it: its draft, videos and
     /// transcripts stay, so "undo" brings it back whole.
     pub fn hide(&self, project: &str, hidden: bool) -> Result<(), Error> {
