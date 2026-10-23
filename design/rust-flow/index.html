@@ -486,9 +486,13 @@ textarea{font-size:.75rem}
 
 
 /* step 2 after an answer is read: one line, send again or paste again, stories below */
-.ai-bar[data-done=true]{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-sm)}
-.ai-bar[data-done=true]>li{grid-template-columns:minmax(0,1fr) auto;padding:var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md);gap:var(--space-sm)}
-.ai-bar[data-done=true] .ai-num,.ai-bar[data-done=true] .ai-text>.caption{display:none}
+/* answer read: one bar, its label on the left and every button on the right; the "paste back" label and the
+   read count go, a warning about unused speech stays */
+.ai-bar[data-done=true]{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.ai-bar[data-done=true]>li{display:flex;align-items:center;gap:var(--space-sm);padding:0;border:0;background:none}
+.ai-bar[data-done=true]>li:first-child{flex:1;min-width:0}.ai-bar[data-done=true]>li:first-child .packet-actions{margin-left:auto}
+.ai-bar[data-done=true] .ai-num,.ai-bar[data-done=true] .ai-text>.caption,.ai-bar[data-done=true]>li:last-child .ai-text h2{display:none}
+.ai-bar[data-done=true]>li:last-child .ai-text:not(:has(.plan-status[data-state=warn])){display:none}
 .ai-bar[data-done=true] .ai-text{grid-auto-flow:column;justify-content:start;align-items:center;gap:var(--space-sm)}
 .ai-bar[data-done=true] .ai-text h2{font-size:.8125rem;font-weight:500;color:var(--txt-sub)}
 .ai-bar[data-done=true] .ai-text .plan-status{margin-top:0}
@@ -580,14 +584,22 @@ textarea{font-size:.75rem}
 .layer-head{position:absolute;left:0;right:0;display:flex;align-items:center;gap:6px;padding:0 8px;font-size:.75rem;color:var(--txt-sub);border-top:1px solid var(--line)}
 .layer-head input{width:16px;height:16px;min-height:16px;margin:0;accent-color:var(--acc)}
 .layer-head button{all:unset;cursor:pointer}.layer-head button:hover{color:var(--txt)}
-#captionTransport .edit-lane{height:166px}
-#captionTransport .edit-mark::before{height:156px}
+#captionTransport .edit-lane{height:220px}
+#captionTransport .edit-mark::before{height:210px}
 #captionTransport .edit-seg{top:52px;height:34px;border-color:var(--line-strong);background:var(--raised)}
 #captionTransport .edit-seg[data-line-selected=true]{border-color:var(--acc);background:var(--acc-soft)}
 #captionTransport .edit-text{-webkit-line-clamp:1;line-height:30px;padding:0 6px}
 .edit-vid{position:absolute;top:26px;height:20px;border-radius:4px;background:color-mix(in oklch,var(--acc) 35%,var(--raised));pointer-events:none}
-.edit-emph{position:absolute;top:92px;height:30px;padding:0 6px;border:1px solid var(--warn);border-radius:6px;background:color-mix(in oklch,var(--warn) 28%,var(--surface));color:var(--txt);font-size:.75rem;font-weight:600;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:0;z-index:1}
-.edit-layer-off .edit-emph,.edit-layer-off-speech .edit-seg{opacity:.35}
+.edit-emph{position:absolute;top:104px;height:32px;padding:0 6px;border:1px solid var(--warn);border-radius:6px;background:color-mix(in oklch,var(--warn) 28%,var(--surface));color:var(--txt);font-size:.75rem;font-weight:600;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:0;z-index:1}
+.edit-sub{position:absolute;top:166px;height:32px;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;background:var(--raised);color:var(--txt);font-size:.75rem;line-height:30px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.edit-layer-off .edit-emph,.edit-layer-off-speech .edit-seg,.edit-layer-off-sub .edit-sub{opacity:.35}
+/* an empty AI layer: a dark band over its row with the create button, then the send-and-paste box, in the middle */
+#captionTransport>#layerActions{grid-column:2;grid-row:2;position:relative;pointer-events:none;z-index:3}
+.layer-action{position:absolute;left:1px;right:1px;display:flex;align-items:center;justify-content:center;gap:var(--space-sm);background:oklch(12% .02 var(--h) / .86);border-top:1px solid var(--line);pointer-events:auto}
+.layer-action[data-role=emphasis]{top:64px;height:54px}.layer-action[data-role=english]{top:118px;height:54px}
+.layer-action[hidden]{display:none}
+.layer-action>span{font-size:.8125rem;color:var(--txt-sub);margin-right:var(--space-xs)}
+.layer-action button{min-height:36px;padding:0 14px;font-size:.8125rem}
 
 /* the story picker stays in the title on steps 3 and 4; step 4's preview drops its caption row like step 3 */
 #captionsTitle{display:flex;align-items:center;gap:var(--space-sm)}#captionsTitle>span::after{content:' ·'}
@@ -603,12 +615,13 @@ textarea{font-size:.75rem}
 #captionTransport .editor-zoom{margin-left:var(--space-sm)}
 #editor .caption-ai{display:none}
 #captionTransport .editor-controls{gap:var(--space-sm)}
-#captionTransport .edit-lane{height:112px}
-#captionTransport .edit-mark::before{height:104px}
+#captionTransport .edit-lane{height:176px}
+#captionTransport .edit-mark::before{height:168px}
 .edit-vid{top:24px;height:12px}
 #captionTransport .edit-seg{top:39px;height:24px}
 #captionTransport .edit-text{line-height:22px;font-size:.75rem}
-.edit-emph{top:65px;height:22px;line-height:20px}
+.edit-emph{top:76px;height:28px;line-height:26px}
+.edit-sub{top:132px;height:28px;line-height:26px}
 
 /* one top row (name, steps, save, menu) and a thin stage row; everything else goes to the work area */
 .app{grid-template-rows:auto minmax(0,1fr)}
@@ -930,7 +943,7 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <div class="stage-head"><div><h1 id="captionsTitle"><span>ซับ</span></h1><p>เลือกสิ่งที่จะขึ้นจอ แล้วลากวางตำแหน่ง</p></div></div>
 <div class="stage-body">
 
-<div id="captionDock" class="caption-dock"><div class="row caption-ai"><button id="emphasisCopy" type="button" data-icon="copy" title="คัดลอกซับที่ถอดไว้ไปให้ AI ตัดคำที่ควรเน้นออกมาเป็นชั้นคำเน้น">สร้างคำเน้น</button><button id="emphasisOpen" type="button" data-icon="paste" title="วางคำตอบจาก AI">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status toast" role="status" hidden></p></div><div id="captionTransport"><div class="row sub-timing"><button id="retime" type="button" data-icon="retry" title="ถอดเสียงใหม่แบบจับเวลาละเอียด แล้วใส่เวลาคำให้ท่อนเดิม (เรื่อง คำเน้น การตัดต่อ อยู่ครบ)">จัดเวลาคำใหม่</button><span class="caption">เลื่อนซับ</span><button id="subOffsetLess" type="button" class="icon-only" title="ซับขึ้นเร็วขึ้น 0.1 วิ" aria-label="ซับขึ้นเร็วขึ้น 0.1 วิ">−</button><output id="subOffsetValue">0.0 วิ</output><button id="subOffsetMore" type="button" class="icon-only" title="ซับขึ้นช้าลง 0.1 วิ" aria-label="ซับขึ้นช้าลง 0.1 วิ">+</button></div><div id="layerHeads" class="layer-heads"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
+<div id="captionDock" class="caption-dock"><div class="row caption-ai"><span id="captionRedo" class="row"></span><p id="emphasisStatus" class="badge plan-status toast" role="status" hidden></p></div><div id="captionTransport"><div class="row sub-timing"><button id="retime" type="button" data-icon="retry" title="ถอดเสียงใหม่แบบจับเวลาละเอียด แล้วใส่เวลาคำให้ท่อนเดิม (เรื่อง คำเน้น การตัดต่อ อยู่ครบ)">จัดเวลาคำใหม่</button><span class="caption">เลื่อนซับ</span><button id="subOffsetLess" type="button" class="icon-only" title="ซับขึ้นเร็วขึ้น 0.1 วิ" aria-label="ซับขึ้นเร็วขึ้น 0.1 วิ">−</button><output id="subOffsetValue">0.0 วิ</output><button id="subOffsetMore" type="button" class="icon-only" title="ซับขึ้นช้าลง 0.1 วิ" aria-label="ซับขึ้นช้าลง 0.1 วิ">+</button></div><div id="layerHeads" class="layer-heads"></div><div id="layerActions" class="layer-actions"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
 <div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><label class="frame-aspect"><span class="sr-only">ขนาดคลิป</span><select id="frameAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
 <aside class="text-inspector" aria-label="ปรับข้อความ"><div class="inspector-tabs" role="tablist"><button type="button" role="tab" data-tab="style" aria-selected="true">ปรับข้อความ</button><button type="button" role="tab" data-tab="qc" aria-selected="false">ตรวจซับ</button></div><div id="lineWords" class="line-words" hidden></div><div id="lineBox" class="line-box" hidden><div class="line-box-head"><label for="lineText">✏️ ข้อความท่อนนี้</label><span id="lineTime" class="caption"></span></div><textarea id="lineText" rows="2" maxlength="2000"></textarea><p id="lineEmph" class="caption line-emph" hidden></p><div class="line-box-actions"><button id="lineListen" type="button" data-icon="play">ฟัง</button><button id="lineSave" type="button" class="primary" data-icon="check" disabled>บันทึก</button></div><ul id="lineProblems" class="line-problems"></ul></div>
 <fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำเน้น</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">อังกฤษ</button></div></fieldset>

@@ -555,6 +555,19 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
             }
         }
     }
+    let translated = subtitle_lines(story, document);
+    if !translated.is_empty() {
+        skipped.retain(|role| role != "english");
+        let style = match &document["text_styles"]["english"] {
+            s @ Value::Object(_) => s.clone(),
+            _ => serde_json::json!({"font":"system","size":56,"color":"#ffffff","x":50,"y":78}),
+        };
+        if blend_of(&style) == mode {
+            for (start, end, text) in &translated {
+                ass.push_str(&event((width, height), 0, *start, *end, &style, text));
+            }
+        }
+    }
     for item in headlines(document).into_iter().filter(|_| mode == "normal") {
         ass.push_str(&event(
             (width, height),
@@ -789,6 +802,30 @@ pub fn speech_lines(story: &Story, document: &Value) -> (Vec<(u64, u64, String)>
         .map(str::to_owned)
         .collect();
     (out, skipped)
+}
+/// The step 4 subtitle layer (lines translated by a chat AI, by segment id), each line on screen for its
+/// pieces in output time; empty when the layer is not ticked or nothing was translated.
+pub fn subtitle_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)> {
+    let ticked = document["text_roles"]
+        .as_array()
+        .is_some_and(|r| r.iter().any(|v| v == "english"));
+    let mut out = Vec::new();
+    if !ticked {
+        return out;
+    }
+    let mut at = 0;
+    for p in &story.pieces {
+        let length = p.end_ms - p.start_ms;
+        if let Some(text) = document["subtitles"][p.segment.as_str()].as_str().map(str::trim).filter(|t| !t.is_empty()) {
+            match out.last_mut() {
+                // one line split into neighbouring pieces stays one subtitle
+                Some((_, end, last)) if *end == at && last == text => *end = at + length,
+                _ => out.push((at, at + length, text.to_owned())),
+            }
+        }
+        at += length;
+    }
+    out
 }
 /// Step 5's headline items that have text; each stays on screen for the whole clip.
 pub fn headlines(document: &Value) -> Vec<Value> {

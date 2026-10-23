@@ -138,7 +138,7 @@ const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('t
   const id=finding.id.slice('headline:'.length);draft.headline_items=headlineItems().map(h=>h.id===id?{...h,text}:h);save();textEditor.render();renderHeadline();
  }});
 const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,
- editLine:(line,text)=>{if(!editingAllowed)throw Error('not_editable');speech.edit(line.id,text);textQc.run(true);},listen:line=>speech.listen(line.id),caption:text=>textEditor.live('speech',text),emphasis:text=>textEditor.live('emphasis',text),
+ editLine:(line,text)=>{if(!editingAllowed)throw Error('not_editable');speech.edit(line.id,text);textQc.run(true);},listen:line=>speech.listen(line.id),caption:text=>textEditor.live('speech',text),emphasis:text=>textEditor.live('emphasis',text),subtitle:text=>textEditor.live('english',text),
  write:change=>{if(!editingAllowed)return;change(draft);save();render();},
  go:step=>document.querySelector(`[data-step="${step}"]`).click()});
 const shortClock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;

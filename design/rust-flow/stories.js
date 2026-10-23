@@ -48,7 +48,7 @@ export function checkPlan(text,lines){
 }
 export function parsePlan(text){return checkPlan(text).plan || null;}
 
-export function createStories({project,read,lines,write,go,editable,caption,emphasis=()=>{},editLine=()=>{},listen=()=>{}}){
+export function createStories({project,read,lines,write,go,editable,caption,emphasis=()=>{},subtitle=()=>{},editLine=()=>{},listen=()=>{}}){
  let queue=[];
  const video=$('editVideo');
  const reviews=()=>read().story_reviews || {};
@@ -264,10 +264,10 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  // the panel lists the words of the line picked on the speech layer
  function drawWords(){
   const lane=$('editTrack').querySelector('.edit-lane');if(!lane || !editView)return;
-  lane.querySelectorAll('.edit-emph,.edit-vid').forEach(n=>n.remove());
+  lane.querySelectorAll('.edit-emph,.edit-vid,.edit-sub').forEach(n=>n.remove());
   const textMode=lane.closest('#captionTransport'),emphasis=read().emphasis || {},z=editView.zoom,px=ms=>ms/1000*z;
   if(textMode){
-   const roles=read().text_roles || [];lane.classList.toggle('edit-layer-off',!roles.includes('emphasis'));lane.classList.toggle('edit-layer-off-speech',!roles.includes('speech'));
+   const roles=read().text_roles || [],subs=read().subtitles || {};lane.classList.toggle('edit-layer-off',!roles.includes('emphasis'));lane.classList.toggle('edit-layer-off-sub',!roles.includes('english'));lane.classList.toggle('edit-layer-off-speech',!roles.includes('speech'));
    for(const {line,kept,at} of editView.boxes){
     const span=kept || line;
     const bar=document.createElement('div');bar.className='edit-vid';bar.style.left=px(at)+'px';bar.style.width=Math.max(4,px(span.end_ms-span.start_ms)-2)+'px';lane.append(bar);
@@ -278,7 +278,11 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
      clip.style.left=px(at+first-span.start_ms)+'px';clip.style.width=Math.max(24,px(span.end_ms-first)-2)+'px';
      clip.onclick=e=>{e.stopPropagation();wordLine=line;drawWords();};lane.append(clip);
     }
+    const said=subs[line.segment_id];
+    if(said){const sub=document.createElement('div');sub.className='edit-sub';sub.textContent=said;sub.title=said;sub.lang=read().subtitle_language || 'en';
+     sub.style.left=px(at)+'px';sub.style.width=Math.max(24,px(span.end_ms-span.start_ms)-2)+'px';lane.append(sub);}
    }
+   drawLayerActions();
    for(const box of lane.querySelectorAll('.edit-seg'))box.dataset.lineSelected=String(box.dataset.id===wordLine?.segment_id || box.title===wordLine?.text);
   }
   const host=$('lineWords');if(!host)return;
@@ -291,9 +295,9 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  // track heads for the step 4 layers; the ticks are the "on screen" choices
  function drawHeads(){
   const heads=$('layerHeads');if(!heads)return;
-  const roles=read().text_roles || [],rows=[['วิดีโอ',null,22],['คำพูด','speech',38],['คำเน้น','emphasis',64],['อังกฤษ','english',90]];
-  heads.replaceChildren(...rows.map(([label,role,top])=>{
-   const row=document.createElement('div');row.className='layer-head';row.style.top=top+'px';row.style.height=(role==='english'?22:role?26:16)+'px';
+  const roles=read().text_roles || [],rows=[['วิดีโอ',null,22,16],['คำพูด','speech',38,26],['คำเน้น','emphasis',64,54],['ซับไตเติ้ล','english',118,54]];
+  heads.replaceChildren(...rows.map(([label,role,top,height])=>{
+   const row=document.createElement('div');row.className='layer-head';row.style.top=top+'px';row.style.height=height+'px';
    if(role){
     const tick=document.createElement('input');tick.type='checkbox';tick.checked=roles.includes(role);tick.disabled=!editable();tick.title='แสดงบนจอ';tick.setAttribute('aria-label',`แสดง${label}บนจอ`);
     tick.onchange=()=>{const box=document.querySelector(`[data-role-option="${role}"]`);if(box){box.checked=tick.checked;box.dispatchEvent(new Event('change'));}};
@@ -502,10 +506,11 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    if(!next)video.pause();else if(next.start_ms>now+40 || next.start_ms<line.start_ms)video.currentTime=next.start_ms/1000;
   }
   const story=current(),said=story&&(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept).find(l=>now>=l.start_ms&&now<l.end_ms);
-  const words=said?.words || [],wordByWord=(read().text_styles?.speech?.enter ?? 'words')==='words'&&words.length;
+  const words=said?.words || [],wordByWord=read().text_styles?.speech?.enter==='words'&&words.length;
   // while a line plays, an empty box stays empty (a no-break space) instead of falling back to the sample text
   caption(!said?'':(words.length?speechText(said,now,wordByWord):said.text) || '\u00a0');
   emphasis(said?emphasisNow(said,now) || '\u00a0':'');
+  subtitle(said?(read().subtitles || {})[said.segment_id] || '\u00a0':'');
   if(said&&said.segment_id!==wordLine?.segment_id&&!video.paused)showWords(said);
   const head=$('editHead');
   if(head&&editView){
@@ -605,24 +610,75 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   if(!words)return {error:'คำตอบไม่ตรงกับท่อนหรือคำที่ส่งไป ลองให้ AI ตอบใหม่'};
   return {picked,note:`เน้นคำใน ${Object.keys(picked).length} ท่อน`};
  }
- function checkEmphasisUi(){const c=checkEmphasis();$('emphasisCheck').textContent=c.picked?c.note:c.error;$('emphasisCheck').dataset.state=c.picked?'ok':'error';$('emphasisCheck').hidden=!$('emphasisCheck').textContent;$('emphasisApply').disabled=!c.picked || !editable();}
- $('emphasisCopy').onclick=async()=>{
-  try{await navigator.clipboard.writeText(emphasisText());$('emphasisStatus').textContent=`คัดลอก ${keptLines().length} ท่อนแล้ว วางในแชท AI ได้เลย`;$('emphasisStatus').dataset.state='ok';}
-  catch(_){$('emphasisStatus').textContent='คัดลอกไม่ได้ ลองกดอีกครั้ง';$('emphasisStatus').dataset.state='error';}
-  $('emphasisStatus').hidden=false;
+ // step 4 makes two layers with a chat AI: emphasis words, and subtitles translated to English. An empty layer
+ // shows its "create" button in the middle of its row; pressing it opens the send-and-paste box there
+ function subtitleText(){
+  const packet={schema_version:2,step:'subtitles',project_id:project,language:'en',
+   lines:keptLines().map(({line})=>({id:line.segment_id,text:line.text})),
+   response_schema:{subtitles:{'<line id>':'English subtitle'}}};
+  return ['แปลซับคลิปสั้นเป็นภาษาอังกฤษ ทีละท่อน',
+   'กติกา:',
+   '1. แปลทุกท่อนที่ส่งไป ท่อนละ 1 ประโยคสั้นๆ อ่านทันบนจอ ไม่เกิน 60 ตัวอักษร',
+   '2. แปลตามความหมาย เป็นภาษาพูดที่เป็นธรรมชาติ ไม่ต้องแปลคำเติม เช่น อ่ะ อืม เออ',
+   '3. ชื่อเฉพาะและชื่อแบรนด์เขียนแบบที่คนพูดอังกฤษใช้',
+   '4. อ้างท่อนด้วย id ที่ให้',
+   'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย',''].join('\n')+'\n'+JSON.stringify(packet,null,1);
+ }
+ function checkSubtitles(){
+  const raw=$('emphasisAnswer').value.trim();if(!raw)return {error:''};
+  const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
+  if(value?.response_schema)return {error:'นี่คือข้อความที่ส่งให้ AI ยังไม่ใช่คำตอบ วางในแชท AI ก่อน แล้วคัดลอกคำตอบของ AI กลับมา'};
+  const answer=value?.subtitles && typeof value.subtitles==='object'?value.subtitles:value;
+  if(!answer || typeof answer!=='object' || Array.isArray(answer))return {error:'ไม่พบ subtitles ในคำตอบ'};
+  const sent=new Set(keptLines().map(({line})=>line.segment_id)),picked={};
+  for(const [id,text] of Object.entries(answer))if(sent.has(id)&&typeof text==='string'&&text.trim())picked[id]=text.trim().slice(0,200);
+  const n=Object.keys(picked).length;if(!n)return {error:'คำตอบไม่ตรงกับท่อนที่ส่งไป ลองให้ AI ตอบใหม่'};
+  const missing=sent.size-n;
+  return {picked,note:`แปลแล้ว ${n} ท่อน`+(missing?` · ขาด ${missing} ท่อน`:'')};
+ }
+ const rounds={
+  emphasis:{make:'สร้างคำเน้น',title:'วางคำตอบคำเน้นจาก AI',text:emphasisText,check:checkEmphasis,file:'editorkrab-คำเน้น.txt',
+   has:()=>Object.keys(read().emphasis || {}).length>0,
+   // the answer covers every line that was sent: lines it left out lose their old emphasis (the AI now picks
+   // only the stand-out lines); lines that were not sent keep theirs
+   apply:c=>{const sent=new Set(keptLines().map(({line})=>line.segment_id));
+    write(d=>{const all=Object.fromEntries(Object.entries(d.emphasis || {}).filter(([id])=>!sent.has(id)));d.emphasis={...all,...c.picked};});}},
+  english:{make:'สร้างซับไตเติ้ล',title:'วางคำตอบซับไตเติ้ลจาก AI',text:subtitleText,check:checkSubtitles,file:'editorkrab-ซับไตเติ้ล.txt',
+   has:()=>Object.keys(read().subtitles || {}).length>0,
+   apply:c=>write(d=>{d.subtitles={...(d.subtitles || {}),...c.picked};d.subtitle_language='en';
+    if(!(d.text_roles || []).includes('english'))d.text_roles=[...(d.text_roles || []),'english'];})}
  };
- $('emphasisOpen').onclick=()=>{$('emphasisAnswer').value='';checkEmphasisUi();$('emphasisDialog').showModal();};
+ let round='emphasis';const opened={emphasis:false,english:false};
+ function say(text,ok){$('emphasisStatus').textContent=text;$('emphasisStatus').dataset.state=ok?'ok':'error';$('emphasisStatus').hidden=false;}
+ function action(label,icon,run,needsEdit){const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.icon=icon;b.onclick=run;if(needsEdit)b.disabled=!editable();return b;}
+ async function copyRound(key){try{await navigator.clipboard.writeText(rounds[key].text());say(`คัดลอก ${keptLines().length} ท่อนแล้ว วางในแชท AI ได้เลย`,true);}catch(_){say('คัดลอกไม่ได้ ลองกดอีกครั้ง',false);}}
+ function downloadRound(key){const url=URL.createObjectURL(new Blob([rounds[key].text()],{type:'text/plain;charset=utf-8'}));
+  const a=document.createElement('a');a.href=url;a.download=rounds[key].file;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+ function openRound(key){round=key;$('emphasisTitle').textContent=rounds[key].title;$('emphasisAnswer').value='';checkEmphasisUi();$('emphasisDialog').showModal();}
+ function drawLayerActions(){
+  const host=$('layerActions');if(!host)return;
+  const inStep4=!!$('editTrack').closest('#captionTransport')&&!!model();
+  host.replaceChildren(...Object.entries(rounds).map(([key,r])=>{
+   const slot=document.createElement('div');slot.className='layer-action';slot.dataset.role=key;
+   slot.hidden=!inStep4 || (r.has()&&!opened[key]);
+   if(!opened[key]){const make=action(r.make,'plus',()=>{opened[key]=true;drawLayerActions();},true);make.classList.add('primary');slot.append(make);}
+   else{const label=document.createElement('span');label.textContent='ส่งข้อความให้ AI';
+    slot.append(label,action('คัดลอกให้ AI','copy',()=>copyRound(key)),action('ดาวน์โหลดไฟล์','download',()=>downloadRound(key)),
+     action('วางคำตอบ','paste',()=>openRound(key),true),action('ปิด','x',()=>{opened[key]=false;drawLayerActions();}));}
+   return slot;}));
+  // a layer already made can be made again from the play row
+  const redo=$('captionRedo');
+  if(redo)redo.replaceChildren(...Object.entries(rounds).filter(([key,r])=>inStep4&&r.has()&&!opened[key])
+   .map(([key,r])=>action(r.make+'ใหม่','retry',()=>{opened[key]=true;drawLayerActions();},true)));
+ }
+ function checkEmphasisUi(){const c=rounds[round].check();$('emphasisCheck').textContent=c.picked?c.note:c.error;$('emphasisCheck').dataset.state=c.picked?'ok':'error';$('emphasisCheck').hidden=!$('emphasisCheck').textContent;$('emphasisApply').disabled=!c.picked || !editable();}
  $('emphasisAnswer').oninput=checkEmphasisUi;
  $('emphasisApply').onclick=event=>{
-  const c=checkEmphasis();if(!c.picked){event.preventDefault();return;}
-  // the answer covers every line that was sent: lines it left out lose their old emphasis (the AI now picks
-  // only the stand-out lines); lines that were not sent keep theirs
-  const sent=new Set(keptLines().map(({line})=>line.segment_id));
-  write(d=>{const all=Object.fromEntries(Object.entries(d.emphasis || {}).filter(([id])=>!sent.has(id)));d.emphasis={...all,...c.picked};});
-  $('emphasisStatus').textContent=c.note;$('emphasisStatus').dataset.state='ok';$('emphasisStatus').hidden=false;
+  const c=rounds[round].check();if(!c.picked){event.preventDefault();return;}
+  opened[round]=false;rounds[round].apply(c);say(c.note,true);drawLayerActions();
  };
  // leaving step 3: stop the preview and take its line off the subtitle frame
- function stop(){queue=[];if(!video.paused)video.pause();caption('');emphasis('');
+ function stop(){queue=[];if(!video.paused)video.pause();caption('');emphasis('');subtitle('');
   const size=document.querySelector('.frame-aspect'),home=document.querySelector('.preview-caption');if(size&&home&&size.parentElement!==home)home.append(size);}
  // per video: how many stories came from it, and how many are arranged with the AI and reviewed
  function summary(){

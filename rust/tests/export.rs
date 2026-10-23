@@ -261,6 +261,28 @@ fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
 }
 
 #[test]
+fn translated_subtitles_show_for_their_pieces_only_when_ticked() {
+    let piece = |segment: &str, start_ms, end_ms| Piece {
+        source: 0, start_ms, end_ms, text: "ไทย".into(), words: vec![], timed: false, segment: segment.into(),
+    };
+    let story = editorkrab::export::Story {
+        id: "s".into(), title: String::new(), sources: vec!["a.mp4".into()],
+        pieces: vec![piece("a1", 0, 1000), piece("a1", 1000, 1500), piece("a2", 3000, 4000), piece("a3", 5000, 5500)],
+    };
+    let doc = json!({"text_roles": ["english"], "subtitles": {"a1": "Hello there", "a2": "Second line"}});
+    // a line cut into neighbouring pieces stays one subtitle; a line with no translation shows nothing
+    assert_eq!(
+        editorkrab::export::subtitle_lines(&story, &doc),
+        vec![(0, 1500, "Hello there".to_owned()), (1500, 2500, "Second line".to_owned())]
+    );
+    let (ass, skipped) = subtitles(&story, &doc);
+    assert!(ass.contains("Hello there") && ass.contains("Second line"), "{ass}");
+    assert!(skipped.is_empty(), "{skipped:?}");
+    let off = json!({"text_roles": [], "subtitles": {"a1": "Hello there"}});
+    assert!(editorkrab::export::subtitle_lines(&story, &off).is_empty());
+}
+
+#[test]
 fn blurred_shadow_goes_under_the_text_and_blend_layers_get_their_own_file() {
     let mut doc = document(json!({"stories": [{"segment_ids": ["a1"]}]}));
     let story = &plan(&doc, &jobs()).unwrap()[0];
