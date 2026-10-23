@@ -148,7 +148,7 @@ impl Store {
 
     /// Deleting a project on the project screen only hides it: its draft, videos and
     /// transcripts stay, so "undo" brings it back whole.
-    pub fn hide(&self, project: &str, hidden: bool) -> Result<(), Error> {
+    pub fn hide(&mut self, project: &str, hidden: bool) -> Result<(), Error> {
         if self.read(project)?.is_none() {
             return Err(Error::NotFound);
         }
@@ -158,6 +158,10 @@ impl Store {
             "DELETE FROM hidden_projects WHERE project_id=?1"
         };
         self.0.execute(sql, [project])?;
+        // a deleted project's transcription stops (P'Ohm 23 Oct); undo brings the project back, not the jobs
+        if hidden {
+            self.cancel_project_jobs(project)?;
+        }
         Ok(())
     }
 
@@ -381,7 +385,10 @@ mod tests {
         assert_eq!(projects[0]["step"], 4);
         assert_eq!(projects[1]["title"], "ใหม่");
         assert_eq!(projects[1]["cover"], Value::Null);
+        let waiting = |store: &Store| store.list_jobs("old").unwrap().iter().filter(|j| j.status == "queued").count();
+        assert!(waiting(&store) > 0, "saving videos queues their probe jobs");
         store.hide("old", true).unwrap();
+        assert_eq!(waiting(&store), 0, "a deleted project's jobs stop");
         assert_eq!(store.list().unwrap().len(), 1);
         assert!(store.read("old").unwrap().is_some(), "a deleted project keeps its draft");
         store.hide("old", false).unwrap();
