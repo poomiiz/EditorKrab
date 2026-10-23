@@ -537,13 +537,14 @@ textarea{font-size:.75rem}
 .file-stages{grid-area:stages;align-self:start;list-style:none;margin:var(--space-sm) 0 0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-xs);max-width:520px}
 .file-stages li{display:grid;gap:4px;font-size:.75rem;line-height:1.3;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .file-stages li::before{content:"";height:4px;border-radius:2px;background:var(--line)}
-.file-stages li[data-part=true]{color:var(--txt-sub)}.file-stages li[data-part=true]::before{background:linear-gradient(90deg,var(--warn) 50%,var(--line) 50%)}
+.file-stages li[data-part=true]{color:var(--txt-sub)}.file-stages li[data-part=true]::before{background:linear-gradient(90deg,var(--warn) var(--fill,50%),var(--line) var(--fill,50%))}
 .file-stages li[data-done=true]{color:var(--txt-sub)}.file-stages li[data-done=true]::before{background:var(--ok)}
 .file-card .file-progress{display:none}
 .file-percent{grid-area:percent;margin:0;display:grid;justify-items:end;gap:2px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .file-percent b{font-size:1.125rem;font-weight:600;color:var(--txt)}.file-percent span{font-size:.8125rem;color:var(--mut)}
 #fileList>li.file-card .source-remove{grid-column:auto;grid-area:remove;min-width:32px;min-height:32px;padding:0;border-color:transparent;background:none;color:var(--mut)}
 #fileList>li.file-card .source-remove:hover:not(:disabled){color:var(--danger);background:var(--sunken)}
+.transcribe-percent{margin:-6px 0 0;font-variant-numeric:tabular-nums}
 /* no video yet: the drop area already says what to do */
 .stage:not([data-has-files]) .library-head,.stage:not([data-has-files]) #empty{display:none}
 @media (max-width:760px){
@@ -890,7 +891,7 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <section class="transcript-panel" aria-labelledby="transcriptTitle">
 <div class="row"><h2 id="transcriptTitle">ถอดเสียงเป็นข้อความ</h2><span id="transcribeState" class="badge" role="status">กำลังตรวจ</span></div>
 <p id="transcribeHint" class="caption" role="status">กำลังอ่านการตั้งค่า</p>
-<progress id="transcribeProgress" aria-label="ช่วงเสียงที่ถอดสำเร็จ" hidden></progress>
+<progress id="transcribeProgress" aria-label="ถอดเสียงไปแล้ว" max="100" hidden></progress><p id="transcribePercent" class="caption transcribe-percent" aria-live="off" hidden></p>
 <p id="transcribeError" class="field-warning" role="alert" hidden></p>
 <div id="asrDownload" class="asr-download" hidden><p id="asrDownloadNote" class="caption">ใช้ครั้งแรกต้องดาวน์โหลดตัวถอดเสียงก่อน</p><div class="row"><button id="asrDownloadStart" type="button" data-icon="download">ดาวน์โหลดตัวถอดเสียง</button><button id="asrDownloadCancel" type="button" hidden data-icon="x">ยกเลิก</button></div><progress id="asrDownloadProgress" max="1" value="0" aria-label="ดาวน์โหลดตัวถอดเสียง" hidden></progress><p id="asrDownloadRate" class="caption" role="status" hidden></p><p id="asrDownloadError" class="field-warning" role="alert" hidden></p></div>
 <div id="asrGpu" class="asr-download" hidden><p id="asrGpuNote" class="caption"></p><div id="asrGpuButtons" class="row"><button id="asrGpuStart" type="button" data-icon="gpu">ดาวน์โหลดตัวเร่งการ์ดจอ</button><button id="asrGpuCancel" type="button" hidden data-icon="x">ยกเลิก</button></div><progress id="asrGpuProgress" max="1" value="0" aria-label="ดาวน์โหลดตัวเร่งการ์ดจอ" hidden></progress><p id="asrGpuError" class="field-warning" role="alert" hidden></p><label id="asrGpuForceLabel" class="asr-gpu-force" hidden><input id="asrGpuForce" type="checkbox">ใช้ CPU อย่างเดียว</label></div>

@@ -213,9 +213,12 @@ $('removeSelected').onclick=()=>{if(!editingAllowed||!picked.size)return;draft.f
 // a video's progress: transcribed, split into stories, each story arranged and reviewed, clips made (20% each)
 function progressOf(file){
   const s=stories.summary().get(file.source_id) || {stories:0,refined:0,reviewed:0},part=n=>s.stories?n/s.stories:0;
-  const stages=[['ถอดเสียง',file.source_id&&speech.fileDone(file)?1:0],['แบ่งเรื่อง',s.stories?1:0],['เรียบเรียง',part(s.refined)],['ตรวจ',part(s.reviewed)],['สร้างคลิป',s.stories&&exporter?.done()?1:0]];
+  const stages=[['ถอดเสียง',file.source_id?(speech.fileDone(file)?1:speech.fraction(file)):0],['แบ่งเรื่อง',s.stories?1:0],['เรียบเรียง',part(s.refined)],['ตรวจ',part(s.reviewed)],['สร้างคลิป',s.stories&&exporter?.done()?1:0]];
   return {stories:s.stories,stages,percent:Math.round(stages.reduce((n,[,v])=>n+v,0)/stages.length*100)};
 }
+// the card's transcribe share moves while a piece runs
+let wasRunning=false;
+setInterval(()=>{const now=speech.running();if(now||wasRunning)queueFilesRender();wasRunning=now;},1000);
 function renderFiles() {
   let duration=0,ready=0;
   for(const key of [...picked])if(!draft.files.some(f=>fileKey(f)===key))picked.delete(key);
@@ -248,7 +251,7 @@ function renderFiles() {
     info.textContent=`${(file.size/1048576).toFixed(1)} MB · ${info.textContent}`;
     li.append(info);
     const facts=progressOf(file),stages=document.createElement('ol');stages.className='file-stages';stages.setAttribute('aria-label','ทำถึงขั้นไหน');
-    for(const [label,value] of facts.stages){const dot=document.createElement('li');dot.dataset.done=String(value>=1);dot.dataset.part=String(value>0&&value<1);dot.title=`${label}${value>0&&value<1?' (บางเรื่อง)':''}`;dot.textContent=label;stages.append(dot);}
+    for(const [label,value] of facts.stages){const dot=document.createElement('li');dot.dataset.done=String(value>=1);dot.dataset.part=String(value>0&&value<1);dot.style.setProperty('--fill',`${Math.round(value*100)}%`);dot.title=`${label}${value>0&&value<1?' (บางเรื่อง)':''}`;dot.textContent=label;stages.append(dot);}
     const percent=document.createElement('p');percent.className='file-percent';
     const share=document.createElement('b');share.textContent=`${facts.percent}%`;
     const count=document.createElement('span');count.textContent=facts.stories?`${facts.stories} เรื่อง`:'ยังไม่แบ่งเรื่อง';

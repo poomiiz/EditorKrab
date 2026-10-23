@@ -103,7 +103,9 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   const phases={verifying:'กำลังตรวจไฟล์',extracting:'กำลังเตรียมเสียง',transcribing:'กำลังถอดเสียง',cache:'กำลังเปิดข้อความที่ถอดไว้'};
   $('transcribeState').textContent=busy?'เตรียมงาน':running.length?'กำลังทำ':complete()?'ถอดครบแล้ว':configuration==='loading'?'กำลังตรวจ':configuration==='ready'?(retry.length?'ถอดไม่สำเร็จ':'พร้อม'):'ยังใช้ไม่ได้';
   $('transcribeHint').textContent=configuration==='missing'?'ดาวน์โหลดตัวถอดเสียงก่อนใช้ครั้งแรก':configuration==='error'?'ตรวจตัวถอดเสียงไม่ได้ กดลองอีกครั้ง':configuration==='loading'?'กำลังเตรียม':!read().files.length?'เลือกไฟล์ที่มีเสียงก่อน':!files.length?'รออ่านไฟล์ และตรวจว่ามีเสียง':!ready?'รอให้บันทึกงานสำเร็จก่อนเริ่ม':running.length?(phases[running.find(j=>j.status==='running')?.step] || 'รอคิว')+` · สำเร็จ ${completed}/${all.length} ช่วง`:all.length?`สำเร็จ ${completed}/${all.length} ช่วง`+(retry.length?` · ไม่สำเร็จ ${retry.length} ช่วง กดลองใหม่ได้`:'')+(waiting?' · มีไฟล์ที่ยังตรวจไม่สำเร็จ':'')+(silent?` · ข้าม ${silent} ไฟล์ไม่มีเสียง`:''):'เลือกไฟล์ที่มีเสียงก่อน';
-  const progress=$('transcribeProgress');progress.hidden=!all.length&&!busy;if(all.length){progress.max=all.length;progress.value=completed;}else progress.removeAttribute('value');
+  const progress=$('transcribeProgress'),share=Math.round(fractionAll()*100);progress.hidden=!all.length&&!busy;
+  if(all.length){progress.max=100;progress.value=share;}else progress.removeAttribute('value');
+  $('transcribePercent').hidden=progress.hidden;$('transcribePercent').textContent=all.length?(completed===all.length?'100%':`${share}%`+(running.length?' (ประมาณจากความเร็วเครื่อง)':'')):'';
   const selected=chosen;if(!files.some(f=>f.source_id===chosen))chosen=files[0]?.source_id || '';
   if(selected!==chosen){page=0;rowsKey='';clearAudio();}
   const optionsKey=JSON.stringify(files.map(f=>[f.source_id,f.name]));if($('transcriptFile').dataset.options!==optionsKey){$('transcriptFile').replaceChildren(...files.map(f=>{const option=document.createElement('option');option.value=f.source_id;option.textContent=f.name;return option;}));$('transcriptFile').dataset.options=optionsKey;}
@@ -226,5 +228,26 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  }
  // one video's speech is all transcribed
  function fileDone(file){const list=chunks(file);return list.length>0&&list.every(j=>j?.status==='succeeded');}
- return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit,fileDone,pieces};
+ // How far a video is, 0-1. Finished pieces count whole. The engine answers a piece only when the whole piece is
+ // done, so the piece being worked on is estimated from this computer's earlier pieces: about 8 s to check the
+ // file, take out the audio and load the model, then audio seconds at the speed those pieces decoded. The estimate
+ // stops at 95% until the piece's answer arrives.
+ const SETUP=8;
+ function speed(){
+  const rates=[...jobs.values()].filter(j=>j.task.kind==='transcribe'&&j.status==='succeeded'&&!j.result?.cache_hit&&j.finished_at>j.started_at)
+   .map(j=>(j.task.context.end_ms-j.task.context.start_ms)/1000/Math.max(1,j.finished_at-j.started_at-SETUP)).sort((a,b)=>a-b);
+  return rates.length?rates[Math.floor(rates.length/2)]:4;
+ }
+ function fraction(file){
+  const list=chunks(file),length=list.length&&ranges(file).at(-1)[1];if(!length)return 0;
+  const rate=speed(),now=Date.now()/1000;let done=0;
+  ranges(file).forEach(([start,end],i)=>{const j=list[i],size=end-start;if(j?.status==='succeeded')done+=size;
+   else if(j?.status==='running'&&j.started_at)done+=Math.min(0.95,Math.max(0,now-j.started_at)/(SETUP+size/1000/rate))*size;});
+  return Math.min(1,done/length);
+ }
+ function fractionAll(){const files=eligible(),total=files.reduce((n,f)=>n+(probe(f)?.result?.duration_s||0),0);
+  return total?files.reduce((n,f)=>n+fraction(f)*(probe(f)?.result?.duration_s||0),0)/total:0;}
+ // while a piece runs the estimate moves, so the bar is redrawn every second
+ setInterval(()=>{if(active().some(j=>j.status==='running'))refresh();},1000);
+ return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit,fileDone,fraction,running:()=>active().some(j=>j.status==='running'),pieces};
 }
