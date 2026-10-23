@@ -190,6 +190,43 @@ fn trim(t: &Value, start: u64, end: u64) -> (u64, u64) {
     (from, to.clamp(from + SHORTEST, (end + REACH).max(from + SHORTEST)))
 }
 
+/// Quiet stretches of the video at `path`, as step 4 stored them (`quiet` by source id, from pauses.rs).
+fn quiet_of(document: &Value, path: &std::path::Path) -> Vec<(u64, u64)> {
+    let id = document["files"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|f| f["path"].as_str().is_some_and(|p| std::path::Path::new(p) == path))
+        .and_then(|f| f["source_id"].as_str());
+    id.and_then(|id| document["quiet"][id].as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|s| Some((s[0].as_u64()?, s[1].as_u64()?)))
+        .collect()
+}
+/// Dead air: a quiet stretch a line starts or ends in is cut, leaving PAD_MS of it; an edge the person dragged
+/// in step 3 stays where they put it. Matches `unquiet` in stories.js.
+pub fn unquiet(quiet: &[(u64, u64)], trim: &Value, start: u64, end: u64) -> (u64, u64) {
+    const PAD_MS: u64 = crate::pauses::WORD_PAD_MS;
+    const SHORTEST: u64 = 200;
+    let (mut a, mut b) = (start, end);
+    if !trim["start_ms"].is_number() {
+        for &(s, e) in quiet {
+            if s <= a + PAD_MS && e > a {
+                a = a.max(e.saturating_sub(PAD_MS));
+            }
+        }
+    }
+    if !trim["end_ms"].is_number() {
+        for &(s, e) in quiet.iter().rev() {
+            if s > a && s < b && e + PAD_MS >= b {
+                b = b.min(s + PAD_MS);
+            }
+        }
+    }
+    if b >= a + SHORTEST { (a, b) } else { (start, end) }
+}
+
 /// The stories to render, in plan order. Any unknown segment is an error, never a silent skip.
 pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
     let raw = document["plan"].as_str().unwrap_or("").trim();
@@ -229,6 +266,8 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
             };
             // step 3 can move a line's in/out points (up to 2 s past it); only words inside the new span are shown
             let (start_ms, end_ms) = trim(&story["trims"][id], s.start_ms, s.end_ms);
+            let quiet = quiet_of(document, &s.path);
+            let (start_ms, end_ms) = unquiet(&quiet, &story["trims"][id], start_ms, end_ms);
             pieces.push(Piece {
                 source,
                 start_ms,
@@ -824,10 +863,13 @@ pub fn join_short_lines(pieces: &[Piece]) -> Vec<Piece> {
     let mut out: Vec<Piece> = Vec::new();
     for p in pieces {
         match out.last_mut() {
-            Some(last) if last.source == p.source && last.end_ms == p.start_ms && short(last) => {
+            // the next piece of the same video; the dead air between them is cut, so the joined piece is
+            // as long as the two together and the second one's words move up by the gap
+            Some(last) if last.source == p.source && p.start_ms >= last.end_ms && short(last) => {
+                let gap = p.start_ms - last.end_ms;
                 last.text = format!("{}{}", last.text.trim_end(), p.text.trim_start());
-                last.words.extend(p.words.iter().cloned());
-                last.end_ms = p.end_ms;
+                last.words.extend(p.words.iter().map(|(w, from, to)| (w.clone(), from - gap, to - gap)));
+                last.end_ms += p.end_ms - p.start_ms;
                 last.timed &= p.timed;
             }
             _ => out.push(p.clone()),

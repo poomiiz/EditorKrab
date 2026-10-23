@@ -271,16 +271,30 @@ fn a_one_word_line_before_a_pause_reads_with_the_line_it_runs_into() {
             piece("s8", 31420, 32840, "ว่าเรื่องนี้เป็นปัญหา"),
             piece("s9", 32840, 37040, "การ"),
             piece("s10", 37040, 39200, "ตอบคำถามไม่ได้"),
-            // a short line with a gap after it stays as it is
+            // a short line joins the next line of its video even across a gap (the dead air there is cut)
             piece("s11", 40000, 40500, "คือ"),
             piece("s12", 41000, 42000, "ฉันน่ะคิด"),
         ],
     };
     let (lines, _) = editorkrab::export::speech_lines(&story, &json!({"text_roles": ["speech"]}));
     let texts: Vec<&str> = lines.iter().map(|l| l.2.as_str()).collect();
-    assert_eq!(texts, ["ว่าเรื่องนี้เป็นปัญหา", "การตอบคำถามไม่ได้", "คือ", "ฉันน่ะคิด"], "{lines:?}");
+    assert_eq!(texts, ["ว่าเรื่องนี้เป็นปัญหา", "การตอบคำถามไม่ได้", "คือฉันน่ะคิด"], "{lines:?}");
     // the joined line runs from "การ" to the end of the next line
     assert_eq!((lines[1].0, lines[1].1), (1420, 7780));
+}
+
+#[test]
+fn dead_air_at_a_lines_ends_is_cut_unless_that_edge_was_dragged() {
+    use editorkrab::export::unquiet;
+    // "การ" runs 32.84-37.04 s but she stops talking at 33.2 s; another quiet stretch ends just before the line
+    let quiet = [(30000, 32800), (33200, 37000)];
+    assert_eq!(unquiet(&quiet, &json!(null), 32840, 37040), (32840, 33300));
+    // a line that starts inside quiet starts PAD before that quiet ends, and ends PAD into the next one
+    assert_eq!(unquiet(&quiet, &json!(null), 31000, 34000), (32700, 33300));
+    // edges the person moved stay where they put them
+    assert_eq!(unquiet(&quiet, &json!({"end_ms": 37040}), 32840, 37040), (32840, 37040));
+    // a line that is all quiet is left whole, never cut to nothing
+    assert_eq!(unquiet(&[(0, 10000)], &json!(null), 2000, 3000), (2000, 3000));
 }
 
 #[test]

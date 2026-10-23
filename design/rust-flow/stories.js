@@ -61,13 +61,24 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const end=Math.max(start+SHORTEST,Math.min(n(trim?.end_ms) ?? line.end_ms,line.end_ms+REACH));
   return {start_ms:start,end_ms:end};
  }
+ // dead air: a quiet stretch a line starts or ends in is cut, leaving PAD ms of it; an edge the person dragged
+ // stays where they put it. Quiet stretches come from the audio (pauses.rs) and are kept per video in the
+ // draft, so the export cuts the same (unquiet in export.rs)
+ const PAD=100;
+ function unquiet(line,span,trim){
+  const spans=(read().quiet || {})[line.source_id];if(!Array.isArray(spans))return span;
+  let a=span.start_ms,b=span.end_ms;
+  if(!Number.isFinite(trim?.start_ms))for(const [s,e] of spans)if(s<=a+PAD&&e>a)a=Math.max(a,e-PAD);
+  if(!Number.isFinite(trim?.end_ms))for(const [s,e] of [...spans].reverse())if(s>a&&s<b&&e>=b-PAD)b=Math.min(b,s+PAD);
+  return b-a>=SHORTEST?{start_ms:a,end_ms:b}:span;
+ }
  function model(){
   const plan=parsePlan(read().plan);if(!plan)return null;
   const all=lines(),bySegment=new Map(all.map(l=>[l.segment_id,l]));
   const stories=plan.stories.map((s,index)=>{
    const trims=s?.trims && typeof s.trims==='object' ? s.trims : {};
    const kept=(Array.isArray(s?.segment_ids)?s.segment_ids:[]).map(id=>bySegment.get(id)).filter(Boolean)
-    .map(l=>({...l,from_ms:l.start_ms,to_ms:l.end_ms,...trimmed(l,trims[l.segment_id])}));
+    .map(l=>({...l,from_ms:l.start_ms,to_ms:l.end_ms,...unquiet(l,trimmed(l,trims[l.segment_id]),trims[l.segment_id])}));
    const counts=new Map();for(const l of kept)counts.set(l.source_id,(counts.get(l.source_id) || 0)+1);
    const {id,title,summary}=storyFields(s,index);
    return {index,id,title,summary,refined:Array.isArray(s?.round1_ids),
@@ -524,8 +535,9 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   // export does the same: join_short_lines in export.rs)
   const list=story?(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept):[],i=said?list.indexOf(said):-1;
   const short=l=>!!l&&!/\s/.test((l.text || '').trim())&&[...(l.text || '').trim()].length<=SHORT;
-  const before=i>0&&short(list[i-1])&&list[i-1].end_ms===said.start_ms?shown(list[i-1]):'';
-  const after=i>=0&&short(said)&&list[i+1]?.start_ms===said.end_ms?shown(list[i+1]):'';
+  const next=(a,b)=>!!a&&!!b&&a.source_id===b.source_id&&b.start_ms>=a.end_ms;
+  const before=i>0&&short(list[i-1])&&next(list[i-1],said)?shown(list[i-1]):'';
+  const after=i>=0&&short(said)&&next(said,list[i+1])?shown(list[i+1]):'';
   caption(!said?'':(before+shown(said)+after) || '\u00a0');
   const held=story?emphasisAt(story,said,now):'';
   emphasis(held || (said?'\u00a0':''));
@@ -581,7 +593,24 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  // make each video's preview as soon as it is in the project, so step 3 opens without waiting
  const warmed=new Set();
  function warm(){for(const f of read().files.filter(f=>f.source_id&&!warmed.has(f.source_id))){warmed.add(f.source_id);
-  fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/preview`,{headers:{Range:'bytes=0-0'}}).catch(()=>warmed.delete(f.source_id));}}
+  fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/preview`,{headers:{Range:'bytes=0-0'}}).catch(()=>warmed.delete(f.source_id));}
+  findQuiet();}
+ // each video's quiet stretches are found once from its audio and kept in the draft (see unquiet)
+ const seeking=new Set();
+ let quietRetry=0;
+ function findQuiet(){
+  // the draft may still be opening; look again shortly instead of giving up
+  if(!editable()){clearTimeout(quietRetry);quietRetry=setTimeout(findQuiet,1000);return;}
+  for(const f of read().files.filter(f=>f.source_id&&!(read().quiet || {})[f.source_id]&&!seeking.has(f.source_id))){
+   seeking.add(f.source_id);
+   fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/pauses?start_ms=0&end_ms=3600000`,{signal:AbortSignal.timeout(120000)})
+    .then(r=>r.ok?r.json():Promise.reject(Error('pauses_failed')))
+    .then(answer=>{if(!Array.isArray(answer.pauses) || !editable())throw Error('pauses_invalid');
+     write(d=>{d.quiet={...(d.quiet || {}),[f.source_id]:answer.pauses.map(p=>[p.start_ms,p.end_ms])};});})
+    // a video whose audio cannot be read keeps its lines uncut; it is tried again when the page reloads
+    .catch(()=>{});
+  }
+ }
  function allReviewed(){const m=model();return !!m&&m.stories.length>0&&m.stories.every(s=>reviews()[s.id]);}
  // emphasis round: every story's kept lines go to an AI, which names the words worth emphasising per line
  function keptLines(){const m=model();if(!m)return [];const seen=new Set();return m.stories.flatMap(s=>s.kept.map(l=>({story:s,line:lines().find(x=>x.segment_id===l.segment_id) || l}))).filter(({line})=>!seen.has(line.segment_id)&&seen.add(line.segment_id));}
