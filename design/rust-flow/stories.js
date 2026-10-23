@@ -136,7 +136,10 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   try{const r=await fetch('/api/v1/voice/download',{method:'POST',signal:AbortSignal.timeout(900000)});const a=await r.json();if(!r.ok || !a.ready)throw Error(a.error || 'download_failed');b.hidden=true;airStatus('');findQuiet();}
   catch(e){airStatus('ดาวน์โหลดไม่สำเร็จ ลองอีกครั้ง');}finally{b.disabled=false;}
  };
- if($('airMin'))$('airMin').onchange=()=>{if(!editable())return;const v=Number($('airMin').value);write(d=>{d.dead_min_ms=v;});findQuiet();};
+ // any length in seconds, 0.1 s steps; 0 turns the cut off; a value out of range is put back to what is saved
+ if($('airMin'))$('airMin').onchange=()=>{if(!editable())return;const v=Number($('airMin').value);
+  if(!Number.isFinite(v) || v<0 || v>10){$('airMin').value=String(airMin()/1000);airStatus('ใส่ 0 ถึง 10 วินาที (0 = ไม่ตัด)');return;}
+  write(d=>{d.dead_min_ms=Math.round(v*10)*100;});findQuiet();};
  function model(){
   const plan=parsePlan(read().plan);if(!plan)return null;
   const all=lines(),bySegment=new Map(all.map(l=>[l.segment_id,l]));
@@ -326,7 +329,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   };
   drawPeople();
   $('editClock').textContent=`ใช้ ${story.kept.length} บรรทัด · ${pieces(story)} ท่อน · ยาว ${clock(played(story.kept))}`;
-  if($('airMin'))$('airMin').value=String(airMin());if($('airStatus')&&airNote)$('airStatus').textContent=airNote;
+  if($('airMin')&&document.activeElement!==$('airMin'))$('airMin').value=String(airMin()/1000);if($('airStatus')&&airNote)$('airStatus').textContent=airNote;
  }
  let editView=null,refocus=null,cropSource=null,wordLine=null,scrubbed=false,qcBy=new Map();
  // the line picked on the step 4 timeline in the panel's text box, with the check's notes for it
