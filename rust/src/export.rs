@@ -21,15 +21,45 @@ pub fn frame(document: &Value) -> (u32, u32) {
 /// Where a video's crop window sits, 0..1 across the slack left and right (x) and above and below (y);
 /// the window is the largest one of the clip's shape. Keyed by the draft's source_id, centred when unset.
 pub fn crop(document: &Value, path: &Path) -> (f64, f64) {
-    let id = document["files"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .find(|f| f["path"].as_str().map(Path::new) == Some(path))
-        .and_then(|f| f["source_id"].as_str());
-    let c = id.map(|id| &document["crops"][id]).unwrap_or(&Value::Null);
+    let c = source_id(document, path).map(|id| &document["crops"][id]).unwrap_or(&Value::Null);
     let at = |v: &Value| v.as_f64().filter(|v| v.is_finite()).unwrap_or(0.5).clamp(0.0, 1.0);
     (at(&c["x"]), at(&c["y"]))
+}
+/// The crop at `ms` of the video: with the camera following the speaker (`follow_speaker`), the window that
+/// person was given (`crops[id].speakers[n]`), else the video's own window.
+pub fn crop_at(document: &Value, path: &Path, ms: u64) -> (f64, f64) {
+    let base = crop(document, path);
+    if document["follow_speaker"] != true {
+        return base;
+    }
+    let Some(id) = source_id(document, path) else { return base };
+    let Some(who) = speaker_at(document, id, ms) else { return base };
+    let c = &document["crops"][id]["speakers"][who.to_string()];
+    let at = |v: &Value, d: f64| v.as_f64().filter(|v| v.is_finite()).unwrap_or(d).clamp(0.0, 1.0);
+    if c.is_object() { (at(&c["x"], base.0), at(&c["y"], base.1)) } else { base }
+}
+/// The draft's source id for the video at `path`.
+pub fn source_id<'a>(document: &'a Value, path: &Path) -> Option<&'a str> {
+    document["files"]
+        .as_array()?
+        .iter()
+        .find(|f| f["path"].as_str().map(Path::new) == Some(path))
+        .and_then(|f| f["source_id"].as_str())
+}
+/// Shortest turn the camera cuts to; a shorter one (a "yes" from the other side) keeps the shot.
+pub const FOLLOW_MIN_MS: u64 = 1000;
+/// Who is talking at `ms` in a video, by the diarization step 3 stored (`voice[id].turns`); between turns,
+/// whoever spoke last. Turns under FOLLOW_MIN_MS do not count.
+pub fn speaker_at(document: &Value, id: &str, ms: u64) -> Option<i32> {
+    let turns: Vec<(u64, u64, i64)> = document["voice"][id]["turns"]
+        .as_array()?
+        .iter()
+        .filter_map(|t| Some((t["start_ms"].as_u64()?, t["end_ms"].as_u64()?, t["speaker"].as_i64()?)))
+        .filter(|(a, b, _)| b >= &(a + FOLLOW_MIN_MS))
+        .collect();
+    let inside = turns.iter().filter(|(a, b, _)| *a <= ms && ms < *b).min_by_key(|(a, b, _)| b - a);
+    let before = turns.iter().filter(|(a, _, _)| *a <= ms).max_by_key(|(a, _, _)| *a);
+    inside.or(before).or_else(|| turns.first()).map(|t| t.2 as i32)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -235,6 +265,30 @@ pub fn unquiet(quiet: &[(u64, u64)], trim: &Value, start: u64, end: u64) -> (u64
     if b >= a + SHORTEST { (a, b) } else { (start, end) }
 }
 
+/// A stretch of video split where the speaker (by `speaker_at`) changes, for the camera to follow.
+pub fn speaker_cuts(document: &Value, id: &str, start: u64, end: u64) -> Vec<(u64, u64)> {
+    let mut edges: Vec<u64> = document["voice"][id]["turns"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|t| Some((t["start_ms"].as_u64()?, t["end_ms"].as_u64()?)))
+        .flat_map(|(a, b)| [a, b])
+        .filter(|&t| t > start + 200 && t + 200 < end)
+        .collect();
+    edges.sort();
+    edges.dedup();
+    let mut parts = Vec::new();
+    let mut at = start;
+    for t in edges {
+        if speaker_at(document, id, t) != speaker_at(document, id, at) {
+            parts.push((at, t));
+            at = t;
+        }
+    }
+    parts.push((at, end));
+    parts
+}
+
 /// The parts of a line left once the dead air inside it is cut: each quiet stretch well inside the line goes,
 /// leaving PAD_MS of it on both sides, when at least 0.2 s goes. Matches `inner` in stories.js.
 pub fn inner_cuts(quiet: &[(u64, u64)], start: u64, end: u64) -> Vec<(u64, u64)> {
@@ -298,7 +352,13 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
             // over the pause after it ("การ" 32.84-37.04 s), which the dead-air cut then removes
             let inside = |from: u64, to: u64, a: u64, b: u64| ((from + to) / 2 >= a && (from + to) / 2 < b) || (from >= a && from < b);
             // dead air inside the line is cut too: the line plays as several pieces with the pause taken out
-            let parts = inner_cuts(&quiet, start_ms, end_ms);
+            let mut parts = inner_cuts(&quiet, start_ms, end_ms);
+            // the camera follows the speaker: a part is cut again where the person talking changes
+            if document["follow_speaker"] == true {
+                if let Some(sid) = source_id(document, &s.path) {
+                    parts = parts.into_iter().flat_map(|(a, b)| speaker_cuts(document, sid, a, b)).collect();
+                }
+            }
             let split = parts.len() > 1 && !s.words.is_empty();
             for (a, b) in parts {
                 let words: Vec<(String, u64, u64)> = s.words.iter().filter(|(_, from, to)| inside(*from, *to, a, b)).cloned().collect();
@@ -978,7 +1038,7 @@ pub fn ffmpeg_args(story: &Story, document: &Value, output: &Path) -> Vec<String
     for (n, p) in story.pieces.iter().enumerate() {
         let (a, b) = (p.start_ms as f64 / 1000.0, p.end_ms as f64 / 1000.0);
         // the largest window of the clip's shape, slid to where step 3 put it, then scaled to the frame
-        let (cx, cy) = crop(document, &story.sources[p.source]);
+        let (cx, cy) = crop_at(document, &story.sources[p.source], p.start_ms);
         graph.push_str(&format!(
             "[{s}:v]trim=start={a:.3}:end={b:.3},setpts=PTS-STARTPTS,\
 crop=w='min(iw,ih*{shape:.6})':h='min(ih,iw/{shape:.6})':x='(iw-ow)*{cx:.4}':y='(ih-oh)*{cy:.4}',\

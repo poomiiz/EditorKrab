@@ -962,6 +962,9 @@ struct VoiceBody {
     /// start times of the transcribed words in this video (ms): they name the main speaker and are never cut
     words: Vec<u64>,
     min_ms: u64,
+    /// speakers whose talk is kept; the main speaker when not given
+    #[serde(default)]
+    keep: Option<Vec<i32>>,
 }
 fn voice_models(setup: &AsrSetup) -> editorkrab::voice::Models {
     tool_roots(&setup.data)
@@ -1023,7 +1026,8 @@ async fn source_voice(
     let (speech, n) = speech;
     let total_ms = n as u64 * 1000 / editorkrab::voice::RATE as u64;
     let main = editorkrab::voice::main_speaker(&turns, &body.words);
-    let dead = editorkrab::voice::dead_air(&speech, &turns, main, &body.words, total_ms, body.min_ms);
+    let keep = body.keep.unwrap_or_else(|| main.into_iter().collect());
+    let dead = editorkrab::voice::dead_air(&speech, &turns, &keep, &body.words, total_ms, body.min_ms);
     Ok(Json(json!({"speech": speech, "turns": turns, "main": main, "dead": dead, "total_ms": total_ms})))
 }
 #[derive(Deserialize)]
@@ -1034,11 +1038,14 @@ struct DeadAirBody {
     words: Vec<u64>,
     total_ms: u64,
     min_ms: u64,
+    #[serde(default)]
+    keep: Option<Vec<i32>>,
 }
 /// Dead air again from a video's stored speech and speakers, for a new shortest pause; no audio is read.
 async fn dead_air(Json(body): Json<DeadAirBody>) -> Json<Value> {
     let main = editorkrab::voice::main_speaker(&body.turns, &body.words);
-    let dead = editorkrab::voice::dead_air(&body.speech, &body.turns, main, &body.words, body.total_ms, body.min_ms);
+    let keep = body.keep.unwrap_or_else(|| main.into_iter().collect());
+    let dead = editorkrab::voice::dead_air(&body.speech, &body.turns, &keep, &body.words, body.total_ms, body.min_ms);
     Json(json!({"main": main, "dead": dead}))
 }
 #[derive(Deserialize)]

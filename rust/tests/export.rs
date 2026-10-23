@@ -298,6 +298,34 @@ fn dead_air_at_a_lines_ends_is_cut_unless_that_edge_was_dragged() {
 }
 
 #[test]
+fn the_camera_follows_whoever_is_talking() {
+    use editorkrab::export::{crop_at, speaker_at, speaker_cuts};
+    let path = std::path::Path::new("C:/v/a.mov");
+    let doc = json!({
+        "follow_speaker": true,
+        "files": [{"source_id": "v1", "path": "C:/v/a.mov"}],
+        "crops": {"v1": {"x": 0.5, "y": 0.5, "speakers": {"0": {"x": 0.2, "y": 0.5}, "1": {"x": 0.8, "y": 0.4}}}},
+        "voice": {"v1": {"turns": [
+            {"start_ms": 0, "end_ms": 5000, "speaker": 0},
+            {"start_ms": 5000, "end_ms": 9000, "speaker": 1},
+            {"start_ms": 9000, "end_ms": 9400, "speaker": 0},
+            {"start_ms": 9400, "end_ms": 12000, "speaker": 1}
+        ]}}
+    });
+    assert_eq!(speaker_at(&doc, "v1", 1000), Some(0));
+    assert_eq!(speaker_at(&doc, "v1", 6000), Some(1));
+    // a 0.4 s "yes" from the other side keeps the shot on the person talking
+    assert_eq!(speaker_at(&doc, "v1", 9200), Some(1));
+    assert_eq!(crop_at(&doc, path, 1000), (0.2, 0.5));
+    assert_eq!(crop_at(&doc, path, 6000), (0.8, 0.4));
+    assert_eq!(speaker_cuts(&doc, "v1", 2000, 11000), vec![(2000, 5000), (5000, 11000)]);
+    // following off: one window for the whole video
+    let mut off = doc.clone();
+    off["follow_speaker"] = json!(false);
+    assert_eq!(crop_at(&off, path, 6000), (0.5, 0.5));
+}
+
+#[test]
 fn dead_air_inside_a_line_is_cut_and_the_line_still_reads_as_one() {
     use editorkrab::export::inner_cuts;
     // a 1 s pause inside a 4 s line goes, 0.1 s of it kept on each side; a short dip stays

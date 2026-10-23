@@ -155,17 +155,17 @@ pub fn main_speaker(turns: &[Turn], words: &[u64]) -> Option<i32> {
 /// How long after a transcribed word starts it is kept from being cut, however long the engine stretched it.
 pub const WORD_HOLD_MS: u64 = 600;
 
-/// Dead air: stretches of at least `min_ms` with no speech from the main speaker: VAD speech where diarization
-/// hears the main speaker (all VAD speech when nobody is known). Laughs, a café and other people's voices are
+/// Dead air: stretches of at least `min_ms` with no speech from the people kept (`keep`, the main speaker unless
+/// the person picks others): VAD speech where diarization hears one of them (all VAD speech when `keep` is empty). Laughs, a café and other people's voices are
 /// dead air. Diarization misses soft speech (23 Oct, IMG_6779: no turn at 8.8-14.2 s where a line is said), so
 /// WORD_HOLD_MS after every transcribed word start (`words`, ms) is never cut either.
-pub fn dead_air(speech: &[(u64, u64)], turns: &[Turn], main: Option<i32>, words: &[u64], total_ms: u64, min_ms: u64) -> Vec<(u64, u64)> {
+pub fn dead_air(speech: &[(u64, u64)], turns: &[Turn], keep: &[i32], words: &[u64], total_ms: u64, min_ms: u64) -> Vec<(u64, u64)> {
     let mut talk: Vec<(u64, u64)> = Vec::new();
     for &(a, b) in speech {
-        match main {
-            None => talk.push((a, b)),
-            Some(main) => {
-                for t in turns.iter().filter(|t| t.speaker == main) {
+        match keep.is_empty() {
+            true => talk.push((a, b)),
+            false => {
+                for t in turns.iter().filter(|t| keep.contains(&t.speaker)) {
                     let (x, y) = (a.max(t.start_ms), b.min(t.end_ms));
                     if y > x {
                         talk.push((x, y));
@@ -221,7 +221,7 @@ mod tests {
         println!("speakers: {:?}", turns.iter().map(|t| t.speaker).collect::<std::collections::BTreeSet<_>>());
         for t in &turns { println!("turn {:>6} {:>6} speaker {}", t.start_ms, t.end_ms, t.speaker); }
         let total = samples.len() as u64 * 1000 / RATE as u64;
-        for (a, b) in dead_air(&speech, &turns, main, &[], total, 500) { println!("dead {a:>6} {b:>6}"); }
+        for (a, b) in dead_air(&speech, &turns, &main.into_iter().collect::<Vec<_>>(), &[], total, 500) { println!("dead {a:>6} {b:>6}"); }
     }
     #[test]
     fn dead_air_is_where_the_main_speaker_is_quiet_even_if_others_talk() {
@@ -235,10 +235,12 @@ mod tests {
         ];
         let main = main_speaker(&turns, &[100, 900, 2000, 3600, 9500, 11000, 4500]);
         assert_eq!(main, Some(0));
-        assert_eq!(dead_air(&speech, &turns, main, &[], 12500, 400), vec![(3000, 3500), (4000, 9000), (12000, 12500)]);
+        assert_eq!(dead_air(&speech, &turns, &[0], &[], 12500, 400), vec![(3000, 3500), (4000, 9000), (12000, 12500)]);
+        // keeping both people: the laugh is speech too
+        assert_eq!(dead_air(&speech, &turns, &[0, 1], &[], 12500, 400), vec![(3000, 3500), (5500, 9000), (12000, 12500)]);
         // nobody known: any speech counts
-        assert_eq!(dead_air(&speech, &turns, None, &[], 12500, 400), vec![(3000, 3500), (6000, 9000), (12000, 12500)]);
+        assert_eq!(dead_air(&speech, &turns, &[], &[], 12500, 400), vec![(3000, 3500), (6000, 9000), (12000, 12500)]);
         // a transcribed word said in a gap keeps WORD_HOLD_MS after it (soft speech diarization missed)
-        assert_eq!(dead_air(&speech, &turns, main, &[7000], 12500, 400), vec![(3000, 3500), (4000, 7000), (7600, 9000), (12000, 12500)]);
+        assert_eq!(dead_air(&speech, &turns, &[0], &[7000], 12500, 400), vec![(3000, 3500), (4000, 7000), (7600, 9000), (12000, 12500)]);
     }
 }

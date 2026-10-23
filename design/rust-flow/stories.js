@@ -106,12 +106,13 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   if(!editable()){clearTimeout(airRetry);airRetry=setTimeout(findQuiet,1000);return;}
   const voice=read().voice || {},files=read().files.filter(f=>f.source_id&&lines().some(l=>l.source_id===f.source_id));
   const todo=files.filter(f=>!voice[f.source_id]&&!listening.has(f.source_id));
-  const stale=files.filter(f=>voice[f.source_id]&&((read().quiet_min || {})[f.source_id]!==airMin() || (read().quiet_rule || {})[f.source_id]!==AIR_RULE)&&airMin()>0&&!listening.has(f.source_id));
+  const keyOf=f=>`${airMin()}|${AIR_RULE}|${keepOf(f.source_id).join(',')}`;
+  const stale=files.filter(f=>voice[f.source_id]&&(read().quiet_key || {})[f.source_id]!==keyOf(f)&&airMin()>0&&!listening.has(f.source_id));
   for(const f of stale){listening.add(f.source_id);
    try{const v=voice[f.source_id];const r=await fetch('/api/v1/voice/dead-air',{method:'POST',headers:{'Content-Type':'application/json'},
-     body:JSON.stringify({speech:v.speech,turns:v.turns,words:wordStarts(f.source_id),total_ms:v.total_ms,min_ms:airMin()}),signal:AbortSignal.timeout(30000)});
+     body:JSON.stringify({speech:v.speech,turns:v.turns,words:wordStarts(f.source_id),total_ms:v.total_ms,min_ms:airMin(),keep:keepOf(f.source_id)}),signal:AbortSignal.timeout(30000)});
     const a=await r.json();if(!r.ok || !Array.isArray(a.dead))throw Error(a.error || 'dead_air_failed');
-    write(d=>{d.quiet={...(d.quiet || {}),[f.source_id]:a.dead};d.quiet_min={...(d.quiet_min || {}),[f.source_id]:airMin()};d.quiet_rule={...(d.quiet_rule || {}),[f.source_id]:AIR_RULE};});}
+    write(d=>{d.quiet={...(d.quiet || {}),[f.source_id]:a.dead};d.quiet_key={...(d.quiet_key || {}),[f.source_id]:keyOf(f)};});}
    catch(_){airStatus('นับช่วงเงียบใหม่ไม่สำเร็จ ลองเปลี่ยนค่าอีกครั้ง');}
    finally{listening.delete(f.source_id);}
   }
@@ -123,7 +124,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
      body:JSON.stringify({words:wordStarts(f.source_id),min_ms:airMin() || AIR_MIN}),signal:AbortSignal.timeout(900000)});
     const a=await r.json();if(!r.ok || !Array.isArray(a.dead))throw Error(a.error || 'voice_failed');
     write(d=>{d.voice={...(d.voice || {}),[f.source_id]:{speech:a.speech,turns:a.turns,total_ms:a.total_ms,main:a.main}};
-     d.quiet={...(d.quiet || {}),[f.source_id]:a.dead};d.quiet_min={...(d.quiet_min || {}),[f.source_id]:airMin() || AIR_MIN};d.quiet_rule={...(d.quiet_rule || {}),[f.source_id]:AIR_RULE};});
+     d.quiet={...(d.quiet || {}),[f.source_id]:a.dead};d.quiet_key={...(d.quiet_key || {}),[f.source_id]:airMin()?keyOf(f):''};});
     airStatus(`เจอช่วงเงียบ ${a.dead.length} ช่วง`);}
    catch(e){airStatus('ฟังเสียงไม่สำเร็จ ('+(e.message || 'ไม่ทราบสาเหตุ')+') ท่อนยังไม่ถูกตัด');}
    finally{listening.delete(f.source_id);}
@@ -317,6 +318,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    const up=()=>{removeEventListener('pointermove',move);removeEventListener('pointerup',up);setTimeout(()=>{scrubbed=false;},0);};
    addEventListener('pointermove',move);addEventListener('pointerup',up);
   };
+  drawPeople();
   $('editClock').textContent=`ใช้ ${story.kept.length} บรรทัด · ${pieces(story)} ท่อน · ยาว ${clock(played(story.kept))}`;
   if($('airMin'))$('airMin').value=String(airMin());if($('airStatus')&&airNote)$('airStatus').textContent=airNote;
  }
@@ -350,7 +352,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    const roles=read().text_roles || [],subs=read().subtitles || {};lane.classList.toggle('edit-layer-off',!roles.includes('emphasis'));lane.classList.toggle('edit-layer-off-sub',!roles.includes('english'));lane.classList.toggle('edit-layer-off-speech',!roles.includes('speech'));
    for(const {line,kept,at} of editView.boxes){
     const span=kept || line;
-    const bar=document.createElement('div');bar.className='edit-vid';bar.style.left=px(at)+'px';bar.style.width=Math.max(4,px(span.end_ms-span.start_ms)-2)+'px';lane.append(bar);
+    const bar=document.createElement('div');bar.className='edit-vid';{const who=speakerAt(line.source_id,span.start_ms),n=people(line.source_id).findIndex(p=>p.id===who);if(n>=0)bar.dataset.speaker=String(n%4);}bar.style.left=px(at)+'px';bar.style.width=Math.max(4,px(span.end_ms-span.start_ms)-2)+'px';lane.append(bar);
     const words=picks(line).filter(w=>w.start_ms<span.end_ms&&(w.end_ms ?? w.start_ms+1)>span.start_ms);
     if(words.length){
      const first=Math.max(words[0].start_ms,span.start_ms),clip=document.createElement('button');clip.type='button';clip.className='edit-emph';
@@ -499,7 +501,49 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
 
  // crop: where the clip-shaped window sits on the video, 0..1 across the slack each way (0.5 = centred)
  const cropOf=id=>{const c=read().crops?.[id] || {};const f=v=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):0.5;return {x:f(c.x),y:f(c.y)};};
- function showCrop(at=cropOf(cropSource)){video.style.objectPosition=`${at.x*100}% ${at.y*100}%`;}
+ function showCrop(at=cropAt(cropSource,video.currentTime*1000)){video.style.objectPosition=`${at.x*100}% ${at.y*100}%`;}
+ // who talks when, from the stored diarization (voice[id].turns); a turn under FOLLOW_MIN does not move the camera
+ // (the export does the same: speaker_at in export.rs)
+ const FOLLOW_MIN=1000;
+ function speakerAt(source,ms){
+  const turns=((read().voice || {})[source]?.turns || []).filter(t=>t.end_ms-t.start_ms>=FOLLOW_MIN);
+  const inside=turns.filter(t=>t.start_ms<=ms&&ms<t.end_ms).sort((a,b)=>(a.end_ms-a.start_ms)-(b.end_ms-b.start_ms))[0];
+  const before=turns.filter(t=>t.start_ms<=ms).sort((a,b)=>b.start_ms-a.start_ms)[0];
+  return (inside || before || turns[0])?.speaker ?? null;
+ }
+ const following=()=>read().follow_speaker===true;
+ // the crop at a moment: the speaker's own window when the camera follows them, else the video's window
+ function cropAt(source,ms){
+  const base=cropOf(source),who=following()?speakerAt(source,ms):null,c=who===null?null:read().crops?.[source]?.speakers?.[String(who)];
+  const f=(v,d)=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):d;
+  return c?{x:f(c.x,base.x),y:f(c.y,base.y)}:base;
+ }
+ // the people heard in a video, by how long each talks, with whether their talk is kept from the dead-air cut
+ const keepOf=source=>{const k=(read().speakers_keep || {})[source];const main=(read().voice || {})[source]?.main;return Array.isArray(k)?k:Number.isInteger(main)?[main]:[];};
+ function people(source){
+  const v=(read().voice || {})[source];if(!v)return [];
+  const talk=new Map();for(const t of v.turns || [])talk.set(t.speaker,(talk.get(t.speaker) || 0)+t.end_ms-t.start_ms);
+  return [...talk].sort((a,b)=>b[1]-a[1]).map(([id,ms],n)=>({id,ms,n,main:id===v.main,kept:keepOf(source).includes(id)}));
+ }
+ function drawPeople(){
+  const host=$('speakerList');if(!host)return;
+  const story=current(),source=story?.source_id,list=source?people(source):[];
+  $('speakerBox').hidden=!list.length;
+  host.replaceChildren(...list.map(p=>{
+   const row=document.createElement('label');row.className='speaker-row';row.dataset.speaker=String(p.n%4);
+   const box=document.createElement('input');box.type='checkbox';box.checked=p.kept;box.disabled=!editable();
+   box.onchange=()=>{const next=new Set(keepOf(source));if(box.checked)next.add(p.id);else next.delete(p.id);
+    write(d=>{d.speakers_keep={...(d.speakers_keep || {}),[source]:[...next].sort((a,b)=>a-b)};});findQuiet();};
+   const dot=document.createElement('span');dot.className='speaker-dot';dot.setAttribute('aria-hidden','true');
+   const name=document.createElement('span');name.textContent=`คนที่ ${p.n+1}${p.main?' (หลัก)':''} · พูด ${clock(p.ms)}`;
+   const framed=read().crops?.[source]?.speakers?.[String(p.id)];
+   const frame=document.createElement('span');frame.className='caption';frame.textContent=framed?'ตั้งกรอบแล้ว':'ยังไม่ตั้งกรอบ';
+   row.append(box,dot,name,frame);return row;
+  }));
+  if($('followSpeaker')){$('followSpeaker').checked=following();$('followSpeaker').disabled=!editable();}
+ }
+ if($('followSpeaker'))$('followSpeaker').onchange=()=>{if(!editable())return;const on=$('followSpeaker').checked;write(d=>{d.follow_speaker=on;});};
+
  {
   let drag=null;
   for(const frame of [$('textFrame'),$('editFrame')]){
@@ -519,7 +563,11 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const end=e=>{
    if(!drag || e.pointerId!==drag.id)return;
    const at=drag.at,id=cropSource;drag=null;delete frame.dataset.cropping;
-   if(at&&id)write(d=>{d.crops={...(d.crops || {}),[id]:{x:Math.round(at.x*1000)/1000,y:Math.round(at.y*1000)/1000}};});
+   // with the camera following, the window dragged is the one of the person talking now
+   const who=following()?speakerAt(id,video.currentTime*1000):null,r=v=>Math.round(v*1000)/1000;
+   if(at&&id)write(d=>{const c={...(d.crops?.[id] || {x:0.5,y:0.5})};
+    if(who===null){c.x=r(at.x);c.y=r(at.y);}else c.speakers={...(c.speakers || {}),[String(who)]:{x:r(at.x),y:r(at.y)}};
+    d.crops={...(d.crops || {}),[id]:c};});
   };
   frame.addEventListener('pointerup',end);frame.addEventListener('pointercancel',end);
   }
@@ -597,6 +645,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    if(!next)video.pause();else if(next.start_ms>now+40 || next.start_ms<line.start_ms)video.currentTime=next.start_ms/1000;
   }
   const story=current(),said=story&&(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept).find(l=>now>=l.start_ms&&now<l.end_ms);
+  if(following()&&cropSource&&!document.querySelector('[data-cropping=true]'))showCrop();
   // the dead air cut out of the middle of a line is jumped over, as the export leaves it out
   if(said&&!video.paused&&!editView?.showCut){const gap=inner(said).find(([a,b])=>now>=a&&now<b-20);if(gap){video.currentTime=gap[1]/1000;return;}}
   const words=said?.words || [],wordByWord=read().text_styles?.speech?.enter==='words'&&words.length;
