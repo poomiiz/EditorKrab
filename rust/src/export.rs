@@ -38,8 +38,9 @@ pub fn crop_at(document: &Value, path: &Path, ms: u64) -> (f64, f64, f64) {
     let Some(who) = speaker_at(document, id, ms) else { return base };
     let c = &document["crops"][id]["speakers"][who.to_string()];
     let at = |v: &Value, d: f64| v.as_f64().filter(|v| v.is_finite()).unwrap_or(d).clamp(0.0, 1.0);
-    let zoom = c["zoom"].as_f64().filter(|v| v.is_finite()).unwrap_or(1.0).clamp(1.0, 3.0);
-    if c.is_object() { (at(&c["x"], x), at(&c["y"], y), zoom) } else { base }
+    // a person with no window of their own yet is shown FOLLOW_ZOOM closer, so following shows on a clip that fits
+    let zoom = c["zoom"].as_f64().filter(|v| v.is_finite()).unwrap_or(FOLLOW_ZOOM).clamp(1.0, 3.0);
+    (at(&c["x"], x), at(&c["y"], y), zoom)
 }
 /// The draft's source id for the video at `path`.
 pub fn source_id<'a>(document: &'a Value, path: &Path) -> Option<&'a str> {
@@ -49,6 +50,8 @@ pub fn source_id<'a>(document: &'a Value, path: &Path) -> Option<&'a str> {
         .find(|f| f["path"].as_str().map(Path::new) == Some(path))
         .and_then(|f| f["source_id"].as_str())
 }
+/// How much closer the camera goes on a speaker who has no zoom of their own (20%, P'Ohm 23 Oct).
+pub const FOLLOW_ZOOM: f64 = 1.2;
 /// Shortest turn the camera cuts to; a shorter one (a "yes" from the other side) keeps the shot.
 pub const FOLLOW_MIN_MS: u64 = 1000;
 /// Who is talking at `ms` in a video, by the diarization step 3 stored (`voice[id].turns`); between turns,

@@ -506,7 +506,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   video.style.transformOrigin=`${at.x*100}% ${at.y*100}%`;video.style.transform=z>1?`scale(${z})`:'';}
  // who talks when, from the stored diarization (voice[id].turns); a turn under FOLLOW_MIN does not move the camera
  // (the export does the same: speaker_at in export.rs)
- const FOLLOW_MIN=1000;
+ const FOLLOW_MIN=1000,FOLLOW_ZOOM=1.2;
  function speakerAt(source,ms){
   const turns=((read().voice || {})[source]?.turns || []).filter(t=>t.end_ms-t.start_ms>=FOLLOW_MIN);
   const inside=turns.filter(t=>t.start_ms<=ms&&ms<t.end_ms).sort((a,b)=>(a.end_ms-a.start_ms)-(b.end_ms-b.start_ms))[0];
@@ -518,7 +518,9 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function cropAt(source,ms){
   const base=cropOf(source),who=following()?speakerAt(source,ms):null,c=who===null?null:read().crops?.[source]?.speakers?.[String(who)];
   const f=(v,d)=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):d;
-  return c?{x:f(c.x,base.x),y:f(c.y,base.y),zoom:Number.isFinite(c.zoom)?Math.min(3,Math.max(1,c.zoom)):1}:{...base,zoom:1};
+  if(who===null)return {...base,zoom:1};
+  // a person with no window of their own yet is shown 20% closer, so following shows even on a clip that fits
+  return {x:f(c?.x,base.x),y:f(c?.y,base.y),zoom:Number.isFinite(c?.zoom)?Math.min(3,Math.max(1,c.zoom)):FOLLOW_ZOOM};
  }
  // the people heard in a video, by how long each talks, with whether their talk is kept from the dead-air cut
  const keepOf=source=>{const k=(read().speakers_keep || {})[source];const main=(read().voice || {})[source]?.main;return Array.isArray(k)?k:Number.isInteger(main)?[main]:[];};
@@ -541,8 +543,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    const framed=read().crops?.[source]?.speakers?.[String(p.id)];
    // how close the camera goes on this person; a clip that fits the frame exactly can only follow by zooming
    const zoom=document.createElement('select');zoom.title='ซูมเข้าหาคนนี้';zoom.setAttribute('aria-label',`ซูมเข้าหาคนที่ ${p.n+1}`);zoom.disabled=!editable() || !following();
-   for(const z of [1,1.25,1.5,2]){const o=document.createElement('option');o.value=String(z);o.textContent=z===1?'ไม่ซูม':`ซูม ${z}x`;zoom.append(o);}
-   zoom.value=String(framed?.zoom || 1);
+   for(const z of [1,1.2,1.3,1.5,1.75,2]){const o=document.createElement('option');o.value=String(z);o.textContent=z===1?'ไม่ซูม':`ซูม +${Math.round((z-1)*100)}%`;zoom.append(o);}
+   zoom.value=String(framed?.zoom ?? FOLLOW_ZOOM);
    zoom.onchange=()=>write(d=>{const c={...(d.crops?.[source] || {x:0.5,y:0.5})};c.speakers={...(c.speakers || {}),[String(p.id)]:{x:0.5,y:0.5,...(c.speakers?.[String(p.id)] || {}),zoom:Number(zoom.value)}};d.crops={...(d.crops || {}),[source]:c};});
    row.append(box,dot,name,zoom);return row;
   }));

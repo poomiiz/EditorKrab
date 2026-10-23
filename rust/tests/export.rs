@@ -316,7 +316,8 @@ fn the_camera_follows_whoever_is_talking() {
     assert_eq!(speaker_at(&doc, "v1", 6000), Some(1));
     // a 0.4 s "yes" from the other side keeps the shot on the person talking
     assert_eq!(speaker_at(&doc, "v1", 9200), Some(1));
-    assert_eq!(crop_at(&doc, path, 1000), (0.2, 0.5, 1.0));
+    // no zoom of their own: 20% closer
+    assert_eq!(crop_at(&doc, path, 1000), (0.2, 0.5, 1.2));
     // a clip that already fits the frame still moves in on the speaker by zooming
     assert_eq!(crop_at(&doc, path, 6000), (0.8, 0.4, 1.5));
     assert_eq!(speaker_cuts(&doc, "v1", 2000, 11000), vec![(2000, 5000), (5000, 11000)]);
