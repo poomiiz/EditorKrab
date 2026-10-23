@@ -527,7 +527,7 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
     // a speech layer with another blend mode is drawn in that mode's own file
     let speech = if blend_of(&style) == mode { speech } else { Vec::new() };
     if speech.is_empty() {
-    } else if style["enter"].as_str().unwrap_or("words") == "words" {
+    } else if style["enter"].as_str() == Some("words") {
         let size = style["size"].as_f64().unwrap_or(64.0);
         let limit = (0.86 * WIDTH as f64 / (size * 0.55)).max(4.0) as usize;
         let mut at = 0;

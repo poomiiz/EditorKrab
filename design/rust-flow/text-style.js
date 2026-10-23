@@ -25,8 +25,8 @@ const effectValid={outline:v=>Number.isInteger(v)&&v>=0&&v<=20,shadow:v=>Number.
  case:v=>['none','upper','lower','title'].includes(v),align:v=>['left','center','right'].includes(v),spacing:v=>Number.isInteger(v)&&v>=-20&&v<=100,
  glow_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),glow_strength:v=>Number.isInteger(v)&&v>=0&&v<=100,glow_range:v=>Number.isInteger(v)&&v>=0&&v<=60,
  shadow_angle:v=>Number.isInteger(v)&&v>=-180&&v<=180,box_opacity:v=>Number.isInteger(v)&&v>=0&&v<=100};
-// speech appears word by word unless another entrance is picked
-export const roleEffects=key=>key==='speech'?{...effectDefaults,enter:'words'}:effectDefaults;
+// every role, speech included, shows its whole line at once unless an entrance is picked (P'Ohm 23 Oct)
+export const roleEffects=()=>effectDefaults;
 const baseKeys=['text','font','size','color','x','y'];
 export function validTextStyle(v){
  return v && typeof v==='object' && !Array.isArray(v) && Object.keys(v).every(k=>baseKeys.includes(k) || (Object.hasOwn(effectValid,k) && effectValid[k](v[k]))) && baseKeys.every(k=>Object.hasOwn(v,k)) && typeof v.text==='string' && v.text.length<=80 && !/[\r\n]/.test(v.text) && validFont(v.font) &&

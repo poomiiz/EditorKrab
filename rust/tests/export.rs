@@ -246,6 +246,12 @@ fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
     assert_eq!(editorkrab::export::emphasis_lines(&story, &name), vec![(2000, 3000, "มอนสเตอร์".to_owned())]);
     let latin = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "Gentle", "start_ms": 3000, "end_ms": 3300}, {"text": "Monster", "start_ms": 3300, "end_ms": 3600}]}});
     assert_eq!(editorkrab::export::emphasis_lines(&story, &latin), vec![(2000, 3000, "Gentle Monster".to_owned())]);
+    // by default the speech line shows whole (P'Ohm 23 Oct), still without the picked word
+    let (ass, _) = subtitles(&story, &doc);
+    assert!(ass.contains("}หนึ่งสาม\n") && !ass.contains("}หนึ่ง\n") && !ass.contains("}หนึ่งสอง"), "{ass}");
+    // word by word only when that entrance is picked
+    let doc = json!({"text_roles": ["speech", "emphasis"], "emphasis": {"a1": [2000]},
+        "text_styles": {"speech": {"font":"system","size":64,"color":"#ffffff","x":50,"y":69,"enter":"words"}}});
     let (ass, skipped) = subtitles(&story, &doc);
     // the picked word is on screen as emphasis, so the speech line leaves it out
     assert!(ass.contains("0:00:00.20,0:00:02.00,Text") && ass.contains("}หนึ่ง\n") && ass.contains("}หนึ่งสาม\n"), "{ass}");
