@@ -261,6 +261,29 @@ fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
 }
 
 #[test]
+fn a_one_word_line_before_a_pause_reads_with_the_line_it_runs_into() {
+    let piece = |segment: &str, start_ms, end_ms, text: &str| Piece {
+        source: 0, start_ms, end_ms, text: text.into(), words: vec![], timed: false, segment: segment.into(),
+    };
+    let story = editorkrab::export::Story {
+        id: "s".into(), title: String::new(), sources: vec!["a.mp4".into()],
+        pieces: vec![
+            piece("s8", 31420, 32840, "ว่าเรื่องนี้เป็นปัญหา"),
+            piece("s9", 32840, 37040, "การ"),
+            piece("s10", 37040, 39200, "ตอบคำถามไม่ได้"),
+            // a short line with a gap after it stays as it is
+            piece("s11", 40000, 40500, "คือ"),
+            piece("s12", 41000, 42000, "ฉันน่ะคิด"),
+        ],
+    };
+    let (lines, _) = editorkrab::export::speech_lines(&story, &json!({"text_roles": ["speech"]}));
+    let texts: Vec<&str> = lines.iter().map(|l| l.2.as_str()).collect();
+    assert_eq!(texts, ["ว่าเรื่องนี้เป็นปัญหา", "การตอบคำถามไม่ได้", "คือ", "ฉันน่ะคิด"], "{lines:?}");
+    // the joined line runs from "การ" to the end of the next line
+    assert_eq!((lines[1].0, lines[1].1), (1420, 7780));
+}
+
+#[test]
 fn an_emphasis_word_at_the_end_of_its_line_stays_up_long_enough_to_read() {
     // "ว่าเรื่องนี้เป็นปัญหา" then "การ": "ปัญหา" is said in the line's last 0.4 s (P'Ohm 23 Oct)
     let piece = |segment: &str, start_ms, end_ms, words: Vec<(String, u64, u64)>| Piece {

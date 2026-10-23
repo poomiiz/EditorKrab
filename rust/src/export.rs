@@ -798,7 +798,7 @@ pub fn speech_lines(story: &Story, document: &Value) -> (Vec<(u64, u64, String)>
         let size = speech_style(document)["size"].as_f64().unwrap_or(64.0);
         let limit = (0.86 * WIDTH as f64 / (size * 0.55)).max(4.0) as usize;
         let mut at = 0;
-        for p in &story.pieces {
+        for p in &join_short_lines(&story.pieces) {
             for (start, end, text) in lines(p, limit) {
                 out.push((at + start, at + end, text));
             }
@@ -811,6 +811,29 @@ pub fn speech_lines(story: &Story, document: &Value) -> (Vec<(u64, u64, String)>
         .map(str::to_owned)
         .collect();
     (out, skipped)
+}
+/// Letters in a line short enough to join the line it runs into (the preview uses the same: SHORT in stories.js).
+pub const SHORT_LINE: usize = 4;
+/// A piece of one short word ("การ" said before a pause, P'Ohm 23 Oct) joins the piece it runs straight into,
+/// same video and no gap, so it is not on screen alone; the joined line is split again if it is too long.
+pub fn join_short_lines(pieces: &[Piece]) -> Vec<Piece> {
+    let short = |p: &Piece| {
+        let t = p.text.trim();
+        !t.is_empty() && !t.contains(char::is_whitespace) && t.chars().count() <= SHORT_LINE
+    };
+    let mut out: Vec<Piece> = Vec::new();
+    for p in pieces {
+        match out.last_mut() {
+            Some(last) if last.source == p.source && last.end_ms == p.start_ms && short(last) => {
+                last.text = format!("{}{}", last.text.trim_end(), p.text.trim_start());
+                last.words.extend(p.words.iter().cloned());
+                last.end_ms = p.end_ms;
+                last.timed &= p.timed;
+            }
+            _ => out.push(p.clone()),
+        }
+    }
+    out
 }
 /// The step 4 subtitle layer (lines translated by a chat AI, by segment id), each line on screen for its
 /// pieces in output time; empty when the layer is not ticked or nothing was translated.

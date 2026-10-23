@@ -370,6 +370,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  // a word picked at the end of its line stays up at least HOLD ms, into the next line, until another pick
  // shows (the export does the same: EMPHASIS_HOLD_MS in export.rs)
  const HOLD=1200;
+ // letters in a line short enough to join the line next to it on screen
+ const SHORT=4;
  function emphasisAt(story,said,now){
   const own=said&&emphasisNow(said,now);if(own)return own;
   let best=null;
@@ -517,7 +519,14 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const story=current(),said=story&&(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept).find(l=>now>=l.start_ms&&now<l.end_ms);
   const words=said?.words || [],wordByWord=read().text_styles?.speech?.enter==='words'&&words.length;
   // while a line plays, an empty box stays empty (a no-break space) instead of falling back to the sample text
-  caption(!said?'':(words.length?speechText(said,now,wordByWord):said.text) || '\u00a0');
+  const shown=l=>(l.words?.length?speechText(l,now,wordByWord&&l===said):l.text) || '';
+  // a line of one short word ("\u0e01\u0e32\u0e23" before a pause) reads with the line it runs into (P'Ohm 23 Oct; the
+  // export does the same: join_short_lines in export.rs)
+  const list=story?(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept):[],i=said?list.indexOf(said):-1;
+  const short=l=>!!l&&!/\s/.test((l.text || '').trim())&&[...(l.text || '').trim()].length<=SHORT;
+  const before=i>0&&short(list[i-1])&&list[i-1].end_ms===said.start_ms?shown(list[i-1]):'';
+  const after=i>=0&&short(said)&&list[i+1]?.start_ms===said.end_ms?shown(list[i+1]):'';
+  caption(!said?'':(before+shown(said)+after) || '\u00a0');
   const held=story?emphasisAt(story,said,now):'';
   emphasis(held || (said?'\u00a0':''));
   subtitle(said?(read().subtitles || {})[said.segment_id] || '\u00a0':'');
