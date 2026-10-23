@@ -1016,6 +1016,9 @@ async fn source_voice(
     let samples = editorkrab::voice::samples(&ffmpeg, &path)
         .await
         .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
+    // faces and who is seen talking: a video with no picture (sound only) has none
+    let frames = editorkrab::faces::frames(&ffmpeg, &path).await.ok();
+    let face_model = models.face.clone();
     let (speech, turns) = tokio::task::spawn_blocking(move || -> Result<_, String> {
         Ok((editorkrab::voice::speech(&models.vad, &samples)?, editorkrab::voice::speakers(&models, &samples)?, samples.len()))
     })
@@ -1028,7 +1031,18 @@ async fn source_voice(
     let main = editorkrab::voice::main_speaker(&turns, &body.words);
     let keep = body.keep.unwrap_or_else(|| main.into_iter().collect());
     let dead = editorkrab::voice::dead_air(&speech, &turns, &keep, &body.words, total_ms, body.min_ms);
-    Ok(Json(json!({"speech": speech, "turns": turns, "main": main, "dead": dead, "total_ms": total_ms})))
+    let talk = speech.clone();
+    let (faces, seen) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        let Some((frames, w, h)) = frames else { return Ok((Vec::new(), Vec::new())) };
+        let people = editorkrab::faces::people(&face_model, &frames, w, h)?;
+        let motion = editorkrab::faces::mouth_motion(&people, &frames, w, h);
+        Ok((people, editorkrab::faces::visual_turns(&motion, &talk)))
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))?
+    .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
+    let seen: Vec<Value> = seen.iter().map(|(a, b, n)| json!({"start_ms": a, "end_ms": b, "person": n})).collect();
+    Ok(Json(json!({"speech": speech, "turns": turns, "main": main, "dead": dead, "total_ms": total_ms, "faces": faces, "seen": seen})))
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

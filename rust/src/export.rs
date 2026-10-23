@@ -25,22 +25,47 @@ pub fn crop(document: &Value, path: &Path) -> (f64, f64) {
     let at = |v: &Value| v.as_f64().filter(|v| v.is_finite()).unwrap_or(0.5).clamp(0.0, 1.0);
     (at(&c["x"]), at(&c["y"]))
 }
-/// The crop at `ms` of the video as (x, y, zoom): with the camera following the speaker (`follow_speaker`), the
-/// window that person was given (`crops[id].speakers[n]`, zoom 1-3 so a clip that fits the frame exactly can
-/// still move in on them), else the video's own window at zoom 1.
-pub fn crop_at(document: &Value, path: &Path, ms: u64) -> (f64, f64, f64) {
+/// The crop at `ms` of the video as (x, y, zoom, centred). Without the camera following the speaker it is the
+/// video's own window: x and y place it across the slack, zoom 1. Following (`follow_speaker`), it is the window
+/// of the person talking: one they dragged (`crops[id].speakers[n]`, x/y across the slack) or, when step 3 found
+/// their face (`voice[id].faces[n]`), centred on that face (x/y are then the face centre, `centred` true); zoom
+/// 1-3, FOLLOW_ZOOM when they set none, so a clip that fits the frame exactly can still move in on them.
+pub fn crop_at(document: &Value, path: &Path, ms: u64) -> (f64, f64, f64, bool) {
     let (x, y) = crop(document, path);
-    let base = (x, y, 1.0);
+    let base = (x, y, 1.0, false);
     if document["follow_speaker"] != true {
         return base;
     }
     let Some(id) = source_id(document, path) else { return base };
     let Some(who) = speaker_at(document, id, ms) else { return base };
     let c = &document["crops"][id]["speakers"][who.to_string()];
+    // an entry of exactly x 0.5, y 0.5 was written by the first zoom picker (people were voices then): unset
+    let c = if c["x"].as_f64() == Some(0.5) && c["y"].as_f64() == Some(0.5) { &Value::Null } else { c };
     let at = |v: &Value, d: f64| v.as_f64().filter(|v| v.is_finite()).unwrap_or(d).clamp(0.0, 1.0);
-    // a person with no window of their own yet is shown FOLLOW_ZOOM closer, so following shows on a clip that fits
     let zoom = c["zoom"].as_f64().filter(|v| v.is_finite()).unwrap_or(FOLLOW_ZOOM).clamp(1.0, 3.0);
-    (at(&c["x"], x), at(&c["y"], y), zoom)
+    if c["x"].is_number() || c["y"].is_number() {
+        return (at(&c["x"], x), at(&c["y"], y), zoom, false);
+    }
+    let face = &document["voice"][id]["faces"][who as usize];
+    if seen(document, id) && face["cx"].is_number() {
+        return (at(&face["cx"], 0.5), at(&face["cy"], 0.5), zoom, true);
+    }
+    (x, y, zoom, false)
+}
+/// Whether step 3 saw who talks (faces and mouth movement); the camera then follows people on screen, not voices.
+fn seen(document: &Value, id: &str) -> bool {
+    document["voice"][id]["seen"].as_array().is_some_and(|s| !s.is_empty())
+}
+/// The turns the camera follows: who is seen talking (`voice[id].seen`, by person on screen) when step 3 found
+/// faces, else who is heard (`voice[id].turns`, by diarization).
+fn follow_turns(document: &Value, id: &str) -> Vec<(u64, u64, i64)> {
+    let (list, who) = if seen(document, id) { ("seen", "person") } else { ("turns", "speaker") };
+    document["voice"][id][list]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|t| Some((t["start_ms"].as_u64()?, t["end_ms"].as_u64()?, t[who].as_i64()?)))
+        .collect()
 }
 /// The draft's source id for the video at `path`.
 pub fn source_id<'a>(document: &'a Value, path: &Path) -> Option<&'a str> {
@@ -57,10 +82,8 @@ pub const FOLLOW_MIN_MS: u64 = 1000;
 /// Who is talking at `ms` in a video, by the diarization step 3 stored (`voice[id].turns`); between turns,
 /// whoever spoke last. Turns under FOLLOW_MIN_MS do not count.
 pub fn speaker_at(document: &Value, id: &str, ms: u64) -> Option<i32> {
-    let turns: Vec<(u64, u64, i64)> = document["voice"][id]["turns"]
-        .as_array()?
-        .iter()
-        .filter_map(|t| Some((t["start_ms"].as_u64()?, t["end_ms"].as_u64()?, t["speaker"].as_i64()?)))
+    let turns: Vec<(u64, u64, i64)> = follow_turns(document, id)
+        .into_iter()
         .filter(|(a, b, _)| b >= &(a + FOLLOW_MIN_MS))
         .collect();
     let inside = turns.iter().filter(|(a, b, _)| *a <= ms && ms < *b).min_by_key(|(a, b, _)| b - a);
@@ -273,12 +296,9 @@ pub fn unquiet(quiet: &[(u64, u64)], trim: &Value, start: u64, end: u64) -> (u64
 
 /// A stretch of video split where the speaker (by `speaker_at`) changes, for the camera to follow.
 pub fn speaker_cuts(document: &Value, id: &str, start: u64, end: u64) -> Vec<(u64, u64)> {
-    let mut edges: Vec<u64> = document["voice"][id]["turns"]
-        .as_array()
+    let mut edges: Vec<u64> = follow_turns(document, id)
         .into_iter()
-        .flatten()
-        .filter_map(|t| Some((t["start_ms"].as_u64()?, t["end_ms"].as_u64()?)))
-        .flat_map(|(a, b)| [a, b])
+        .flat_map(|(a, b, _)| [a, b])
         .filter(|&t| t > start + 200 && t + 200 < end)
         .collect();
     edges.sort();
@@ -954,12 +974,15 @@ pub fn speech_lines(story: &Story, document: &Value) -> (Vec<(u64, u64, String)>
 }
 /// Letters in a line short enough to join the line it runs into (the preview uses the same: SHORT in stories.js).
 pub const SHORT_LINE: usize = 4;
+/// Back-channel words ("ใช่", "อืม") stay a card of their own, as in a Nina clip; only a cut-off word joins the next
+/// line. Matches BACKCHANNEL in stories.js.
+pub const BACKCHANNEL: [&str; 16] = ["ใช่", "อืม", "อือ", "เออ", "อ๋อ", "อ้อ", "เฮ้ย", "ค่ะ", "ครับ", "จ้ะ", "จ้า", "โห", "ว้าว", "หา", "ฮะ", "อ่าว"];
 /// A piece of one short word ("การ" said before a pause, P'Ohm 23 Oct) joins the piece it runs straight into,
 /// same video and no gap, so it is not on screen alone; the joined line is split again if it is too long.
 pub fn join_short_lines(pieces: &[Piece]) -> Vec<Piece> {
     let short = |p: &Piece| {
         let t = p.text.trim();
-        !t.is_empty() && !t.contains(char::is_whitespace) && t.chars().count() <= SHORT_LINE
+        !t.is_empty() && !t.contains(char::is_whitespace) && t.chars().count() <= SHORT_LINE && !BACKCHANNEL.contains(&t)
     };
     let mut out: Vec<Piece> = Vec::new();
     for p in pieces {
@@ -1044,12 +1067,18 @@ pub fn ffmpeg_args(story: &Story, document: &Value, output: &Path) -> Vec<String
     for (n, p) in story.pieces.iter().enumerate() {
         let (a, b) = (p.start_ms as f64 / 1000.0, p.end_ms as f64 / 1000.0);
         // the largest window of the clip's shape, slid to where step 3 put it, then scaled to the frame
-        let (cx, cy, zoom) = crop_at(document, &story.sources[p.source], p.start_ms);
+        let (cx, cy, zoom, centred) = crop_at(document, &story.sources[p.source], p.start_ms);
         // zooming in on a speaker is a smaller window; no zoom keeps the plain one
         let zoom = if zoom > 1.0001 { format!("/{zoom:.4}") } else { String::new() };
+        // a window on a face is centred on it, held inside the picture
+        let (x, y) = if centred {
+            (format!("max(0,min(iw-ow,iw*{cx:.4}-ow/2))"), format!("max(0,min(ih-oh,ih*{cy:.4}-oh/2))"))
+        } else {
+            (format!("(iw-ow)*{cx:.4}"), format!("(ih-oh)*{cy:.4}"))
+        };
         graph.push_str(&format!(
             "[{s}:v]trim=start={a:.3}:end={b:.3},setpts=PTS-STARTPTS,\
-crop=w='min(iw,ih*{shape:.6}){zoom}':h='min(ih,iw/{shape:.6}){zoom}':x='(iw-ow)*{cx:.4}':y='(ih-oh)*{cy:.4}',\
+crop=w='min(iw,ih*{shape:.6}){zoom}':h='min(ih,iw/{shape:.6}){zoom}':x='{x}':y='{y}',\
 scale={width}:{height},setsar=1,fps=30,format=yuv420p[v{n}];\
 [{s}:a]atrim=start={a:.3}:end={b:.3},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,afade=t=in:d=0.008,\
 afade=t=out:st={fade:.3}:d=0.008[a{n}];",

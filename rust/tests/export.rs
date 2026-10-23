@@ -274,11 +274,14 @@ fn a_one_word_line_before_a_pause_reads_with_the_line_it_runs_into() {
             // a short line joins the next line of its video even across a gap (the dead air there is cut)
             piece("s11", 40000, 40500, "คือ"),
             piece("s12", 41000, 42000, "ฉันน่ะคิด"),
+            // a back-channel word from the listener stays its own card
+            piece("s13", 42000, 42500, "ใช่"),
+            piece("s14", 42500, 44000, "แล้วก็ต่อ"),
         ],
     };
     let (lines, _) = editorkrab::export::speech_lines(&story, &json!({"text_roles": ["speech"]}));
     let texts: Vec<&str> = lines.iter().map(|l| l.2.as_str()).collect();
-    assert_eq!(texts, ["ว่าเรื่องนี้เป็นปัญหา", "การตอบคำถามไม่ได้", "คือฉันน่ะคิด"], "{lines:?}");
+    assert_eq!(texts, ["ว่าเรื่องนี้เป็นปัญหา", "การตอบคำถามไม่ได้", "คือฉันน่ะคิด", "ใช่", "แล้วก็ต่อ"], "{lines:?}");
     // the joined line runs from "การ" to the end of the next line
     assert_eq!((lines[1].0, lines[1].1), (1420, 7780));
 }
@@ -317,14 +320,21 @@ fn the_camera_follows_whoever_is_talking() {
     // a 0.4 s "yes" from the other side keeps the shot on the person talking
     assert_eq!(speaker_at(&doc, "v1", 9200), Some(1));
     // no zoom of their own: 20% closer
-    assert_eq!(crop_at(&doc, path, 1000), (0.2, 0.5, 1.2));
+    assert_eq!(crop_at(&doc, path, 1000), (0.2, 0.5, 1.2, false));
     // a clip that already fits the frame still moves in on the speaker by zooming
-    assert_eq!(crop_at(&doc, path, 6000), (0.8, 0.4, 1.5));
+    assert_eq!(crop_at(&doc, path, 6000), (0.8, 0.4, 1.5, false));
     assert_eq!(speaker_cuts(&doc, "v1", 2000, 11000), vec![(2000, 5000), (5000, 11000)]);
     // following off: one window for the whole video
     let mut off = doc.clone();
     off["follow_speaker"] = json!(false);
-    assert_eq!(crop_at(&off, path, 6000), (0.5, 0.5, 1.0));
+    assert_eq!(crop_at(&off, path, 6000), (0.5, 0.5, 1.0, false));
+    // faces seen: the camera follows who is seen talking and centres on their face, 20% closer
+    let mut faces = doc.clone();
+    faces["crops"]["v1"]["speakers"] = json!({});
+    faces["voice"]["v1"]["faces"] = json!([{"cx": 0.21, "cy": 0.51, "size": 0.3}, {"cx": 0.76, "cy": 0.45, "size": 0.2}]);
+    faces["voice"]["v1"]["seen"] = json!([{"start_ms": 0, "end_ms": 16000, "person": 0}, {"start_ms": 16000, "end_ms": 30000, "person": 1}]);
+    assert_eq!(crop_at(&faces, path, 20000), (0.76, 0.45, 1.2, true));
+    assert_eq!(speaker_cuts(&faces, "v1", 10000, 20000), vec![(10000, 16000), (16000, 20000)]);
 }
 
 #[test]

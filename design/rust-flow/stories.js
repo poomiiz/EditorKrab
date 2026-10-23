@@ -9,7 +9,7 @@ const clock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padSta
 function readJson(raw){
  // Gemini's copy indents with non-breaking spaces (U+00A0), which JSON does not allow as spacing; chat pages also
  // slip in other wide or zero-width spaces. They become plain spaces before reading.
- raw=raw.replace(/[   -​  　﻿]/g,' ');
+ raw=raw.replace(/[\u00a0\u1680\u2000-\u200b\u202f\u205f\u3000\ufeff]/g,' ');
  const fence=raw.match(/```(?:json)?\s*([\s\S]*?)```/),body=(fence?fence[1]:raw).trim();
  const from=body.search(/[[{]/),to=Math.max(body.lastIndexOf('}'),body.lastIndexOf(']')),json=from<0?body:body.slice(from,to+1);
  try{return {value:JSON.parse(json),json};}catch(_){return {};}
@@ -68,7 +68,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  // edges (unquiet) and inside it (inner), leaving PAD ms of it; an edge the person dragged stays where they put
  // it, and a cut clicked back stays in (air_keep). The export cuts the same (unquiet / inner_cuts, export.rs).
  // AIR_RULE goes up when voice.rs counts dead air differently, so stored stretches are counted again
- const PAD=100,AIR_MIN=500,AIR_RULE=2;
+ // Nina clips keep breaths (pauses of 0.3-0.5 s stay in) and cut gaps over about a second, and keep the listener
+ const PAD=100,AIR_MIN=1000,AIR_RULE=3;
  const airMin=()=>Number.isFinite(read().dead_min_ms)?read().dead_min_ms:AIR_MIN;
  function quietOf(source){
   if(airMin()===0)return [];
@@ -105,7 +106,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  async function findQuiet(){
   if(!editable()){clearTimeout(airRetry);airRetry=setTimeout(findQuiet,1000);return;}
   const voice=read().voice || {},files=read().files.filter(f=>f.source_id&&lines().some(l=>l.source_id===f.source_id));
-  const todo=files.filter(f=>!voice[f.source_id]&&!listening.has(f.source_id));
+  const todo=files.filter(f=>(!voice[f.source_id] || !Array.isArray(voice[f.source_id].seen))&&!listening.has(f.source_id));
   const keyOf=f=>`${airMin()}|${AIR_RULE}|${keepOf(f.source_id).join(',')}`;
   const stale=files.filter(f=>voice[f.source_id]&&(read().quiet_key || {})[f.source_id]!==keyOf(f)&&airMin()>0&&!listening.has(f.source_id));
   for(const f of stale){listening.add(f.source_id);
@@ -119,11 +120,11 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   if(!todo.length)return;
   const status=await fetch('/api/v1/voice',{cache:'no-store'}).then(r=>r.json()).catch(()=>null);
   if(!status?.ready){airStatus(status?`ตัดช่วงเงียบต้องใช้ตัวแยกเสียง (${Math.round((status.download_bytes || 0)/1048576)} MB ครั้งเดียว)`:'อ่านสถานะตัวแยกเสียงไม่ได้');const b=$('airDownload');if(b)b.hidden=!status;return;}
-  for(const f of todo){listening.add(f.source_id);airStatus('กำลังฟังเสียงหาช่วงเงียบ…');
+  for(const f of todo){listening.add(f.source_id);airStatus('กำลังฟังเสียงและดูหน้าคนในภาพ…');
    try{const r=await fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/voice`,{method:'POST',headers:{'Content-Type':'application/json'},
      body:JSON.stringify({words:wordStarts(f.source_id),min_ms:airMin() || AIR_MIN}),signal:AbortSignal.timeout(900000)});
     const a=await r.json();if(!r.ok || !Array.isArray(a.dead))throw Error(a.error || 'voice_failed');
-    write(d=>{d.voice={...(d.voice || {}),[f.source_id]:{speech:a.speech,turns:a.turns,total_ms:a.total_ms,main:a.main}};
+    write(d=>{d.voice={...(d.voice || {}),[f.source_id]:{speech:a.speech,turns:a.turns,total_ms:a.total_ms,main:a.main,faces:a.faces || [],seen:a.seen || []}};
      d.quiet={...(d.quiet || {}),[f.source_id]:a.dead};d.quiet_key={...(d.quiet_key || {}),[f.source_id]:airMin()?keyOf(f):''};});
     airStatus(`เจอช่วงเงียบ ${a.dead.length} ช่วง`);}
    catch(e){airStatus('ฟังเสียงไม่สำเร็จ ('+(e.message || 'ไม่ทราบสาเหตุ')+') ท่อนยังไม่ถูกตัด');}
@@ -200,9 +201,14 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const packet={schema_version:1,step:'refine_story',project_id:project,story_id:story.id,title:story.title,summary:story.summary,
    lines:offered(story).map(l=>({id:l.segment_id,start_ms:l.start_ms,end_ms:l.end_ms,text:l.text})),
    response_schema:{story_id:story.id,title:'หัวข้อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[]}};
-  return 'เรียบเรียงเรื่องนี้ให้เป็นคลิปที่ดูแล้วรู้เรื่องในตัวเอง เลือกเฉพาะท่อนที่ดีที่สุด ตัดท่อนที่พูดซ้ำ พูดติดขัด หรือออกนอกเรื่อง '
-   +'เรียงลำดับใหม่ได้ถ้าเล่าแล้วดีขึ้น เปิดเรื่องให้น่าสนใจและรักษาตอนจบให้ครบ อ้างท่อนด้วย id ใน lines เท่านั้น ห้ามสร้างท่อนหรือเวลาใหม่ '
-   +'segment_ids คือท่อนที่เก็บ เรียงตามลำดับที่จะเล่น ปรับ title และ summary ให้ตรงกับเรื่องที่เรียบเรียงแล้ว\n'
+  // the shape of a finished Nina clip (NinaStyleBook, 5 CapCut drafts measured 23 Oct): hook, setup, proof, twist,
+  // lesson, button; 60-130 s; the listener's questions and laughs stay in
+  return 'เรียบเรียงเรื่องนี้ให้เป็นคลิปสั้นที่ดูแล้วรู้เรื่องในตัวเอง ยาวประมาณ 60-130 วินาที ลำดับการเล่า: '
+   +'1) เปิดด้วยประโยคที่บอกว่าคนดูจะได้อะไร (ใน 5 วินาทีแรก ไม่เปิดด้วยการเกริ่น) 2) ปูเรื่อง 3) หลักฐานจริง เช่น ตัวเลข ชื่อ สถานที่ ตัวอย่างเปรียบเทียบ '
+   +'4) จุดหักมุม 5) บทเรียนประโยคเดียว 6) ปิดด้วยมุก คำคม หรือประโยคที่อยากให้ดูต่อ '
+   +'เก็บคำถาม ข้อสงสัย และเสียงหัวเราะของคนถาม/คนฟังไว้ (เป็นเสียงแทนคนดู) เก็บรายละเอียดเฉพาะ ตัดคำพูดกว้างๆ ที่ไม่มีสาระ ตัดท่อนที่พูดซ้ำหรือพูดติดขัด '
+   +'เรียงลำดับใหม่ได้ถ้าเล่าแล้วดีขึ้นแต่ต้องคงความหมายเดิม ห้ามจบกลางประโยค อ้างท่อนด้วย id ใน lines เท่านั้น ห้ามสร้างท่อนหรือเวลาใหม่ '
+   +'segment_ids คือท่อนที่เก็บ เรียงตามลำดับที่จะเล่น title ต้องเป็นคำที่พูดจริงในท่อนที่เก็บ ไม่เกิน 40 ตัวอักษร ปรับ summary ให้ตรงกับเรื่องที่เรียบเรียงแล้ว\n'
    +'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,1);
  }
  const refineStory=()=>model()?.stories.find(s=>s.id===refining) || null;
@@ -352,7 +358,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    const roles=read().text_roles || [],subs=read().subtitles || {};lane.classList.toggle('edit-layer-off',!roles.includes('emphasis'));lane.classList.toggle('edit-layer-off-sub',!roles.includes('english'));lane.classList.toggle('edit-layer-off-speech',!roles.includes('speech'));
    for(const {line,kept,at} of editView.boxes){
     const span=kept || line;
-    const bar=document.createElement('div');bar.className='edit-vid';{const who=speakerAt(line.source_id,span.start_ms),n=people(line.source_id).findIndex(p=>p.id===who);if(n>=0)bar.dataset.speaker=String(n%4);}bar.style.left=px(at)+'px';bar.style.width=Math.max(4,px(span.end_ms-span.start_ms)-2)+'px';lane.append(bar);
+    const bar=document.createElement('div');bar.className='edit-vid';{const who=speakerAt(line.source_id,span.start_ms),n=seenOf(line.source_id)?who ?? -1:people(line.source_id).findIndex(p=>p.id===who);if(n>=0)bar.dataset.speaker=String(n%4);}bar.style.left=px(at)+'px';bar.style.width=Math.max(4,px(span.end_ms-span.start_ms)-2)+'px';lane.append(bar);
     const words=picks(line).filter(w=>w.start_ms<span.end_ms&&(w.end_ms ?? w.start_ms+1)>span.start_ms);
     if(words.length){
      const first=Math.max(words[0].start_ms,span.start_ms),clip=document.createElement('button');clip.type='button';clip.className='edit-emph';
@@ -453,7 +459,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  // shows (the export does the same: EMPHASIS_HOLD_MS in export.rs)
  const HOLD=1200;
  // letters in a line short enough to join the line next to it on screen
- const SHORT=4;
+ const SHORT=4,BACKCHANNEL=new Set(['ใช่','อืม','อือ','เออ','อ๋อ','อ้อ','เฮ้ย','ค่ะ','ครับ','จ้ะ','จ้า','โห','ว้าว','หา','ฮะ','อ่าว']);
  function emphasisAt(story,said,now){
   const own=said&&emphasisNow(said,now);if(own)return own;
   let best=null;
@@ -501,53 +507,86 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
 
  // crop: where the clip-shaped window sits on the video, 0..1 across the slack each way (0.5 = centred)
  const cropOf=id=>{const c=read().crops?.[id] || {};const f=v=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):0.5;return {x:f(c.x),y:f(c.y)};};
- // zoom scales the picture about the same point the window sits at, which is the export's smaller crop window
- function showCrop(at=cropAt(cropSource,video.currentTime*1000)){const z=at.zoom || 1;video.style.objectPosition=`${at.x*100}% ${at.y*100}%`;
-  video.style.transformOrigin=`${at.x*100}% ${at.y*100}%`;video.style.transform=z>1?`scale(${z})`:'';}
- // who talks when, from the stored diarization (voice[id].turns); a turn under FOLLOW_MIN does not move the camera
- // (the export does the same: speaker_at in export.rs)
+ // zoom scales the picture about the same point the window sits at, which is the export's smaller crop window;
+ // a window centred on a face is moved so the face sits mid-frame, kept inside the picture like the export's
+ function showCrop(at=cropAt(cropSource,video.currentTime*1000)){
+  const z=at.zoom || 1,frame=video.parentElement;
+  if(at.centred&&frame&&video.videoWidth){
+   const fw=frame.clientWidth,fh=frame.clientHeight,s=Math.max(fw/video.videoWidth,fh/video.videoHeight),W=video.videoWidth*s,H=video.videoHeight*s;
+   const px=(fw-W)/2+at.x*W,py=(fh-H)/2+at.y*H,clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+   const tx=clamp(fw/2-px*z,fw-((fw-W)/2+W)*z,-((fw-W)/2)*z),ty=clamp(fh/2-py*z,fh-((fh-H)/2+H)*z,-((fh-H)/2)*z);
+   video.style.objectPosition='50% 50%';video.style.transformOrigin='0 0';video.style.transform=`translate(${tx}px,${ty}px) scale(${z})`;return;
+  }
+  video.style.objectPosition=`${at.x*100}% ${at.y*100}%`;video.style.transformOrigin=`${at.x*100}% ${at.y*100}%`;video.style.transform=z>1?`scale(${z})`:'';
+ }
+ // who talks when: who is seen talking (voice[id].seen, by face and mouth movement) when faces were found, else who
+ // is heard (voice[id].turns); a turn under FOLLOW_MIN does not move the camera (speaker_at in export.rs)
  const FOLLOW_MIN=1000,FOLLOW_ZOOM=1.2;
+ const seenOf=source=>{const s=(read().voice || {})[source]?.seen;return Array.isArray(s)&&s.length?s:null;};
+ function followTurns(source){const v=(read().voice || {})[source] || {},seen=seenOf(source);
+  return seen?seen.map(t=>({start_ms:t.start_ms,end_ms:t.end_ms,who:t.person})):(v.turns || []).map(t=>({start_ms:t.start_ms,end_ms:t.end_ms,who:t.speaker}));}
  function speakerAt(source,ms){
-  const turns=((read().voice || {})[source]?.turns || []).filter(t=>t.end_ms-t.start_ms>=FOLLOW_MIN);
+  const turns=followTurns(source).filter(t=>t.end_ms-t.start_ms>=FOLLOW_MIN);
   const inside=turns.filter(t=>t.start_ms<=ms&&ms<t.end_ms).sort((a,b)=>(a.end_ms-a.start_ms)-(b.end_ms-b.start_ms))[0];
   const before=turns.filter(t=>t.start_ms<=ms).sort((a,b)=>b.start_ms-a.start_ms)[0];
-  return (inside || before || turns[0])?.speaker ?? null;
+  return (inside || before || turns[0])?.who ?? null;
  }
  const following=()=>read().follow_speaker===true;
- // the crop at a moment: the speaker's own window when the camera follows them, else the video's window
+ // the window at a moment: the person's dragged window, else centred on their face, else the video's window
  function cropAt(source,ms){
-  const base=cropOf(source),who=following()?speakerAt(source,ms):null,c=who===null?null:read().crops?.[source]?.speakers?.[String(who)];
-  const f=(v,d)=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):d;
+  const base=cropOf(source),who=following()?speakerAt(source,ms):null;
   if(who===null)return {...base,zoom:1};
-  // a person with no window of their own yet is shown 20% closer, so following shows even on a clip that fits
-  return {x:f(c?.x,base.x),y:f(c?.y,base.y),zoom:Number.isFinite(c?.zoom)?Math.min(3,Math.max(1,c.zoom)):FOLLOW_ZOOM};
+  // an entry of exactly x 0.5, y 0.5 was written by the first zoom picker (when people were voices, not faces): unset
+  const raw=read().crops?.[source]?.speakers?.[String(who)],c=raw&&raw.x===0.5&&raw.y===0.5?null:raw,f=(v,d)=>Number.isFinite(v)?Math.min(1,Math.max(0,v)):d;
+  // a person with no zoom of their own is shown 20% closer, so following shows even on a clip that fits
+  const zoom=Number.isFinite(c?.zoom)?Math.min(3,Math.max(1,c.zoom)):FOLLOW_ZOOM;
+  if(Number.isFinite(c?.x) || Number.isFinite(c?.y))return {x:f(c.x,base.x),y:f(c.y,base.y),zoom};
+  const face=seenOf(source)&&(read().voice || {})[source]?.faces?.[who];
+  if(face&&Number.isFinite(face.cx))return {x:f(face.cx,0.5),y:f(face.cy,0.5),zoom,centred:true};
+  return {...base,zoom};
  }
  // the people heard in a video, by how long each talks, with whether their talk is kept from the dead-air cut
- const keepOf=source=>{const k=(read().speakers_keep || {})[source];const main=(read().voice || {})[source]?.main;return Array.isArray(k)?k:Number.isInteger(main)?[main]:[];};
+ // every voice is kept unless the person unticks one: a Nina clip keeps the listener's lines (NinaStyleBook)
+ const keepOf=source=>{const k=(read().speakers_keep || {})[source];return Array.isArray(k)?k:((read().voice || {})[source]?.turns || []).map(t=>t.speaker).filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>a-b);};
  function people(source){
   const v=(read().voice || {})[source];if(!v)return [];
   const talk=new Map();for(const t of v.turns || [])talk.set(t.speaker,(talk.get(t.speaker) || 0)+t.end_ms-t.start_ms);
   return [...talk].sort((a,b)=>b[1]-a[1]).map(([id,ms],n)=>({id,ms,n,main:id===v.main,kept:keepOf(source).includes(id)}));
  }
+ // the people on screen, left to right, with how long each is seen talking
+ function onScreen(source){
+  const faces=(read().voice || {})[source]?.faces || [],seen=seenOf(source) || [];
+  return faces.map((f,id)=>({id,face:f,ms:seen.filter(t=>t.person===id).reduce((n,t)=>n+t.end_ms-t.start_ms,0)}));
+ }
+ const sideName=(i,n)=>n===1?'':n===2?(i===0?' (ซ้าย)':' (ขวา)'):i===0?' (ซ้าย)':i===n-1?' (ขวา)':' (กลาง)';
+ function zoomPick(source,id,label){
+  const stored=read().crops?.[source]?.speakers?.[String(id)],framed=stored&&stored.x===0.5&&stored.y===0.5?null:stored;
+  const zoom=document.createElement('select');zoom.title='ซูมเข้าหาคนนี้';zoom.setAttribute('aria-label',`ซูมเข้าหา${label}`);zoom.disabled=!editable() || !following();
+  for(const z of [1,1.2,1.3,1.5,1.75,2]){const o=document.createElement('option');o.value=String(z);o.textContent=z===1?'ไม่ซูม':`ซูม +${Math.round((z-1)*100)}%`;zoom.append(o);}
+  zoom.value=String(framed?.zoom ?? FOLLOW_ZOOM);
+  zoom.onchange=()=>write(d=>{const c={...(d.crops?.[source] || {x:0.5,y:0.5})};c.speakers={...(c.speakers || {}),[String(id)]:{...(framed || {}),zoom:Number(zoom.value)}};d.crops={...(d.crops || {}),[source]:c};});
+  return zoom;
+ }
  function drawPeople(){
   const host=$('speakerList');if(!host)return;
-  const story=current(),source=story?.source_id,list=source?people(source):[];
-  $('speakerBox').hidden=!list.length;
+  const story=current(),source=story?.source_id,list=source?people(source):[],screen=source?onScreen(source):[];
+  $('speakerBox').hidden=!list.length&&!screen.length;
   host.replaceChildren(...list.map(p=>{
    const row=document.createElement('label');row.className='speaker-row';row.dataset.speaker=String(p.n%4);
    const box=document.createElement('input');box.type='checkbox';box.checked=p.kept;box.disabled=!editable();
    box.onchange=()=>{const next=new Set(keepOf(source));if(box.checked)next.add(p.id);else next.delete(p.id);
     write(d=>{d.speakers_keep={...(d.speakers_keep || {}),[source]:[...next].sort((a,b)=>a-b)};});findQuiet();};
    const dot=document.createElement('span');dot.className='speaker-dot';dot.setAttribute('aria-hidden','true');
-   const name=document.createElement('span');name.textContent=`คนที่ ${p.n+1}${p.main?' (หลัก)':''} · พูด ${clock(p.ms)}`;
-   const framed=read().crops?.[source]?.speakers?.[String(p.id)];
-   // how close the camera goes on this person; a clip that fits the frame exactly can only follow by zooming
-   const zoom=document.createElement('select');zoom.title='ซูมเข้าหาคนนี้';zoom.setAttribute('aria-label',`ซูมเข้าหาคนที่ ${p.n+1}`);zoom.disabled=!editable() || !following();
-   for(const z of [1,1.2,1.3,1.5,1.75,2]){const o=document.createElement('option');o.value=String(z);o.textContent=z===1?'ไม่ซูม':`ซูม +${Math.round((z-1)*100)}%`;zoom.append(o);}
-   zoom.value=String(framed?.zoom ?? FOLLOW_ZOOM);
-   zoom.onchange=()=>write(d=>{const c={...(d.crops?.[source] || {x:0.5,y:0.5})};c.speakers={...(c.speakers || {}),[String(p.id)]:{x:0.5,y:0.5,...(c.speakers?.[String(p.id)] || {}),zoom:Number(zoom.value)}};d.crops={...(d.crops || {}),[source]:c};});
-   row.append(box,dot,name,zoom);return row;
+   const name=document.createElement('span');name.textContent=`เสียงที่ ${p.n+1}${p.main?' (หลัก)':''} · พูด ${clock(p.ms)}`;
+   // with faces found the camera follows faces (zoom is set per face below); otherwise per voice here
+   row.append(box,dot,name,screen.length?document.createElement('span'):zoomPick(source,p.id,`เสียงที่ ${p.n+1}`));return row;
   }));
+  const cams=$('faceList');
+  if(cams){cams.hidden=!screen.length;cams.replaceChildren(...screen.map(p=>{
+   const row=document.createElement('div');row.className='speaker-row face-row';row.dataset.speaker=String(p.id%4);
+   const dot=document.createElement('span');dot.className='speaker-dot';dot.setAttribute('aria-hidden','true');
+   const name=document.createElement('span');name.textContent=`คนที่ ${p.id+1}${sideName(p.id,screen.length)} · เห็นพูด ${clock(p.ms)}`;
+   row.append(document.createElement('span'),dot,name,zoomPick(source,p.id,`คนที่ ${p.id+1}`));return row;}));}
   if($('followSpeaker')){$('followSpeaker').checked=following();$('followSpeaker').disabled=!editable();}
  }
  if($('followSpeaker'))$('followSpeaker').onchange=()=>{if(!editable())return;const on=$('followSpeaker').checked;write(d=>{d.follow_speaker=on;});};
@@ -663,7 +702,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   // a line of one short word ("\u0e01\u0e32\u0e23" before a pause) reads with the line it runs into (P'Ohm 23 Oct; the
   // export does the same: join_short_lines in export.rs)
   const list=story?(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept):[],i=said?list.indexOf(said):-1;
-  const short=l=>!!l&&!/\s/.test((l.text || '').trim())&&[...(l.text || '').trim()].length<=SHORT;
+  // a back-channel word ("ใช่", "อืม") is a card of its own in a Nina clip; a cut-off word ("การ") joins the next line
+  const short=l=>!!l&&!/\s/.test((l.text || '').trim())&&[...(l.text || '').trim()].length<=SHORT&&!BACKCHANNEL.has((l.text || '').trim());
   const next=(a,b)=>!!a&&!!b&&a.source_id===b.source_id&&b.start_ms>=a.end_ms;
   const before=i>0&&short(list[i-1])&&next(list[i-1],said)?shown(list[i-1]):'';
   const after=i>=0&&short(said)&&next(said,list[i+1])?shown(list[i+1]):'';
@@ -735,9 +775,9 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    response_schema:{emphasis:{'<line id>':['คำที่เน้น']}}};
   return ['เลือก "คำเน้น" สำหรับซับคลิปสั้น คือคำที่จะขึ้นตัวใหญ่บนจอตอนคนพูดคำนั้น',
    'กติกา:',
-   '1. เลือกเฉพาะท่อนที่มีใจความเด่นจริง ประมาณ 1 ใน 3 ของท่อนทั้งหมด ท่อนอื่นไม่ต้องใส่ในคำตอบ',
-   '2. ท่อนละ 1 คำ (มากสุด 2) แต่ละคำยาวไม่เกิน 12 ตัวอักษร',
-   '3. เลือกคำที่มีความหมายครบในตัว: ชื่อแบรนด์หรือชื่อเฉพาะ (เอาทั้งชื่อ ไม่ตัดครึ่ง) ตัวเลข ราคา คำที่ให้อารมณ์ หรือใจความหลักของท่อน',
+   '1. เลือกท่อนที่มีใจความเด่น ประมาณ 4 ใน 10 ของท่อนทั้งหมด ท่อนอื่นไม่ต้องใส่ในคำตอบ',
+   '2. ท่อนละ 1 คำหรือวลีสั้น (มากสุด 2) แต่ละอันยาวไม่เกิน 15 ตัวอักษร',
+   '3. เลือกคำที่มีความหมายครบในตัว: ชื่อแบรนด์หรือชื่อเฉพาะ (เอาทั้งชื่อ ไม่ตัดครึ่ง) ตัวเลขพร้อมหน่วย เช่น 10,000 บาท ศัพท์อังกฤษที่พูดเป็นอังกฤษ คำที่ให้อารมณ์ หรือใจความหลักของท่อน',
    '4. ห้ามเลือกคำเติมหรือคำเชื่อม เช่น แบบ คือ อ่ะ อืม เออ ที่ ว่า แล้ว ก็ มัน นี้ เนี้ย ใช่ ปะ',
    '5. คัดลอกคำให้ตรงกับข้อความใน text ของท่อนนั้นทุกตัวอักษร ถ้า text สะกดผิดก็ใช้ตามนั้น ห้ามแก้ ห้ามแปล',
    '6. อ้างท่อนด้วย id ที่ให้',

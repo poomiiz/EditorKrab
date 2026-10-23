@@ -17,6 +17,8 @@ pub struct Models {
     pub vad: PathBuf,
     pub segmentation: PathBuf,
     pub embedding: PathBuf,
+    /// SeetaFace frontal face model (faces.rs)
+    pub face: PathBuf,
 }
 impl Models {
     pub fn at(data: &Path) -> Self {
@@ -25,10 +27,11 @@ impl Models {
             vad: dir.join("silero_vad.onnx"),
             segmentation: dir.join("pyannote-segmentation-3.0.onnx"),
             embedding: dir.join("wespeaker_en_voxceleb_resnet34_LM.onnx"),
+            face: dir.join("seeta_fd_frontal_v1.0.bin"),
         }
     }
     pub fn ready(&self) -> bool {
-        [&self.vad, &self.segmentation, &self.embedding].iter().all(|p| p.is_file())
+        [&self.vad, &self.segmentation, &self.embedding, &self.face].iter().all(|p| p.is_file())
     }
 }
 
@@ -39,6 +42,7 @@ pub fn plan(data: &Path) -> Vec<Item> {
         (VAD_URL, VAD_SIZE, VAD_SHA256, models.vad),
         (SEGMENTATION_URL, SEGMENTATION_SIZE, SEGMENTATION_SHA256, models.segmentation),
         (EMBEDDING_URL, EMBEDDING_SIZE, EMBEDDING_SHA256, models.embedding),
+        (crate::faces::MODEL_URL, crate::faces::MODEL_SIZE, crate::faces::MODEL_SHA256, models.face),
     ]
     .into_iter()
     .filter(|(_, _, _, dest)| !dest.is_file())
@@ -111,6 +115,11 @@ pub fn speech(model: &Path, samples: &[f32]) -> Result<Vec<(u64, u64)>, String> 
 
 /// Who speaks when, by speaker diarization; speakers are numbered from 0.
 pub fn speakers(models: &Models, samples: &[f32]) -> Result<Vec<Turn>, String> {
+    speakers_at(models, samples, CLUSTER_THRESHOLD)
+}
+/// How alike two voices must be to count as one person (sherpa-onnx fast clustering; lower splits more).
+pub const CLUSTER_THRESHOLD: f32 = 0.5;
+pub fn speakers_at(models: &Models, samples: &[f32], threshold: f32) -> Result<Vec<Turn>, String> {
     let config = OfflineSpeakerDiarizationConfig {
         segmentation: OfflineSpeakerSegmentationModelConfig {
             pyannote: OfflineSpeakerSegmentationPyannoteModelConfig {
@@ -126,7 +135,7 @@ pub fn speakers(models: &Models, samples: &[f32]) -> Result<Vec<Turn>, String> {
             ..Default::default()
         },
         // the number of people is not known; voices closer than this threshold are one person
-        clustering: FastClusteringConfig { num_clusters: -1, threshold: 0.5, ..Default::default() },
+        clustering: FastClusteringConfig { num_clusters: -1, threshold, ..Default::default() },
         ..Default::default()
     };
     let diarization = OfflineSpeakerDiarization::create(&config).ok_or("diarization_load_failed")?;
@@ -214,6 +223,12 @@ mod tests {
         let t = std::time::Instant::now();
         let speech = speech(&models.vad, &samples).unwrap();
         let vad_ms = t.elapsed().as_millis();
+        for threshold in [0.3, 0.4, 0.6, 0.7] {
+            let turns = speakers_at(&models, &samples, threshold).unwrap();
+            let mut talk = std::collections::BTreeMap::<i32, u64>::new();
+            for t in &turns { *talk.entry(t.speaker).or_default() += t.end_ms - t.start_ms; }
+            println!("threshold {threshold}: {talk:?}");
+        }
         let t = std::time::Instant::now();
         let turns = speakers(&models, &samples).unwrap();
         println!("vad {vad_ms} ms, diarization {} ms", t.elapsed().as_millis());
