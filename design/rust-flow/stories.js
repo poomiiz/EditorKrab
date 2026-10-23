@@ -53,6 +53,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  const video=$('editVideo');
  const reviews=()=>read().story_reviews || {};
  const length=list=>list.reduce((sum,l)=>sum+l.end_ms-l.start_ms,0);
+ // what plays: the lines with their inner dead air cut out
+ const played=list=>list.reduce((sum,l)=>sum+playLength(l),0);
  // a kept line's in/out points, moved by dragging its edges: at most 2 s past the line, at least 0.2 s long
  const REACH=2000,SHORTEST=200;
  function trimmed(line,trim){
@@ -61,17 +63,78 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const end=Math.max(start+SHORTEST,Math.min(n(trim?.end_ms) ?? line.end_ms,line.end_ms+REACH));
   return {start_ms:start,end_ms:end};
  }
- // dead air: a quiet stretch a line starts or ends in is cut, leaving PAD ms of it; an edge the person dragged
- // stays where they put it. Quiet stretches come from the audio (pauses.rs) and are kept per video in the
- // draft, so the export cuts the same (unquiet in export.rs)
- const PAD=100;
+ // dead air, from each video's speech and speakers (voice.rs): stretches where the main speaker is not talking
+ // (a laugh or someone off camera counts as dead air) and no transcribed word starts. It is cut at a line's
+ // edges (unquiet) and inside it (inner), leaving PAD ms of it; an edge the person dragged stays where they put
+ // it, and a cut clicked back stays in (air_keep). The export cuts the same (unquiet / inner_cuts, export.rs).
+ // AIR_RULE goes up when voice.rs counts dead air differently, so stored stretches are counted again
+ const PAD=100,AIR_MIN=500,AIR_RULE=2;
+ const airMin=()=>Number.isFinite(read().dead_min_ms)?read().dead_min_ms:AIR_MIN;
+ function quietOf(source){
+  if(airMin()===0)return [];
+  const spans=(read().quiet || {})[source],keep=(read().air_keep || {})[source] || [];
+  return Array.isArray(spans)?spans.filter(([s])=>!keep.includes(s)):[];
+ }
  function unquiet(line,span,trim){
-  const spans=(read().quiet || {})[line.source_id];if(!Array.isArray(spans))return span;
+  const spans=quietOf(line.source_id);
   let a=span.start_ms,b=span.end_ms;
   if(!Number.isFinite(trim?.start_ms))for(const [s,e] of spans)if(s<=a+PAD&&e>a)a=Math.max(a,e-PAD);
   if(!Number.isFinite(trim?.end_ms))for(const [s,e] of [...spans].reverse())if(s>a&&s<b&&e>=b-PAD)b=Math.min(b,s+PAD);
   return b-a>=SHORTEST?{start_ms:a,end_ms:b}:span;
  }
+ // the dead air cut out of a kept line's middle, as [from, to] in the video's time
+ function inner(line){
+  const out=[];let at=line.start_ms;
+  for(const [s,e] of quietOf(line.source_id)){const a=s+PAD,b=e-PAD;if(a>at&&b<line.end_ms&&b>=a+200){out.push([a,b]);at=b;}}
+  return out;
+ }
+ // every quiet stretch inside a kept line, cut or clicked back, for the timeline marks
+ function marks(line){
+  const keep=(read().air_keep || {})[line.source_id] || [],all=airMin()===0?[]:(read().quiet || {})[line.source_id] || [];
+  return all.filter(([s,e])=>s+PAD>line.start_ms&&e-PAD<line.end_ms&&e-s>=200+2*PAD).map(([s,e])=>({s,e,from:s+PAD,to:e-PAD,kept:keep.includes(s)}));
+ }
+ const playLength=l=>l.end_ms-l.start_ms-inner(l).reduce((n,[a,b])=>n+b-a,0);
+ function toggleAir(source,start){
+  if(!editable())return;
+  write(d=>{const keep={...(d.air_keep || {})},list=new Set(keep[source] || []);if(list.has(start))list.delete(start);else list.add(start);keep[source]=[...list];d.air_keep=keep;});
+ }
+ // each video is listened to once (about a fifth of its length on CPU); a new shortest pause only recounts
+ const listening=new Set();let airRetry=0,airNote='';
+ const wordStarts=source=>lines().filter(l=>l.source_id===source).flatMap(l=>(l.words || []).map(w=>w.start_ms)).filter(Number.isFinite);
+ function airStatus(text){airNote=text;const el=$('airStatus');if(el)el.textContent=text;}
+ async function findQuiet(){
+  if(!editable()){clearTimeout(airRetry);airRetry=setTimeout(findQuiet,1000);return;}
+  const voice=read().voice || {},files=read().files.filter(f=>f.source_id&&lines().some(l=>l.source_id===f.source_id));
+  const todo=files.filter(f=>!voice[f.source_id]&&!listening.has(f.source_id));
+  const stale=files.filter(f=>voice[f.source_id]&&((read().quiet_min || {})[f.source_id]!==airMin() || (read().quiet_rule || {})[f.source_id]!==AIR_RULE)&&airMin()>0&&!listening.has(f.source_id));
+  for(const f of stale){listening.add(f.source_id);
+   try{const v=voice[f.source_id];const r=await fetch('/api/v1/voice/dead-air',{method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({speech:v.speech,turns:v.turns,words:wordStarts(f.source_id),total_ms:v.total_ms,min_ms:airMin()}),signal:AbortSignal.timeout(30000)});
+    const a=await r.json();if(!r.ok || !Array.isArray(a.dead))throw Error(a.error || 'dead_air_failed');
+    write(d=>{d.quiet={...(d.quiet || {}),[f.source_id]:a.dead};d.quiet_min={...(d.quiet_min || {}),[f.source_id]:airMin()};d.quiet_rule={...(d.quiet_rule || {}),[f.source_id]:AIR_RULE};});}
+   catch(_){airStatus('นับช่วงเงียบใหม่ไม่สำเร็จ ลองเปลี่ยนค่าอีกครั้ง');}
+   finally{listening.delete(f.source_id);}
+  }
+  if(!todo.length)return;
+  const status=await fetch('/api/v1/voice',{cache:'no-store'}).then(r=>r.json()).catch(()=>null);
+  if(!status?.ready){airStatus(status?`ตัดช่วงเงียบต้องใช้ตัวแยกเสียง (${Math.round((status.download_bytes || 0)/1048576)} MB ครั้งเดียว)`:'อ่านสถานะตัวแยกเสียงไม่ได้');const b=$('airDownload');if(b)b.hidden=!status;return;}
+  for(const f of todo){listening.add(f.source_id);airStatus('กำลังฟังเสียงหาช่วงเงียบ…');
+   try{const r=await fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/voice`,{method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({words:wordStarts(f.source_id),min_ms:airMin() || AIR_MIN}),signal:AbortSignal.timeout(900000)});
+    const a=await r.json();if(!r.ok || !Array.isArray(a.dead))throw Error(a.error || 'voice_failed');
+    write(d=>{d.voice={...(d.voice || {}),[f.source_id]:{speech:a.speech,turns:a.turns,total_ms:a.total_ms,main:a.main}};
+     d.quiet={...(d.quiet || {}),[f.source_id]:a.dead};d.quiet_min={...(d.quiet_min || {}),[f.source_id]:airMin() || AIR_MIN};d.quiet_rule={...(d.quiet_rule || {}),[f.source_id]:AIR_RULE};});
+    airStatus(`เจอช่วงเงียบ ${a.dead.length} ช่วง`);}
+   catch(e){airStatus('ฟังเสียงไม่สำเร็จ ('+(e.message || 'ไม่ทราบสาเหตุ')+') ท่อนยังไม่ถูกตัด');}
+   finally{listening.delete(f.source_id);}
+  }
+ }
+ if($('airDownload'))$('airDownload').onclick=async()=>{
+  const b=$('airDownload');b.disabled=true;airStatus('กำลังดาวน์โหลดตัวแยกเสียง…');
+  try{const r=await fetch('/api/v1/voice/download',{method:'POST',signal:AbortSignal.timeout(900000)});const a=await r.json();if(!r.ok || !a.ready)throw Error(a.error || 'download_failed');b.hidden=true;airStatus('');findQuiet();}
+  catch(e){airStatus('ดาวน์โหลดไม่สำเร็จ ลองอีกครั้ง');}finally{b.disabled=false;}
+ };
+ if($('airMin'))$('airMin').onchange=()=>{if(!editable())return;const v=Number($('airMin').value);write(d=>{d.dead_min_ms=v;});findQuiet();};
  function model(){
   const plan=parsePlan(read().plan);if(!plan)return null;
   const all=lines(),bySegment=new Map(all.map(l=>[l.segment_id,l]));
@@ -114,7 +177,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const done=!!reviews()[story.id],status=document.createElement('span');status.className='badge story-status';status.dataset.done=done;status.textContent='ตรวจแล้ว';status.hidden=!done;
   const title=document.createElement('strong');title.textContent=`${story.index+1}. ${story.title}`;
   const summary=document.createElement('span');summary.className='story-summary';summary.textContent=story.summary || story.kept.map(l=>l.text).join(' ').slice(0,100);
-  const meta=document.createElement('span');meta.className='caption story-meta';meta.textContent=`${clock(length(story.kept))} · ${pieces(story)} ท่อน`;
+  const meta=document.createElement('span');meta.className='caption story-meta';meta.textContent=`${clock(played(story.kept))} · ${pieces(story)} ท่อน`;
   const marks=document.createElement('span');marks.className='story-marks';marks.append(status);
   if(story.refined){const done=document.createElement('span');done.className='badge story-refined';done.textContent='เรียบเรียงแล้ว';marks.append(done);}
   button.title=`${story.title}\n${summary.textContent}`;button.append(marks,title,summary,meta);
@@ -229,6 +292,11 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
     box.ondragleave=()=>{delete box.dataset.drop;};
     box.ondrop=e=>{e.preventDefault();const side=box.dataset.drop;delete box.dataset.drop;move(story,e.dataTransfer.getData('text/plain'),kept.segment_id,side);};
    }
+   // dead air inside the line: hatched where it is cut, dashed where it was clicked back in
+   if(kept)for(const m of marks(kept)){const cut=document.createElement('button');cut.type='button';cut.className='edit-air';cut.dataset.kept=String(m.kept);
+    cut.style.left=px(m.from-span.start_ms)+'px';cut.style.width=Math.max(3,px(m.to-m.from))+'px';
+    cut.title=(m.kept?'ช่วงเงียบ ':'ตัดช่วงเงียบ ')+((m.e-m.s)/1000).toFixed(1)+' วิ · '+(m.kept?'กดเพื่อตัด':'กดเพื่อเก็บไว้');cut.setAttribute('aria-label',cut.title);cut.disabled=!editable();
+    cut.onclick=e=>{e.stopPropagation();toggleAir(kept.source_id,m.s);};box.append(cut);}
    lane.append(box);
   }
   const head=document.createElement('div');head.className='edit-head';head.id='editHead';lane.append(head);
@@ -249,7 +317,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    const up=()=>{removeEventListener('pointermove',move);removeEventListener('pointerup',up);setTimeout(()=>{scrubbed=false;},0);};
    addEventListener('pointermove',move);addEventListener('pointerup',up);
   };
-  $('editClock').textContent=`ใช้ ${story.kept.length} บรรทัด · ${pieces(story)} ท่อน · ยาว ${clock(length(story.kept))}`;
+  $('editClock').textContent=`ใช้ ${story.kept.length} บรรทัด · ${pieces(story)} ท่อน · ยาว ${clock(played(story.kept))}`;
+  if($('airMin'))$('airMin').value=String(airMin());if($('airStatus')&&airNote)$('airStatus').textContent=airNote;
  }
  let editView=null,refocus=null,cropSource=null,wordLine=null,scrubbed=false,qcBy=new Map();
  // the line picked on the step 4 timeline in the panel's text box, with the check's notes for it
@@ -528,6 +597,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    if(!next)video.pause();else if(next.start_ms>now+40 || next.start_ms<line.start_ms)video.currentTime=next.start_ms/1000;
   }
   const story=current(),said=story&&(editView?.showCut?lines().filter(l=>l.source_id===story.source_id):story.kept).find(l=>now>=l.start_ms&&now<l.end_ms);
+  // the dead air cut out of the middle of a line is jumped over, as the export leaves it out
+  if(said&&!video.paused&&!editView?.showCut){const gap=inner(said).find(([a,b])=>now>=a&&now<b-20);if(gap){video.currentTime=gap[1]/1000;return;}}
   const words=said?.words || [],wordByWord=read().text_styles?.speech?.enter==='words'&&words.length;
   // while a line plays, an empty box stays empty (a no-break space) instead of falling back to the sample text
   const shown=l=>(l.words?.length?speechText(l,now,wordByWord&&l===said):l.text) || '';
@@ -595,22 +666,6 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function warm(){for(const f of read().files.filter(f=>f.source_id&&!warmed.has(f.source_id))){warmed.add(f.source_id);
   fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/preview`,{headers:{Range:'bytes=0-0'}}).catch(()=>warmed.delete(f.source_id));}
   findQuiet();}
- // each video's quiet stretches are found once from its audio and kept in the draft (see unquiet)
- const seeking=new Set();
- let quietRetry=0;
- function findQuiet(){
-  // the draft may still be opening; look again shortly instead of giving up
-  if(!editable()){clearTimeout(quietRetry);quietRetry=setTimeout(findQuiet,1000);return;}
-  for(const f of read().files.filter(f=>f.source_id&&!(read().quiet || {})[f.source_id]&&!seeking.has(f.source_id))){
-   seeking.add(f.source_id);
-   fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/pauses?start_ms=0&end_ms=3600000`,{signal:AbortSignal.timeout(120000)})
-    .then(r=>r.ok?r.json():Promise.reject(Error('pauses_failed')))
-    .then(answer=>{if(!Array.isArray(answer.pauses) || !editable())throw Error('pauses_invalid');
-     write(d=>{d.quiet={...(d.quiet || {}),[f.source_id]:answer.pauses.map(p=>[p.start_ms,p.end_ms])};});})
-    // a video whose audio cannot be read keeps its lines uncut; it is tried again when the page reloads
-    .catch(()=>{});
-  }
- }
  function allReviewed(){const m=model();return !!m&&m.stories.length>0&&m.stories.every(s=>reviews()[s.id]);}
  // emphasis round: every story's kept lines go to an AI, which names the words worth emphasising per line
  function keptLines(){const m=model();if(!m)return [];const seen=new Set();return m.stories.flatMap(s=>s.kept.map(l=>({story:s,line:lines().find(x=>x.segment_id===l.segment_id) || l}))).filter(({line})=>!seen.has(line.segment_id)&&seen.add(line.segment_id));}

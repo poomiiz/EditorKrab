@@ -911,29 +911,10 @@ async fn text_qc(Json(body): Json<TextQcBody>) -> Result<Json<Value>, ApiError> 
         .map_err(spelling_failure)?;
     Ok(Json(json!({"findings":findings})))
 }
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct PauseQuery {
-    start_ms: u64,
-    end_ms: u64,
-}
-/// Quiet spans of one source range (the old `quiet_spans`), plus the pad kept around words.
-async fn source_pauses(
-    State(runtime): State<Runtime>,
-    Path((project, source_id)): Path<(String, String)>,
-    Query(query): Query<PauseQuery>,
-) -> Result<Json<Value>, ApiError> {
-    if query.end_ms <= query.start_ms || query.end_ms - query.start_ms > 3_600_000 {
-        return Err(failure(Error::InvalidInput));
-    }
-    let ffmpeg = runtime.asr().map(|v| v.0.ffmpeg.clone()).ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"error":"transcription_not_configured"})),
-        )
-    })?;
+/// A project's video on disk, checked to be the one the draft names (same size and time stamp).
+async fn source_path(runtime: &Runtime, project: String, source_id: String) -> Result<PathBuf, ApiError> {
     let store = runtime.store.clone();
-    let path = tokio::task::spawn_blocking(move || -> Result<PathBuf, ApiError> {
+    tokio::task::spawn_blocking(move || -> Result<PathBuf, ApiError> {
         let store = store.lock().map_err(|_| failure(Error::Unavailable))?;
         let draft = store.read(&project).map_err(failure)?.ok_or((
             StatusCode::NOT_FOUND,
@@ -972,7 +953,116 @@ async fn source_pauses(
         Ok(path)
     })
     .await
-    .map_err(|_| failure(Error::Unavailable))??;
+    .map_err(|_| failure(Error::Unavailable))?
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VoiceBody {
+    /// start times of the transcribed words in this video (ms): they name the main speaker and are never cut
+    words: Vec<u64>,
+    min_ms: u64,
+}
+fn voice_models(setup: &AsrSetup) -> editorkrab::voice::Models {
+    tool_roots(&setup.data)
+        .iter()
+        .map(|root| editorkrab::voice::Models::at(root))
+        .find(|m| m.ready())
+        .unwrap_or_else(|| editorkrab::voice::Models::at(&setup.data))
+}
+/// Whether the speech and speaker models are here, and how much is left to download.
+async fn voice_status(State(runtime): State<Runtime>) -> Json<Value> {
+    let ready = voice_models(&runtime.setup).ready();
+    let left: u64 = if ready { 0 } else { editorkrab::voice::plan(&runtime.setup.data).iter().map(|i| i.size).sum() };
+    Json(json!({"ready": ready, "download_bytes": left}))
+}
+/// Downloads the three small voice models (about 33 MB), each checked against its pinned SHA256.
+async fn voice_download(State(runtime): State<Runtime>) -> Result<Json<Value>, ApiError> {
+    if !voice_models(&runtime.setup).ready() {
+        let curl = if cfg!(windows) {
+            PathBuf::from(std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into())).join("System32").join("curl.exe")
+        } else {
+            PathBuf::from("curl")
+        };
+        let (_keep, signal) = watch::channel(false);
+        for item in editorkrab::voice::plan(&runtime.setup.data) {
+            editorkrab::asr_download::fetch(&item, &curl, signal.clone())
+                .await
+                .map_err(|e| (StatusCode::BAD_GATEWAY, Json(json!({"error": format!("voice_download_failed: {e}")}))))?;
+        }
+    }
+    Ok(voice_status(State(runtime)).await)
+}
+/// Who speaks when in one video, and its dead air: speech by Silero VAD, speakers by diarization, the main
+/// speaker by the transcribed words. Diarization takes about a fifth of the video's length on CPU.
+async fn source_voice(
+    State(runtime): State<Runtime>,
+    Path((project, source_id)): Path<(String, String)>,
+    Json(body): Json<VoiceBody>,
+) -> Result<Json<Value>, ApiError> {
+    let models = voice_models(&runtime.setup);
+    if !models.ready() {
+        return Err((StatusCode::CONFLICT, Json(json!({"error":"voice_models_missing"}))));
+    }
+    let ffmpeg = runtime
+        .asr()
+        .map(|v| v.0.ffmpeg.clone())
+        .or_else(|| find_asr_tools(&runtime.setup.data).ffmpeg)
+        .ok_or((StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"ffmpeg_missing"}))))?;
+    let path = source_path(&runtime, project, source_id).await?;
+    let samples = editorkrab::voice::samples(&ffmpeg, &path)
+        .await
+        .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
+    let (speech, turns) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        Ok((editorkrab::voice::speech(&models.vad, &samples)?, editorkrab::voice::speakers(&models, &samples)?, samples.len()))
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))?
+    .map(|(speech, turns, n)| ((speech, n), turns))
+    .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
+    let (speech, n) = speech;
+    let total_ms = n as u64 * 1000 / editorkrab::voice::RATE as u64;
+    let main = editorkrab::voice::main_speaker(&turns, &body.words);
+    let dead = editorkrab::voice::dead_air(&speech, &turns, main, &body.words, total_ms, body.min_ms);
+    Ok(Json(json!({"speech": speech, "turns": turns, "main": main, "dead": dead, "total_ms": total_ms})))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeadAirBody {
+    speech: Vec<(u64, u64)>,
+    turns: Vec<editorkrab::voice::Turn>,
+    words: Vec<u64>,
+    total_ms: u64,
+    min_ms: u64,
+}
+/// Dead air again from a video's stored speech and speakers, for a new shortest pause; no audio is read.
+async fn dead_air(Json(body): Json<DeadAirBody>) -> Json<Value> {
+    let main = editorkrab::voice::main_speaker(&body.turns, &body.words);
+    let dead = editorkrab::voice::dead_air(&body.speech, &body.turns, main, &body.words, body.total_ms, body.min_ms);
+    Json(json!({"main": main, "dead": dead}))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PauseQuery {
+    start_ms: u64,
+    end_ms: u64,
+}
+/// Quiet spans of one source range (the old `quiet_spans`), plus the pad kept around words.
+async fn source_pauses(
+    State(runtime): State<Runtime>,
+    Path((project, source_id)): Path<(String, String)>,
+    Query(query): Query<PauseQuery>,
+) -> Result<Json<Value>, ApiError> {
+    if query.end_ms <= query.start_ms || query.end_ms - query.start_ms > 3_600_000 {
+        return Err(failure(Error::InvalidInput));
+    }
+    let ffmpeg = runtime.asr().map(|v| v.0.ffmpeg.clone()).ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error":"transcription_not_configured"})),
+        )
+    })?;
+    let path = source_path(&runtime, project, source_id).await?;
     let spans = editorkrab::pauses::find(&ffmpeg, &path, query.start_ms, query.end_ms)
         .await
         .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
@@ -1994,6 +2084,10 @@ async fn serve(
         .route("/api/v1/text-qc", post(text_qc))
         .route("/api/v1/sources/pick", post(pick_sources))
         .route("/api/v1/sources/locate", post(locate_sources))
+        .route("/api/v1/voice", get(voice_status))
+        .route("/api/v1/voice/download", post(voice_download))
+        .route("/api/v1/voice/dead-air", post(dead_air))
+        .route("/api/v1/projects/{project}/sources/{source_id}/voice", post(source_voice))
         .route("/api/v1/sources/uploads", post(begin_upload))
         .route("/api/v1/sources/uploads/{id}", post(upload_chunk))
         .route("/api/v1/sources/uploads/{id}/finish", post(finish_upload))

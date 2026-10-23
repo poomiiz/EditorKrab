@@ -298,6 +298,27 @@ fn dead_air_at_a_lines_ends_is_cut_unless_that_edge_was_dragged() {
 }
 
 #[test]
+fn dead_air_inside_a_line_is_cut_and_the_line_still_reads_as_one() {
+    use editorkrab::export::inner_cuts;
+    // a 1 s pause inside a 4 s line goes, 0.1 s of it kept on each side; a short dip stays
+    assert_eq!(inner_cuts(&[(11000, 12000), (13000, 13250)], 10000, 14000), vec![(10000, 11100), (11900, 14000)]);
+    // quiet at the line's edges is unquiet's job, not a cut inside
+    assert_eq!(inner_cuts(&[(9000, 10500)], 10000, 14000), vec![(10000, 14000)]);
+    let piece = |start_ms, end_ms, text: &str, words: Vec<(String, u64, u64)>| Piece {
+        source: 0, start_ms, end_ms, text: text.into(), words, timed: true, segment: "s1".into(),
+    };
+    let story = editorkrab::export::Story {
+        id: "s".into(), title: String::new(), sources: vec!["a.mp4".into()],
+        pieces: vec![
+            piece(10000, 11100, "ตอบคำถาม", vec![("ตอบคำถาม".into(), 10000, 11000)]),
+            piece(11900, 14000, "ไม่ได้", vec![("ไม่ได้".into(), 12000, 13000)]),
+        ],
+    };
+    let (lines, _) = editorkrab::export::speech_lines(&story, &json!({"text_roles": ["speech"]}));
+    assert_eq!(lines, vec![(0, 3200, "ตอบคำถามไม่ได้".to_owned())]);
+}
+
+#[test]
 fn an_emphasis_word_at_the_end_of_its_line_stays_up_long_enough_to_read() {
     // "ว่าเรื่องนี้เป็นปัญหา" then "การ": "ปัญหา" is said in the line's last 0.4 s (P'Ohm 23 Oct)
     let piece = |segment: &str, start_ms, end_ms, words: Vec<(String, u64, u64)>| Piece {

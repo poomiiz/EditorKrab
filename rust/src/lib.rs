@@ -14,6 +14,7 @@ pub mod styles;
 pub mod transcription;
 pub mod transcription_jobs;
 pub mod uploads;
+pub mod voice;
 
 pub mod pauses;
 pub mod spelling;

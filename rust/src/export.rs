@@ -190,7 +190,7 @@ fn trim(t: &Value, start: u64, end: u64) -> (u64, u64) {
     (from, to.clamp(from + SHORTEST, (end + REACH).max(from + SHORTEST)))
 }
 
-/// Quiet stretches of the video at `path`, as step 4 stored them (`quiet` by source id, from pauses.rs).
+/// Dead air of the video at `path`, as step 3 stored it (`quiet` by source id: speech and speakers, voice.rs).
 fn quiet_of(document: &Value, path: &std::path::Path) -> Vec<(u64, u64)> {
     let id = document["files"]
         .as_array()
@@ -198,10 +198,18 @@ fn quiet_of(document: &Value, path: &std::path::Path) -> Vec<(u64, u64)> {
         .flatten()
         .find(|f| f["path"].as_str().is_some_and(|p| std::path::Path::new(p) == path))
         .and_then(|f| f["source_id"].as_str());
-    id.and_then(|id| document["quiet"][id].as_array())
+    // cutting is off when the shortest pause is set to 0; a cut the person clicked back stays in (air_keep)
+    if document["dead_min_ms"].as_u64() == Some(0) {
+        return Vec::new();
+    }
+    let Some(id) = id else { return Vec::new() };
+    let kept: Vec<u64> = document["air_keep"][id].as_array().into_iter().flatten().filter_map(Value::as_u64).collect();
+    document["quiet"][id]
+        .as_array()
         .into_iter()
         .flatten()
         .filter_map(|s| Some((s[0].as_u64()?, s[1].as_u64()?)))
+        .filter(|(start, _)| !kept.contains(start))
         .collect()
 }
 /// Dead air: a quiet stretch a line starts or ends in is cut, leaving PAD_MS of it; an edge the person dragged
@@ -225,6 +233,24 @@ pub fn unquiet(quiet: &[(u64, u64)], trim: &Value, start: u64, end: u64) -> (u64
         }
     }
     if b >= a + SHORTEST { (a, b) } else { (start, end) }
+}
+
+/// The parts of a line left once the dead air inside it is cut: each quiet stretch well inside the line goes,
+/// leaving PAD_MS of it on both sides, when at least 0.2 s goes. Matches `inner` in stories.js.
+pub fn inner_cuts(quiet: &[(u64, u64)], start: u64, end: u64) -> Vec<(u64, u64)> {
+    const PAD_MS: u64 = crate::pauses::WORD_PAD_MS;
+    let mut parts = Vec::new();
+    let mut at = start;
+    for &(s, e) in quiet {
+        let (a, b) = (s + PAD_MS, e.saturating_sub(PAD_MS));
+        if a > at && b < end && b >= a + 200 {
+            parts.push((at, a));
+            at = b;
+        }
+    }
+    parts.push((at, end));
+    parts.retain(|(a, b)| b > a);
+    parts
 }
 
 /// The stories to render, in plan order. Any unknown segment is an error, never a silent skip.
@@ -268,20 +294,29 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
             let (start_ms, end_ms) = trim(&story["trims"][id], s.start_ms, s.end_ms);
             let quiet = quiet_of(document, &s.path);
             let (start_ms, end_ms) = unquiet(&quiet, &story["trims"][id], start_ms, end_ms);
-            pieces.push(Piece {
-                source,
-                start_ms,
-                end_ms,
-                text: s.text.clone(),
-                segment: id.to_owned(),
-                timed: !s.words.is_empty(),
-                words: s
-                    .words
-                    .iter()
-                    .filter(|(_, from, to)| (from + to) / 2 >= start_ms && (from + to) / 2 < end_ms)
-                    .cloned()
-                    .collect(),
-            });
+            // a word counts as said in the span when it starts or centres there: the engine stretches a word
+            // over the pause after it ("การ" 32.84-37.04 s), which the dead-air cut then removes
+            let inside = |from: u64, to: u64, a: u64, b: u64| ((from + to) / 2 >= a && (from + to) / 2 < b) || (from >= a && from < b);
+            // dead air inside the line is cut too: the line plays as several pieces with the pause taken out
+            let parts = inner_cuts(&quiet, start_ms, end_ms);
+            let split = parts.len() > 1 && !s.words.is_empty();
+            for (a, b) in parts {
+                let words: Vec<(String, u64, u64)> = s.words.iter().filter(|(_, from, to)| inside(*from, *to, a, b)).cloned().collect();
+                let mut text = String::new();
+                for (w, _, _) in &words {
+                    join(&mut text, w.trim());
+                }
+                pieces.push(Piece {
+                    source,
+                    start_ms: a,
+                    end_ms: b,
+                    // a split line's parts carry their own words; a whole line keeps its (possibly edited) text
+                    text: if split { text } else { s.text.clone() },
+                    segment: id.to_owned(),
+                    timed: !s.words.is_empty(),
+                    words,
+                });
+            }
         }
         // a trim that runs into the next kept line of the same video would play that stretch twice
         for i in 1..pieces.len() {
@@ -865,9 +900,18 @@ pub fn join_short_lines(pieces: &[Piece]) -> Vec<Piece> {
         match out.last_mut() {
             // the next piece of the same video; the dead air between them is cut, so the joined piece is
             // as long as the two together and the second one's words move up by the gap
-            Some(last) if last.source == p.source && p.start_ms >= last.end_ms && short(last) => {
+            // pieces of one line (its inner dead air cut out) read as that one line
+            Some(last) if last.source == p.source && p.start_ms >= last.end_ms && (short(last) || last.segment == p.segment) => {
                 let gap = p.start_ms - last.end_ms;
-                last.text = format!("{}{}", last.text.trim_end(), p.text.trim_start());
+                if last.segment != p.segment {
+                    last.text = format!("{}{}", last.text.trim_end(), p.text.trim_start());
+                    last.segment = p.segment.clone();
+                } else if last.text != p.text {
+                    // the parts' own words (emphasis taken out): the line is all of them in order
+                    let mut text = last.text.clone();
+                    join(&mut text, p.text.trim());
+                    last.text = text;
+                }
                 last.words.extend(p.words.iter().map(|(w, from, to)| (w.clone(), from - gap, to - gap)));
                 last.end_ms += p.end_ms - p.start_ms;
                 last.timed &= p.timed;

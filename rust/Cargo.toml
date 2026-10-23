@@ -19,3 +19,4 @@ uuid = { version = "1", features = ["v4"] }
 
 sha2 = "0.10"
 nlpo3 = "1.4.0"
+sherpa-onnx = "1.13.8"
