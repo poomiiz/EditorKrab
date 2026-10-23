@@ -7,6 +7,9 @@ const clock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padSta
 // the first thing missing so the paste can be redone, never guessed at.
 // the JSON inside a chat answer: a ```json fence or words around it are dropped; json is undefined when none parses
 function readJson(raw){
+ // Gemini's copy indents with non-breaking spaces (U+00A0), which JSON does not allow as spacing; chat pages also
+ // slip in other wide or zero-width spaces. They become plain spaces before reading.
+ raw=raw.replace(/[   -​  　﻿]/g,' ');
  const fence=raw.match(/```(?:json)?\s*([\s\S]*?)```/),body=(fence?fence[1]:raw).trim();
  const from=body.search(/[[{]/),to=Math.max(body.lastIndexOf('}'),body.lastIndexOf(']')),json=from<0?body:body.slice(from,to+1);
  try{return {value:JSON.parse(json),json};}catch(_){return {};}
