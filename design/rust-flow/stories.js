@@ -189,7 +189,27 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   button.onclick=()=>{write(d=>{d.edit_story=story.id;});go(3);};
   const refine=document.createElement('button');refine.type='button';refine.dataset.icon='cut';refine.textContent=story.refined?'เรียบเรียงใหม่':'ตัดต่อเรียบเรียง';refine.title=story.refined?'คัดลอกเรื่องนี้ให้ AI เรียบเรียงอีกครั้ง':'คัดลอกเรื่องนี้ให้ AI เลือกและเรียงท่อน';
   refine.disabled=!story.kept.length || !editable();refine.onclick=()=>openRefine(story);
-  row.append(button,refine);return row;
+  // two stories that read as one half each become one: the next story of the same video joins this one
+  const next=model()?.stories.slice(story.index+1).find(s=>s.source_id===story.source_id);
+  const join=document.createElement('button');join.type='button';join.dataset.icon='plus';join.textContent='รวมกับเรื่องถัดไป';
+  join.title=next?`รวม "${next.title}" เข้ากับเรื่องนี้ แล้วกดตัดต่อเรียบเรียงใหม่`:'ไม่มีเรื่องถัดไปจากวิดีโอนี้';join.hidden=!next;join.disabled=!editable();
+  join.onclick=()=>next&&joinStories(story,next);
+  row.append(button,refine,join);return row;
+ }
+ // the joined story keeps every line either had in round 1, in the video's order, and is arranged again with the AI
+ function joinStories(story,next){
+  if(!editable())return;
+  write(d=>{
+   const plan=parsePlan(d.plan),a=plan?.stories[story.index],b=plan?.stories[next.index];if(!a || !b)return;
+   const at=new Map(lines().map(l=>[l.segment_id,l.start_ms]));
+   const ids=[...new Set([...(a.round1_ids || a.segment_ids || []),...(b.round1_ids || b.segment_ids || [])])].sort((x,y)=>(at.get(x) ?? 0)-(at.get(y) ?? 0));
+   a.segment_ids=ids;delete a.round1_ids;
+   a.trims={...(b.trims || {}),...(a.trims || {})};
+   const fields=storyFields(b,next.index);a.summary=[storyFields(a,story.index).summary,fields.summary].filter(Boolean).join(' ');
+   plan.stories.splice(next.index,1);d.plan=JSON.stringify(plan,null,2);
+   const reviewsNow={...(d.story_reviews || {})};delete reviewsNow[story.id];delete reviewsNow[next.id];d.story_reviews=reviewsNow;
+   if(d.edit_story===next.id)d.edit_story=story.id;
+  });
  }
  // round 2: one story's lines go to an AI, which keeps and orders the ones worth using; its answer changes only that story
  let refining=null;
