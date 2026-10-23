@@ -275,7 +275,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
     if(words.length){
      const first=Math.max(words[0].start_ms,span.start_ms),clip=document.createElement('button');clip.type='button';clip.className='edit-emph';
      clip.textContent=joinPicks(words);clip.title='คำเน้น · คลิกเพื่อแก้คำ';
-     clip.style.left=px(at+first-span.start_ms)+'px';clip.style.width=Math.max(24,px(span.end_ms-first)-2)+'px';
+     clip.style.left=px(at+first-span.start_ms)+'px';clip.style.width=Math.max(24,px(Math.max(span.end_ms-first,HOLD))-2)+'px';
      clip.onclick=e=>{e.stopPropagation();wordLine=line;drawWords();};lane.append(clip);
     }
     const said=subs[line.segment_id];
@@ -362,10 +362,19 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   return row.filter(w=>!reveal || w.at<=now).map(w=>w.text).reduce((out,t)=>out+(out&&/[A-Za-z0-9]$/.test(out)&&/^[A-Za-z0-9]/.test(t)?' ':'')+t,'');
  }
  // emphasis on screen: the group being said (neighbouring picks read as one), until the next group starts
+ function pickGroups(line){const groups=[];for(const p of picks(line)){const g=groups.at(-1),prev=g?.at(-1);if(prev&&p.start_ms<=prev.end_ms+1)g.push(p);else groups.push([p]);}return groups;}
  function emphasisNow(line,now){
-  const groups=[];for(const p of picks(line)){const g=groups.at(-1),prev=g?.at(-1);if(prev&&p.start_ms<=prev.end_ms+1)g.push(p);else groups.push([p]);}
-  const current=[...groups].reverse().find(g=>g[0].start_ms<=now);
+  const current=[...pickGroups(line)].reverse().find(g=>g[0].start_ms<=now);
   return current?joinPicks(current):'';
+ }
+ // a word picked at the end of its line stays up at least HOLD ms, into the next line, until another pick
+ // shows (the export does the same: EMPHASIS_HOLD_MS in export.rs)
+ const HOLD=1200;
+ function emphasisAt(story,said,now){
+  const own=said&&emphasisNow(said,now);if(own)return own;
+  let best=null;
+  for(const line of story.kept)for(const g of pickGroups(line)){const at=g[0].start_ms;if(at<=now&&now<at+HOLD&&(!best||at>best.at))best={at,text:joinPicks(g)};}
+  return best?.text || '';
  }
  // chips: each timed word, split only when the dictionary cuts it cleanly ("ยกตัวอย่าง" -> "ยก|ตัวอย่าง");
  // splitting the whole line cut loan words apart ("เจน|เทิ|ลม|อนส|เต|อร์")
@@ -509,7 +518,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const words=said?.words || [],wordByWord=read().text_styles?.speech?.enter==='words'&&words.length;
   // while a line plays, an empty box stays empty (a no-break space) instead of falling back to the sample text
   caption(!said?'':(words.length?speechText(said,now,wordByWord):said.text) || '\u00a0');
-  emphasis(said?emphasisNow(said,now) || '\u00a0':'');
+  const held=story?emphasisAt(story,said,now):'';
+  emphasis(held || (said?'\u00a0':''));
   subtitle(said?(read().subtitles || {})[said.segment_id] || '\u00a0':'');
   if(said&&said.segment_id!==wordLine?.segment_id&&!video.paused)showWords(said);
   const head=$('editHead');

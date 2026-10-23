@@ -667,8 +667,17 @@ pub fn emphasis_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)
         }
         at += p.end_ms - p.start_ms;
     }
+    // a word picked at the very end of its line was up for a blink ("ปัญหา" for 0.4 s, P'Ohm 23 Oct): each
+    // stays at least EMPHASIS_HOLD_MS, into the next line if need be, but never over the next pick
+    let total = story.duration_ms();
+    for i in 0..out.len() {
+        let next = out.get(i + 1).map_or(total, |e| e.0);
+        out[i].1 = out[i].1.max((out[i].0 + EMPHASIS_HOLD_MS).min(next).min(total));
+    }
     out
 }
+/// Shortest time an emphasis word stays on screen; the preview uses the same (HOLD in stories.js).
+pub const EMPHASIS_HOLD_MS: u64 = 1200;
 
 /// A piece's emphasis picks as (start, text, end), in time order. A pick is {text, start_ms, end_ms}
 /// (step 4) or a bare start time of a timed word (older drafts).

@@ -261,6 +261,27 @@ fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
 }
 
 #[test]
+fn an_emphasis_word_at_the_end_of_its_line_stays_up_long_enough_to_read() {
+    // "ว่าเรื่องนี้เป็นปัญหา" then "การ": "ปัญหา" is said in the line's last 0.4 s (P'Ohm 23 Oct)
+    let piece = |segment: &str, start_ms, end_ms, words: Vec<(String, u64, u64)>| Piece {
+        source: 0, start_ms, end_ms, text: String::new(), words, timed: true, segment: segment.into(),
+    };
+    let story = editorkrab::export::Story {
+        id: "s".into(), title: String::new(), sources: vec!["a.mp4".into()],
+        pieces: vec![
+            piece("s8", 31420, 32840, vec![("ว่า".into(), 31420, 31680), ("เป็นปัญหา".into(), 32100, 32840)]),
+            piece("s9", 32840, 37040, vec![("การ".into(), 32840, 37040)]),
+        ],
+    };
+    let doc = json!({"text_roles": ["emphasis"], "emphasis": {"s8": [{"text": "ปัญหา", "start_ms": 32429, "end_ms": 32840}]}});
+    let lines = editorkrab::export::emphasis_lines(&story, &doc);
+    assert_eq!(lines.len(), 1);
+    let (from, to, text) = &lines[0];
+    assert_eq!(text, "ปัญหา");
+    assert!(to - from >= editorkrab::export::EMPHASIS_HOLD_MS, "{lines:?}");
+}
+
+#[test]
 fn translated_subtitles_show_for_their_pieces_only_when_ticked() {
     let piece = |segment: &str, start_ms, end_ms| Piece {
         source: 0, start_ms, end_ms, text: "ไทย".into(), words: vec![], timed: false, segment: segment.into(),
