@@ -4,12 +4,11 @@ Thanks for helping. Issues and pull requests may be written in Thai or English.
 
 ## Set up
 1. Fork and clone the repo, then follow "Machine setup" in [README.md](README.md).
-2. `python scripts/doctor.py` must show all OK before you report a bug.
 
 ## Good first contributions
 - A new subtitle preset in `presets/` (copy `default.json`).
 - A new motion template in `motion/<name>/` (see [motion/README.md](motion/README.md)).
-- Support for a newer CapCut draft format in `app/capcut_edit.py` / `scripts/capcut/`.
+- Support for a newer CapCut draft format in `rust/src/capcut.rs`.
 - Fixes for issues labelled `good first issue`.
 
 ## Rules for code
@@ -25,12 +24,12 @@ Video, audio, footage frames, client names or client files, `config.json`, `*.sq
 Apps Script / webhook URLs, or fonts you are not allowed to redistribute.
 
 ## Before you open a pull request
-- `python -m py_compile` on every Python file you changed.
+- `cargo test --manifest-path rust/Cargo.toml` passes.
 - Run what you changed on a real clip or draft and say in the PR what you ran and what happened.
 - One topic per pull request.
 
 ## Releases
-Editors' machines update to the newest `vX.Y.Z` tag, not to `main` (`scripts/update.py`). Merging only lands the
+Editors download the Windows app from the newest `vX.Y.Z` release, not from `main`. Merging only lands the
 change on `main`; to ship, bump `version` in `.claude-plugin/plugin.json`, then `git tag vX.Y.Z` and
 `git push origin vX.Y.Z`. The release workflow makes the GitHub Release with the merged PRs as notes. A bad
 release is fixed by tagging a newer one.

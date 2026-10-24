@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title"><title id="title">EditorKrab crab play icon</title><rect width="256" height="256" rx="56" fill="#17243B"/><g fill="none" stroke="#FF785C" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
-<path d="M77 149 49 164 35 152M77 173 48 191 34 182M179 149 207 164 221 152M179 173 208 191 222 182"/>
-<path d="M85 126 65 102M171 126 191 102"/>
-</g>
-<g fill="#FF785C"><path d="M65 105C42 107 31 83 42 61L58 79 68 56C89 73 89 99 65 105Z"/><path d="M191 105C214 107 225 83 214 61L198 79 188 56C167 73 167 99 191 105Z"/>
-<rect x="68" y="113" width="120" height="78" rx="37"/>
-<rect x="92" y="91" width="14" height="30" rx="7"/><rect x="150" y="91" width="14" height="30" rx="7"/>
-</g><g fill="#F7F5EF"><circle cx="99" cy="96" r="9"/><circle cx="157" cy="96" r="9"/></g>
-<path d="M115 135 115 172 148 153Z" fill="#17243B" stroke="#17243B" stroke-width="4" stroke-linejoin="round"/></svg>

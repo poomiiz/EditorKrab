@@ -14,7 +14,7 @@ try {
     foreach ($name in 'EditorKrab.vbs', 'launch.ps1', 'install.ps1', 'Install EditorKrab.cmd') {
         Copy-Item -LiteralPath (Join-Path $root "rust\launcher\$name") -Destination $app
     }
-    Copy-Item -LiteralPath (Join-Path $root 'app\static\editorkrab-crab.ico') -Destination (Join-Path $app 'EditorKrab.ico')
+    Copy-Item -LiteralPath (Join-Path $root 'rust\data\editorkrab-crab.ico') -Destination (Join-Path $app 'EditorKrab.ico')
     Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $app
     Copy-Item -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $app
     $zip = Join-Path $work 'ffmpeg.zip'
