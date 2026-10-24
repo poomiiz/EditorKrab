@@ -117,7 +117,7 @@ export function validateEmphasisSelections(answer,input){
  return {picked,issues,count,note:`พร้อม ${count} คำ`+(issues.length?` · ต้องตรวจ ${issues.length} คำ`:'')};
 }
 // Caption timing contract: selected word IDs remain one phrase; only older split picks may coalesce.
-export const EMPHASIS_GAP_MS=160,EMPHASIS_HOLD_MS=450,EMPHASIS_TAIL_MS=180,VISUAL_RULES_VERSION=3;
+export const EMPHASIS_GAP_MS=160,EMPHASIS_HOLD_MS=450,EMPHASIS_TAIL_MS=180,VISUAL_RULES_VERSION=4;
 export function emphasisGroups(line,list){
  const letters=(line.words || []).flatMap(w=>{const text=[...w.text.trim()].filter(c=>! /\s/.test(c));return text.map((c,i)=>({c,start:w.start_ms+(w.end_ms-w.start_ms)*i/text.length}));}),flat=letters.map(x=>x.c).join('');
  const starts=(text,near)=>{let chosen=-1,gap=Infinity;for(let i=flat.indexOf(text);i>=0;i=flat.indexOf(text,i+1)){const d=Math.abs(letters[i].start-near);if(d<gap){chosen=i;gap=d;}}return chosen;};
@@ -212,7 +212,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  // AIR_RULE goes up when voice.rs counts dead air differently, so stored stretches are counted again
  // Nina clips keep breaths (pauses of 0.3-0.5 s stay in) and cut gaps over about a second, and keep the listener
  // LEAD: more is kept before speech starts again, as VAD hears a word late (export.rs LEAD_PAD_MS)
- const PAD=100,LEAD=250,AIR_MIN=1000,AIR_RULE=5,AIR_LEAST=0.3;
+ const PAD=100,LEAD=250,AIR_MIN=1000,AIR_RULE=7,AIR_LEAST=0.3;
  const airMin=()=>{const v=read().dead_min_ms;return !Number.isFinite(v)?AIR_MIN:v===0?0:Math.max(v,AIR_LEAST*1000);};
  function quietOf(source){
   if(airMin()===0)return [];
@@ -220,10 +220,23 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const spans=(read().quiet || {})[source],keep=(read().air_keep || {})[source] || [];
   return Array.isArray(spans)?spans.filter(([s])=>!keep.includes(s)):[];
  }
+ const FILLERS=new Set(['เออ','เอ่อ','เอิ่ม','อืม','อือ','อ่า','อ้า','อะ','อ่ะ','คือ','แบบ','แบบว่า']);
+ function pastFillers(words,start,end){
+  const said=words.filter(w=>(w.start_ms+w.end_ms)/2>=start&&w.start_ms<end&&w.text.trim());let i=0;
+  while(i<said.length){const t=said[i].text.trim();if(!FILLERS.has(t)&&said[i+1]?.text.trim()!==t)break;i++;}
+  // the cut lands before the real word but never inside the filler said just before it (export.rs)
+  return i>0&&i<said.length?Math.max(said[i].start_ms-100,Math.min(said[i-1].end_ms,said[i].start_ms))+100:null;
+ }
  function unquiet(line,span,trim){
   const spans=quietOf(line.source_id);
   let a=span.start_ms,b=span.end_ms;
   if(!Number.isFinite(trim?.start_ms))for(const [s,e] of spans)if(s<=a+PAD&&e>a)a=Math.max(a,e-LEAD);
+  // filler and stammer at the start go: "เออ คือ คือ มีโมเม้นต์" starts at "มีโมเม้นต์" (export.rs past_fillers)
+  let floor=-Infinity;
+  if(!Number.isFinite(trim?.start_ms)){const at=pastFillers(line.words || [],a,b);if(at!==null){a=Math.max(a,at-100);floor=Math.max(0,...(line.words || []).filter(w=>w.start_ms<a).map(w=>Math.min(w.end_ms,a)));}}
+  // a line that starts while its sound is already on starts where it began, up to 300 ms back (export.rs onset),
+  // never back into the fillers just cut
+  if(!Number.isFinite(trim?.start_ms)){const l=(read().voice?.[line.source_id]?.loud || []).find(([x,y])=>x<a&&a<y);if(l)a=Math.max(l[0],a-300,floor);}
   if(!Number.isFinite(trim?.end_ms))for(const [s,e] of [...spans].reverse())if(s>a&&s<b&&e>=b-PAD)b=Math.min(b,s+PAD);
   return b-a>=SHORTEST?{start_ms:a,end_ms:b}:span;
  }
@@ -263,7 +276,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const stale=files.filter(f=>voice[f.source_id]&&!needsVisual(f)&&(read().quiet_key || {})[f.source_id]!==keyOf(f)&&airMin()>0&&!listening.has(f.source_id));
   for(const f of stale){listening.add(f.source_id);const requestedKey=keyOf(f);
    try{const v=voice[f.source_id];const r=await fetch('/api/v1/voice/dead-air',{method:'POST',headers:{'Content-Type':'application/json'},
-     body:JSON.stringify({speech:v.speech,turns:v.turns,words:wordStarts(f.source_id),total_ms:v.total_ms,min_ms:airMin(),keep:keepOf(f.source_id),loud:v.loud || []}),signal:AbortSignal.timeout(30000)});
+     body:JSON.stringify({speech:v.speech,turns:v.turns,words:wordStarts(f.source_id),total_ms:v.total_ms,min_ms:airMin(),keep:keepOf(f.source_id),loud:v.loud || [],hush:v.hush || []}),signal:AbortSignal.timeout(30000)});
     const a=await r.json();if(!r.ok || !Array.isArray(a.dead))throw Error(a.error || 'dead_air_failed');
     if(keyOf(f)===requestedKey)write(d=>{d.quiet={...(d.quiet || {}),[f.source_id]:a.dead};d.quiet_key={...(d.quiet_key || {}),[f.source_id]:requestedKey};});}
    catch(_){airStatus('นับช่วงเงียบใหม่ไม่สำเร็จ ลองเปลี่ยนค่าอีกครั้ง');}
@@ -276,7 +289,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    try{const r=await fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/voice`,{method:'POST',headers:{'Content-Type':'application/json'},
      body:JSON.stringify({words:wordStarts(f.source_id),min_ms:airMin() || AIR_MIN}),signal:AbortSignal.timeout(900000)});
     const a=await r.json();if(!r.ok || !Array.isArray(a.dead))throw Error(a.error || 'voice_failed');
-    write(d=>{d.voice={...(d.voice || {}),[f.source_id]:{speech:a.speech,turns:a.turns,total_ms:a.total_ms,main:a.main,faces:a.faces || [],seen:a.seen || [],loud:a.loud || [],visual_rules_version:VISUAL_RULES_VERSION}};
+    write(d=>{d.voice={...(d.voice || {}),[f.source_id]:{speech:a.speech,turns:a.turns,total_ms:a.total_ms,main:a.main,faces:a.faces || [],seen:a.seen || [],loud:a.loud || [],hush:a.hush || [],visual_rules_version:VISUAL_RULES_VERSION}};
      d.quiet={...(d.quiet || {}),[f.source_id]:a.dead};d.quiet_key={...(d.quiet_key || {}),[f.source_id]:airMin()&&keyOf(f)===requestedKey?requestedKey:''};});
     airStatus(`เจอช่วงเงียบ ${a.dead.length} ช่วง`);}
    catch(e){airStatus('ฟังเสียงไม่สำเร็จ ('+(e.message || 'ไม่ทราบสาเหตุ')+') ท่อนยังไม่ถูกตัด');}

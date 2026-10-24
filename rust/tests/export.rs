@@ -631,11 +631,11 @@ fn retimed_words_cannot_export_using_a_previous_quiet_analysis() {
     let mut doc=json!({"plan":json!({"stories":[{"segment_ids":["a"]}]}).to_string(),
         "files":[{"path":"C:/clips/a.mp4","source_id":"src"}],"dead_min_ms":100,
         "voice":{"src":{"turns":[{"speaker":0,"start_ms":0,"end_ms":2000}]}},
-        "quiet_key":{"src":json!([300,5,[0],[[100,600]]]).to_string()}});
+        "quiet_key":{"src":json!([300,7,[0],[[100,600]]]).to_string()}});
     assert!(plan(&doc,&jobs).is_ok(),"effective minimum matches the UI's300ms");
     doc["word_times"]=json!({"a":[[150,650]]});
     assert_eq!(plan(&doc,&jobs).unwrap_err(),"pause_analysis_stale");
-    doc["quiet_key"]["src"]=json!(json!([300,5,[0],[[150,650]]]).to_string());
+    doc["quiet_key"]["src"]=json!(json!([300,7,[0],[[150,650]]]).to_string());
     assert!(plan(&doc,&jobs).is_ok());
     doc["speakers_keep"]=json!({"src":[1]});
     assert_eq!(plan(&doc,&jobs).unwrap_err(),"pause_analysis_stale");
@@ -660,6 +660,21 @@ fn the_white_setup_line_stays_on_until_the_orange_punch_line_ends() {
     let mut cues = vec![(0, 1_000, "ก".to_owned()), (1_200, 2_000, "ข".to_owned())];
     editorkrab::export::hold_for_emphasis(&mut cues, &[(500, 1_800, "ค".to_owned()), (9_000, 9_500, "ง".to_owned())]);
     assert_eq!((cues[0].1, cues[1].1), (1_200, 2_000));
+}
+
+#[test]
+fn filler_and_stammer_at_a_lines_start_are_cut() {
+    use editorkrab::export::past_fillers;
+    let w = |t: &str, a: u64, b: u64| (t.to_owned(), a, b);
+    // "เออ คือ คือ มีโมเม้นต์": the line starts at "มีโมเม้นต์"
+    let line = vec![w("เออ", 1000, 1300), w("คือ", 1400, 1600), w("คือ", 1700, 1900), w("มี", 2000, 2200), w("โมเม้นต์", 2200, 2800)];
+    assert_eq!(past_fillers(&line, 1000, 3000), Some(2000));
+    // a word said twice: "มีไหม มีไหม คำถาม" keeps one
+    let line = vec![w("มีไหม", 0, 400), w("มีไหม", 500, 900), w("คำถาม", 1000, 1500)];
+    assert_eq!(past_fillers(&line, 0, 2000), Some(500));
+    // a real first word: nothing goes; a line of fillers only (a listener's "อืม") stays
+    assert_eq!(past_fillers(&[w("ฉัน", 0, 300), w("คือ", 300, 500)], 0, 600), None);
+    assert_eq!(past_fillers(&[w("อืม", 0, 300)], 0, 600), None);
 }
 
 #[test]

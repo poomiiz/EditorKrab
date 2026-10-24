@@ -211,14 +211,18 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  // subtitle shift; the transcript itself never changes (export.rs spoken() does the same)
  function timedWords(segment,source){
   const words=segment.words || [],times=read().word_times?.[segment.id],offset=Math.max(-5000,Math.min(5000,Number(read().subtitle_offset_ms) || 0));
-  const clocks=fitWords(words.map((w,i)=>Array.isArray(times)&&times.length===words.length&&Array.isArray(times[i])&&times[i][1]>=times[i][0]?times[i]:[w.start_ms,w.end_ms]),read().voice?.[source]?.speech);
+  const clocks=fitWords(words.map((w,i)=>Array.isArray(times)&&times.length===words.length&&Array.isArray(times[i])&&times[i][1]>=times[i][0]?times[i]:[w.start_ms,w.end_ms]),read().voice?.[source]?.speech,read().voice?.[source]?.hush);
   return words.map((w,i)=>({...w,start_ms:Math.max(0,clocks[i][0]+offset),end_ms:Math.max(0,clocks[i][1]+offset)}));
  }
  // word clocks fitted to the speech VAD heard (the same rule as voice.rs fit_words): a word starting in a pause
  // starts with the next speech it reaches, one running over 150 ms past its speech ends there, a zero-length
  // word gets 200 ms; a word with no speech under it is left alone
- function fitWords(clocks,speech){
+ // a word timed wholly inside a hushed run moves to the speech starting within 1 s after it (voice.rs
+ // fit_words_hushed): nothing is said where it was put
+ function fitWords(clocks,speech,hush=[]){
   if(!Array.isArray(speech) || !speech.length)return clocks;
+  clocks=clocks.map(([s,e0])=>{const e=Math.max(e0,s);if(speech.some(([a,b])=>a<Math.max(e,s+1)&&b>s))return [s,e0];
+   const run=(hush || []).find(([a,b])=>a<=s&&e<=b),next=run&&speech.find(([a])=>a>=run[1]&&a<=run[1]+1000);return next?[next[0],next[0]]:[s,e0];});
   const SLACK=150,LEAST=200,spanAt=t=>speech.find(([a,b])=>a<=t+SLACK&&t<b);
   return clocks.map(([s0,e0],i)=>{
    let s=s0,e=Math.max(e0,s0),span=spanAt(s);

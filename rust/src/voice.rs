@@ -180,6 +180,10 @@ pub fn dead_air(speech: &[(u64, u64)], turns: &[Turn], keep: &[i32], words: &[(u
 /// `dead_air` that also keeps every `loud` stretch (see `loud`) not said by a dropped person: a sound VAD does
 /// not call speech is not silence (24 Oct review: 1.1 s of sound at 33.5-35.4 s, no VAD speech, was cut).
 pub fn dead_air_heard(speech: &[(u64, u64)], turns: &[Turn], keep: &[i32], words: &[(u64, u64)], loud: &[(u64, u64)], total_ms: u64, min_ms: u64) -> Vec<(u64, u64)> {
+    dead_air_hushed(speech, turns, keep, words, loud, &[], total_ms, min_ms)
+}
+#[allow(clippy::too_many_arguments)]
+pub fn dead_air_hushed(speech: &[(u64, u64)], turns: &[Turn], keep: &[i32], words: &[(u64, u64)], loud: &[(u64, u64)], hush: &[(u64, u64)], total_ms: u64, min_ms: u64) -> Vec<(u64, u64)> {
     let min_ms = min_ms.max(MIN_PAUSE_MS);
     let dropped: Vec<&Turn> = match keep.is_empty() {
         true => Vec::new(),
@@ -187,6 +191,12 @@ pub fn dead_air_heard(speech: &[(u64, u64)], turns: &[Turn], keep: &[i32], words
     };
     let speech: Vec<(u64, u64)> = speech.iter().copied().chain(loud.iter().copied()).collect();
     let speech = &speech[..];
+    let words: Vec<(u64, u64)> = {
+        let mut w = words.to_vec();
+        fit_words_hushed(&mut w, speech, hush);
+        w
+    };
+    let words = &words[..];
     let mut talk: Vec<(u64, u64)> = Vec::new();
     for &(a, b) in speech {
         // the speech left after the dropped people's turns are taken out of it
@@ -243,8 +253,27 @@ pub const WORD_LEAST_MS: u64 = 200;
 /// running more than WORD_SLACK_MS past its speech ends there; a zero-length word gets WORD_LEAST_MS.
 /// A word with no speech under it at all is left alone (VAD misses soft speech).
 pub fn fit_words(words: &mut [(u64, u64)], speech: &[(u64, u64)]) {
+    fit_words_hushed(words, speech, &[]);
+}
+/// How far after a hushed run a word timed inside it may be moved to the speech that follows, ms.
+pub const WORD_SHIFT_MS: u64 = 1000;
+/// `fit_words`, and a word timed wholly inside a hushed run (`hush`, see `hush`) is moved to the speech that
+/// starts within WORD_SHIFT_MS after the run: nothing is said where it was put (24 Oct: "คำ" sat in 1.8 s of
+/// silence at 12.4-14.2 s and kept it from being cut). A word in a gap that is not hushed may be soft speech
+/// VAD missed, and stays.
+pub fn fit_words_hushed(words: &mut [(u64, u64)], speech: &[(u64, u64)], hush: &[(u64, u64)]) {
     if speech.is_empty() {
         return;
+    }
+    for w in words.iter_mut() {
+        let (s, e) = (w.0, w.1.max(w.0));
+        if speech.iter().any(|&(a, b)| a < e.max(s + 1) && b > s) {
+            continue;
+        }
+        let Some(&(_, end)) = hush.iter().find(|&&(a, b)| a <= s && e <= b) else { continue };
+        if let Some(&(a, _)) = speech.iter().find(|&&(a, _)| a >= end && a <= end + WORD_SHIFT_MS) {
+            *w = (a, a);
+        }
     }
     let span_at = |t: u64| speech.iter().copied().find(|&(a, b)| a <= t + WORD_SLACK_MS && t < b);
     let starts: Vec<u64> = words.iter().map(|w| w.0).collect();
@@ -275,6 +304,47 @@ pub fn fit_words(words: &mut [(u64, u64)], speech: &[(u64, u64)]) {
 
 /// Level above which 20 ms of audio is sound, dBFS; speech in these clips sits around -25..-10.
 pub const LOUD_DB: f32 = -38.0;
+/// Level under which audio is hushed, dBFS (24 Oct, IMG_6779: background -53..-47, speech median -27).
+pub const HUSH_DB: f32 = -44.0;
+/// Shortest hushed run that counts, ms: shorter dips are the gaps inside words.
+pub const HUSH_MIN_MS: u64 = 350;
+/// Runs of at least HUSH_MIN_MS where the audio stays under HUSH_DB. VAD keeps talking for a while after a
+/// voice stops and joins short pauses into one stretch of speech (24 Oct: 1.8 s of quiet at 12.4-14.2 s sat
+/// inside "speech"); these runs are taken out of it.
+pub fn hush(samples: &[f32]) -> Vec<(u64, u64)> {
+    let n = RATE as usize / 50;
+    let mut out: Vec<(u64, u64)> = Vec::new();
+    for (k, chunk) in samples.chunks(n).enumerate() {
+        let rms = (chunk.iter().map(|x| x * x).sum::<f32>() / chunk.len().max(1) as f32).sqrt();
+        if 20.0 * rms.max(1e-5).log10() >= HUSH_DB {
+            continue;
+        }
+        let (a, b) = (k as u64 * 20, k as u64 * 20 + 20);
+        match out.last_mut() {
+            Some(last) if a == last.1 => last.1 = b,
+            _ => out.push((a, b)),
+        }
+    }
+    out.retain(|(a, b)| b - a >= HUSH_MIN_MS);
+    out
+}
+/// VAD speech with the hushed runs taken out: what is really heard.
+pub fn heard(speech: &[(u64, u64)], hush: &[(u64, u64)]) -> Vec<(u64, u64)> {
+    let mut out = Vec::new();
+    for &(a, b) in speech {
+        let mut at = a;
+        for &(x, y) in hush.iter().filter(|(x, y)| *y > a && *x < b) {
+            if x > at {
+                out.push((at, x));
+            }
+            at = at.max(y);
+        }
+        if b > at {
+            out.push((at, b));
+        }
+    }
+    out
+}
 /// Stretches of at least 200 ms where the audio is above LOUD_DB (gaps up to 100 ms bridged), ms.
 pub fn loud(samples: &[f32]) -> Vec<(u64, u64)> {
     let n = RATE as usize / 50;
@@ -354,8 +424,8 @@ mod tests {
         // a short word uses its actual end; soft speech missed by diarization still stays
         assert_eq!(dead_air(&speech, &turns, &[0], &[(7000, 7100)], 12500, 400), vec![(3000, 3500), (4000, 5500), (6000, 7000), (7100, 9000), (12000, 12500)]);
         assert_eq!(dead_air(&speech, &turns, &[0], &[(7000, 8000)], 12500, 400), vec![(3000, 3500), (4000, 5500), (6000, 7000), (8000, 9000), (12000, 12500)]);
-        // an end stretched past WORD_MAX_MS is not trusted
-        assert_eq!(dead_air(&speech, &turns, &[], &[(6000, 12000)], 13500, 400), vec![(3000, 3500), (8500, 9000), (12000, 13500)]);
+        // a word starting in a pause is fitted to start with the speech it reaches, so the pause before it goes
+        assert_eq!(dead_air(&speech, &turns, &[], &[(6000, 12000)], 13500, 400), vec![(3000, 3500), (6000, 9000), (12000, 13500)]);
     }
     #[test]
     fn positive_word_clocks_do_not_create_a_six_hundred_ms_tail() {
@@ -389,6 +459,32 @@ mod tests {
         let mut same = [(0, 0)];
         fit_words(&mut same, &[]);
         assert_eq!(same, [(0, 0)]);
+    }
+    #[test]
+    fn a_hushed_run_inside_vad_speech_is_not_heard() {
+        // VAD calls 10-20 s speech; the audio is hushed at 12.4-14.2 s: that run is not heard
+        assert_eq!(heard(&[(10_000, 20_000)], &[(12_400, 14_200)]), vec![(10_000, 12_400), (14_200, 20_000)]);
+        // and a word stretched over it ends where the hush starts, so the hush is dead air
+        let speech = heard(&[(10_000, 20_000)], &[(12_400, 14_200)]);
+        assert_eq!(dead_air(&speech, &[], &[], &[(12_000, 13_900)], 20_000, 300), vec![(0, 10_000), (12_400, 14_200)]);
+        // 400 ms of near-silence counts; a 200 ms dip inside a word does not
+        let mut samples = vec![0.3f32; 16_000];
+        samples.extend(vec![0.0; 16_000 * 4 / 10]);
+        samples.extend(vec![0.3; 16_000]);
+        samples.extend(vec![0.0; 16_000 * 2 / 10]);
+        samples.extend(vec![0.3; 16_000]);
+        assert_eq!(hush(&samples), vec![(1000, 1400)]);
+    }
+    #[test]
+    fn a_word_timed_inside_silence_moves_to_the_speech_after_it() {
+        let speech = [(10_000, 12_400), (14_200, 16_000)];
+        // "คำ" at 12.6-13.2 s sits in the hush 12.4-14.2 s: it is said with the speech at 14.2 s
+        let mut words = [(12_600, 13_200), (20_000, 20_300)];
+        fit_words_hushed(&mut words, &speech, &[(12_400, 14_200)]);
+        assert_eq!(words[0].0, 14_200);
+        // a word in a gap that is not hushed (soft speech) stays
+        assert_eq!(words[1], (20_000, 20_300));
+        assert_eq!(dead_air_hushed(&speech, &[], &[], &[(12_600, 13_200)], &[], &[(12_400, 14_200)], 16_000, 300), vec![(0, 10_000), (12_400, 14_200)]);
     }
     #[test]
     fn a_sound_vad_does_not_call_speech_is_not_dead_air() {

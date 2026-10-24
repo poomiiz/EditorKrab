@@ -41,8 +41,12 @@ def in_word(words, t):
     return None
 
 
+FILLERS = {'เออ', 'เอ่อ', 'เอิ่ม', 'อืม', 'อือ', 'อ่า', 'อ้า', 'อะ', 'อ่ะ', 'คือ', 'แบบ', 'แบบว่า'}
+
+
 def main():
     data = json.load(open(sys.argv[1], encoding='utf-8'))
+    raw = data.get('words', {})
     ffmpeg, out = sys.argv[2], sys.argv[3]
     lines = data['lines']
     order = {l['id']: i for i, l in enumerate(sorted(lines, key=lambda l: (l['path'], l['start_ms'])))}
@@ -78,21 +82,21 @@ def main():
                 problems.append(f'ส่วนที่ตัดออกมีเสียง {loud_ms / 1000:.1f} วิ')
             if removed and removed > 0 and db_at(L, b['start_ms'] - 60, b['start_ms']) > QUIET_DB:
                 problems.append('ตัดหัวคำ (เสียงเริ่มก่อนจุดตัด)')
-            if camera and contiguous:
-                said = sorted(a['words'] + b['words'], key=lambda w: w[1])
-                ends = [w[2] for w in said if w[2] <= a['end_ms'] + 40]
-                starts = [w[1] for w in said if w[1] >= a['end_ms'] - 40]
-                pause = (min(starts) - max(ends)) if ends and starts else 999
-                if pause < 120 and a['segment'] == b['segment']:
-                    problems.append(f'สลับกล้องกลางวลี (เว้นแค่ {max(pause, 0)} ms)')
+            # words taken out on purpose: fillers and stammers at a line's start (export.rs past_fillers)
+            gone = [w for w in raw.get(b['segment'], []) if a['end_ms'] <= w[1] and w[2] <= b['start_ms'] + 40]
+            fillers = bool(gone) and all(w[0].strip() in FILLERS or any(x[0].strip() == w[0].strip() for x in gone if x is not w) for w in gone)
+            if fillers:
+                problems = [p for p in problems if not p.startswith('ส่วนที่ตัดออกมีเสียง') and not p.startswith('ตัดหัวคำ')]
             if not contiguous and a['segment'] == b['segment']:
                 kind = 'ตัดช่วงเงียบกลางประโยค'
             elif not contiguous:
                 kind = 'ต่อประโยคถัดไป' if not skipped and not back else ('ข้ามไปเนื้อหาอื่น' if skipped else 'ย้อนกลับไปประโยคก่อน')
             else:
                 kind = 'สลับกล้อง'
-            if not contiguous and a['segment'] != b['segment'] and not line_done:
-                problems.append('ประโยคก่อนหน้ายังพูดไม่จบ')
+            if fillers:
+                kind = 'ตัดคำเติม: ' + ' '.join(w[0] for w in gone)
+            if skipped and not line_done:
+                problems.append('ประโยคก่อนหน้ายังพูดไม่จบ แล้วข้ามเนื้อหา')
             rows.append(dict(at=b['at'], kind=kind, removed=removed, before=before, after=after, problems=problems,
                              left=' '.join(w[0] for w in a['words'][-4:]) or a['text'][-24:],
                              right=' '.join(w[0] for w in b['words'][:4]) or b['text'][:24], skipped=skipped))

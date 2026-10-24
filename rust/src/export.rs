@@ -175,12 +175,15 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
             continue;
         };
         // the speech VAD heard in this video (step 4 "ตัดช่วงเงียบ"), to fit word clocks to
-        let speech: Vec<(u64, u64)> = document["voice"][context.source.id.as_str()]["speech"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|p| Some((p[0].as_u64()?, p[1].as_u64()?)))
-            .collect();
+        let spans = |key: &str| -> Vec<(u64, u64)> {
+            document["voice"][context.source.id.as_str()][key]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|p| Some((p[0].as_u64()?, p[1].as_u64()?)))
+                .collect()
+        };
+        let (speech, hush) = (spans("speech"), spans("hush"));
         let segments = job
             .result
             .as_ref()
@@ -226,7 +229,7 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
                 }
             }
             let mut clocks: Vec<(u64, u64)> = words.iter().map(|w| (w.1, w.2)).collect();
-            crate::voice::fit_words(&mut clocks, &speech);
+            crate::voice::fit_words_hushed(&mut clocks, &speech, &hush);
             for (w, c) in words.iter_mut().zip(clocks) {
                 (w.1, w.2) = c;
             }
@@ -250,6 +253,10 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
     found
 }
 
+/// Every line's words as the export times them (re-timed, fitted to the speech heard, shifted), by line id.
+pub fn line_words(document: &Value, jobs: &[Job]) -> HashMap<String, Vec<(String, u64, u64)>> {
+    spoken(document, jobs).into_iter().map(|(id, s)| (id, s.words)).collect()
+}
 /// The segments a plan may name, grouped per source file in time order: `(id, start_ms, end_ms, text)`.
 pub type Line = (String, u64, u64, String);
 pub fn transcript(document: &Value, jobs: &[Job]) -> Vec<(PathBuf, Vec<Line>)> {
@@ -353,6 +360,40 @@ pub fn speaker_cuts(document: &Value, id: &str, start: u64, end: u64) -> Vec<(u6
     parts
 }
 
+/// Words said while finding the next one; at a line's start they are cut with any word said twice in a row.
+/// Matches FILLERS in stories.js.
+pub const FILLERS: [&str; 12] = ["เออ", "เอ่อ", "เอิ่ม", "อืม", "อือ", "อ่า", "อ้า", "อะ", "อ่ะ", "คือ", "แบบ", "แบบว่า"];
+/// Sound kept before the first word left after fillers are cut, ms.
+pub const FILLER_PAD_MS: u64 = 100;
+/// Where a line's first real word starts when it opens with fillers or a stammer ("เออ คือ คือ มีโมเม้นต์"
+/// -> "มีโมเม้นต์"); None when it opens with a real word, or when it is nothing but fillers (a listener's
+/// "อืม" is kept: Nina keeps the listener).
+pub fn past_fillers(words: &[(String, u64, u64)], start: u64, end: u64) -> Option<u64> {
+    let said: Vec<&(String, u64, u64)> = words.iter().filter(|w| (w.1 + w.2) / 2 >= start && w.1 < end && !w.0.trim().is_empty()).collect();
+    let mut i = 0;
+    while i < said.len() {
+        let word = said[i].0.trim();
+        let repeated = said.get(i + 1).is_some_and(|next| next.0.trim() == word);
+        if !FILLERS.contains(&word) && !repeated {
+            break;
+        }
+        i += 1;
+    }
+    // the cut lands before the real word but never inside the filler said just before it
+    (i > 0 && i < said.len()).then(|| said[i].1.saturating_sub(FILLER_PAD_MS).max(said[i - 1].2.min(said[i].1)) + FILLER_PAD_MS)
+}
+/// How far back a line's start moves to where its sound begins, ms.
+pub const ONSET_REACH_MS: u64 = 300;
+/// A line that starts while its sound is already on (inside a stored loud stretch) starts where that sound
+/// began, up to ONSET_REACH_MS earlier (24 Oct review: "ตอบ" at 26.9 s lost its first sound). Matches
+/// `onset` in stories.js.
+pub fn onset(document: &Value, path: &Path, start: u64) -> u64 {
+    let Some(id) = source_id(document, path) else { return start };
+    document["voice"][id]["loud"].as_array().into_iter().flatten()
+        .filter_map(|p| Some((p[0].as_u64()?, p[1].as_u64()?)))
+        .find(|&(a, b)| a < start && start < b)
+        .map_or(start, |(a, _)| a.max(start.saturating_sub(ONSET_REACH_MS)))
+}
 /// How far a camera change moves to land between two words, ms.
 pub const GAP_REACH_MS: u64 = 1000;
 /// A camera change inside a line moves to the widest pause between two words near it, so the picture never
@@ -405,7 +446,7 @@ fn quiet_key(document: &Value, source: &str, spoken: &HashMap<String,Spoken>) ->
     let mut segments:Vec<_>=spoken.iter().filter(|(_,v)|path.is_some_and(|path|v.path==Path::new(path))).collect();
     segments.sort_by(|a,b|(a.1.start_ms,a.0).cmp(&(b.1.start_ms,b.0)));
     let words:Vec<_>=segments.iter().flat_map(|(_,v)|v.words.iter().map(|(_,a,b)|[*a,*b])).collect();
-    serde_json::json!([min,5,keep,words]).to_string()
+    serde_json::json!([min,7,keep,words]).to_string()
 }
 
 /// The stories to render, in plan order. Any unknown segment is an error, never a silent skip.
@@ -458,6 +499,22 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
             let (start_ms, end_ms) = trim(&story["trims"][id], s.start_ms, s.end_ms);
             let quiet = quiet_of(document, &s.path);
             let (start_ms, end_ms) = unquiet(&quiet, &story["trims"][id], start_ms, end_ms);
+            // filler and stammer at the line's start go (P'Ohm 24 Oct: "เออ คือ คือ มีโมเม้นต์" -> "มีโมเม้นต์"),
+            // then the start goes back to where the first kept word's sound begins
+            let cut = match story["trims"][id]["start_ms"].is_number() {
+                true => None,
+                false => past_fillers(&s.words, start_ms, end_ms).map(|at| at.saturating_sub(FILLER_PAD_MS).max(start_ms)),
+            };
+            // (never back into the fillers just cut: "คือ" runs straight into "มี")
+            let start_ms = match (cut, story["trims"][id]["start_ms"].is_number()) {
+                (_, true) => start_ms,
+                // back to where the first kept word's sound begins, never into the last filler said
+                (Some(cut), _) => {
+                    let said = s.words.iter().filter(|w| w.1 < cut).map(|w| w.2.min(cut)).max().unwrap_or(0);
+                    onset(document, &s.path, cut).max(said)
+                }
+                (None, _) => onset(document, &s.path, start_ms),
+            };
             // a word counts as said in the span when it starts or centres there: the engine stretches a word
             // over the pause after it ("การ" 32.84-37.04 s), which the dead-air cut then removes
             let inside = |from: u64, to: u64, a: u64, b: u64| ((from + to) / 2 >= a && (from + to) / 2 < b) || (from >= a && from < b);

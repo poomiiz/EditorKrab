@@ -26,5 +26,10 @@ fn main() {
             })
         })
         .collect();
-    std::fs::write(output, serde_json::to_vec_pretty(&serde_json::json!({"stories": stories, "lines": lines})).unwrap()).unwrap();
+    // every line's words as the export times them, to name what a cut takes out
+    let words: serde_json::Map<String, serde_json::Value> = editorkrab::export::line_words(document, &jobs)
+        .into_iter()
+        .map(|(id, w)| (id, serde_json::json!(w)))
+        .collect();
+    std::fs::write(output, serde_json::to_vec_pretty(&serde_json::json!({"stories": stories, "lines": lines, "words": words})).unwrap()).unwrap();
 }
