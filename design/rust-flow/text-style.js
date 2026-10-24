@@ -73,6 +73,12 @@ const effectValid={outline:v=>Number.isInteger(v)&&v>=0&&v<=20,shadow:v=>Number.
  shadow_angle:v=>Number.isInteger(v)&&v>=-180&&v<=180,box_opacity:v=>Number.isInteger(v)&&v>=0&&v<=100};
 // every role, speech included, shows its whole line at once unless an entrance is picked (P'Ohm 23 Oct)
 export const roleEffects=()=>effectDefaults;
+// one press sets speech, emphasis and English together (P'Ohm 24 Oct: step 4 too hard); positions stay
+const looks={
+ nina:{speech:{font:'family:DB Heavent',size:125,color:'#ececf1',outline:4,shadow:1,box_on:false},emphasis:{font:'family:DB Heavent',size:143,color:'#ff8000',outline:4,shadow:1,box_on:false},english:{font:'system',size:47,color:'#ececf1',outline:2,shadow:0,box_on:false}},
+ plain:{speech:{font:'system',size:110,color:'#ececf1',outline:0,shadow:4,box_on:false},emphasis:{font:'system',size:120,color:'#ffd400',outline:0,shadow:4,box_on:false},english:{font:'system',size:44,color:'#ececf1',outline:0,shadow:3,box_on:false}},
+ box:{speech:{font:'system',size:105,color:'#ececf1',outline:0,shadow:0,box_on:true,box_color:'#000000',box_opacity:70},emphasis:{font:'system',size:115,color:'#ffd400',outline:0,shadow:0,box_on:true,box_color:'#000000',box_opacity:70},english:{font:'system',size:42,color:'#ececf1',outline:0,shadow:0,box_on:true,box_color:'#000000',box_opacity:70}}
+};
 const baseKeys=['text','font','size','color','x','y'];
 export function validTextStyle(v){
  return v && typeof v==='object' && !Array.isArray(v) && Object.keys(v).every(k=>baseKeys.includes(k) || (Object.hasOwn(effectValid,k) && effectValid[k](v[k]))) && baseKeys.every(k=>Object.hasOwn(v,k)) && typeof v.text==='string' && v.text.length<=80 && !/[\r\n]/.test(v.text) && validFont(v.font) &&
@@ -216,7 +222,7 @@ export function createStyleEditor(read,write,layout,writeItems){
   const headline=layout().stage===5,host=$(headline?'headlineHost':'captionHost');
   const workspace=$('textStyleWorkspace');if(workspace.parentElement!==host){endDrag();host.append(workspace);}
   const visible=visibleRoles();if(!visible.includes(selected)){endDrag();selected=visible[0] || null;}
-  $('textComponents').hidden=headline;$('headlineActions').hidden=!headline;$('addHeadline').disabled=!enabled || layout().items.length>=100;$('removeHeadline').hidden=!selected?.startsWith('hl:');$('removeHeadline').disabled=!enabled;
+  $('textComponents').hidden=headline;$('textPresetRow').hidden=headline;for(const b of document.querySelectorAll('[data-look]'))b.disabled=!enabled;$('headlineActions').hidden=!headline;$('addHeadline').disabled=!enabled || layout().items.length>=100;$('removeHeadline').hidden=!selected?.startsWith('hl:');$('removeHeadline').disabled=!enabled;
   frame.dataset.empty=String(!visible.length);
   $('textFieldError').hidden=true;
   for(const control of Object.values(controls))control.removeAttribute('aria-invalid');
@@ -236,6 +242,8 @@ export function createStyleEditor(read,write,layout,writeItems){
 
   paint();
  }
+ for(const b of document.querySelectorAll('[data-look]'))b.onclick=()=>{if(!enabled)return;const next=structuredClone(read() || fallback);
+  for(const [role,look] of Object.entries(looks[b.dataset.look]))Object.assign(next[role],look);write(next);render();};
  for(const [key,control] of Object.entries(controls)){
   control.addEventListener('input',()=>{
    if(!enabled || !selected)return;

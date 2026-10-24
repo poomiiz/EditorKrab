@@ -5,7 +5,7 @@ const messages={plan_missing:'ยังไม่มีคำตอบจาก A
  capcut_not_found:'ไม่เจอ CapCut ในเครื่องนี้ ติดตั้งและเปิด CapCut หนึ่งครั้งก่อน',capcut_write:'เขียนโปรเจกต์ลงโฟลเดอร์ของ CapCut ไม่ได้',source_unreadable:'อ่านไฟล์วิดีโอต้นฉบับไม่ได้',pause_analysis_stale:'จังหวะตัดยังคำนวณไม่ครบ กลับขั้นตัดต่อแล้วรอให้เสร็จ'};
 const roleNames={emphasis:'คำสำคัญ',english:'คำแปลอังกฤษ'};
 export function exportMessage(error){const code=String(error||'').split(':')[0];return messages[code]||'สร้างคลิปไม่สำเร็จ กดลองอีกครั้ง';}
-export function createExport({project,saved,planReady,analysisReady=()=>true}){
+export function createExport({project,saved,planReady,analysisReady=()=>true,checklist=()=>[]}){
  const $=id=>document.getElementById(id),base=`/api/v1/projects/${encodeURIComponent(project)}/export`;
  let status={state:'idle'},error='',timer=0,busy=false;
  function paint(){
@@ -15,12 +15,13 @@ export function createExport({project,saved,planReady,analysisReady=()=>true}){
   $('exportStart').classList.toggle('primary',!done);$('exportReveal').classList.toggle('primary',done);
   $('exportCancel').hidden=!running;
   $('exportProgress').hidden=!running;$('exportProgress').value=status.progress||0;
-  $('exportStatus').textContent=running?`กำลังสร้างคลิป ${status.story||1}/${status.stories} · ${Math.floor(100*(status.progress||0))}%`:done?`สร้างเสร็จ ${status.files.length} คลิป`:status.state==='cancelled'?'ยกเลิกแล้ว':!ready?'วางคำตอบจาก AI ที่ขั้น 3 ก่อน':'คลิปละเรื่องตามคำตอบจาก AI ขนาด 9:16 พร้อมซับและหัวคลิป';
+  $('exportStatus').textContent=running?`กำลังสร้างคลิป ${status.story||1}/${status.stories} · ${Math.floor(100*(status.progress||0))}%`:done?`สร้างเสร็จ ${status.files.length} คลิป`:status.state==='cancelled'?'ยกเลิกแล้ว':!ready?'วางคำตอบจาก AI ที่ขั้น 3 ก่อน':'';
   const message=error||(status.state==='failed'?exportMessage(status.error):'');$('exportError').textContent=message;$('exportError').hidden=!message;
   if(!running&&!done&&ready&&!analysisReady())$('exportStatus').textContent='กำลังคำนวณจังหวะตัดและซูม';
   const skipped=(status.skipped||[]).map(r=>roleNames[r]||r);$('exportSkipped').hidden=!skipped.length;$('exportSkipped').textContent=skipped.length?`ยังขาด ${skipped.join(' และ ')} ในวิดีโอ`:'';
   const list=$('exportFiles');list.replaceChildren(...(status.files||[]).map(path=>{const li=document.createElement('li');li.textContent=path.split(/[\\/]/).pop();li.title=path;return li;}));
   list.hidden=!status.files?.length;$('exportReveal').hidden=!status.files?.length;
+  $('exportChecklist').replaceChildren(...(running||done?[]:checklist()).map(({ok,text})=>{const li=document.createElement('li');li.dataset.ok=String(ok);li.textContent=text;return li;}));
   paintCapcut();
  }
  async function poll(){

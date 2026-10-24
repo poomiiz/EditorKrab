@@ -1030,10 +1030,14 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    '6. คืน project_id และ input_revision ตามที่ให้ ห้ามแก้รหัส ถ้าไม่มีคำเหมาะสมคืน emphasis เป็น {}',
    'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย',''].join('\n')+'\n'+JSON.stringify(packet,null,1);
  }
- function checkEmphasis(){
+ function pasted(){
   const raw=$('emphasisAnswer').value.trim();if(!raw)return {error:''};
   const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
   if(value?.response_schema)return {error:'นี่คือข้อความที่ส่งให้ AI ยังไม่ใช่คำตอบ วางในแชท AI ก่อน แล้วคัดลอกคำตอบของ AI กลับมา'};
+  return {value};
+ }
+ function checkEmphasis(){const p=pasted();return p.value?emphasisFrom(p.value):p;}
+ function emphasisFrom(value){
   const stale=checkReply(value);if(stale)return {error:stale};
   const answer=value.emphasis;
   if(!answer || typeof answer!=='object' || Array.isArray(answer))return {error:'ไม่พบ emphasis ในคำตอบ'};
@@ -1054,10 +1058,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    '4. อ้างแต่ละช่วงด้วย id ที่ให้ คืน project_id และ input_revision ให้ตรง ห้ามรวม เพิ่ม หรือข้ามช่วง ห้ามเดาหรือเปลี่ยนเวลา',
    'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย',''].join('\n')+'\n'+JSON.stringify(packet,null,1);
  }
- function checkSubtitles(){
-  const raw=$('emphasisAnswer').value.trim();if(!raw)return {error:''};
-  const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
-  if(value?.response_schema)return {error:'นี่คือข้อความที่ส่งให้ AI ยังไม่ใช่คำตอบ วางในแชท AI ก่อน แล้วคัดลอกคำตอบของ AI กลับมา'};
+ function checkSubtitles(){const p=pasted();return p.value?englishFrom(p.value):p;}
+ function englishFrom(value){
   if(!manifestReady())return {error:manifestError || 'รอบันทึกงานและคำนวณช่วงซับก่อนใช้คำตอบ'};
   return validateEnglishCueReply(value,project,englishManifest);
  }
@@ -1072,9 +1074,22 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   english:{make:'สร้างซับอังกฤษ',title:'วางคำตอบซับอังกฤษจาก AI',text:subtitleText,check:checkSubtitles,file:'editorkrab-ซับอังกฤษ.txt',
    has:()=>!!read().english_cues||Object.keys(read().subtitles || {}).length>0,
    apply:c=>write(d=>{d.english_cues={input_revision:englishManifest.input_revision,translations:c.picked};d.subtitle_language='en';
-    if(!(d.text_roles || []).includes('english'))d.text_roles=[...(d.text_roles || []),'english'];})}
+    if(!(d.text_roles || []).includes('english'))d.text_roles=[...(d.text_roles || []),'english'];})},
+  // one trip to the chat for both layers (P'Ohm 24 Oct: too many copy-paste rounds)
+  both:{make:'ให้ AI ทำคำเน้นและซับอังกฤษ',title:'วางคำตอบจาก AI (คำเน้นและซับอังกฤษ)',file:'editorkrab-คำเน้นและอังกฤษ.txt',
+   has:()=>rounds.emphasis.has()||rounds.english.has(),
+   text:()=>{const only=t=>t.replace('ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n','');
+    return ['ทำ 2 งานแล้วตอบในคำตอบเดียว',
+     'ตอบกลับเป็น JSON ก้อนเดียวอย่างเดียว ไม่ต้องมีคำอธิบาย: {"emphasis_reply": คำตอบงานที่ 1 ตาม response_schema ของงานที่ 1, "english_reply": คำตอบงานที่ 2 ตาม response_schema ของงานที่ 2}',
+     '','=== งานที่ 1: คำเน้น ===',only(emphasisText()),'','=== งานที่ 2: ซับอังกฤษ ===',only(subtitleText())].join('\n');},
+   check:()=>{const p=pasted();if(!p.value)return p;
+    if(!p.value.emphasis_reply||!p.value.english_reply)return {error:'คำตอบต้องมีทั้ง emphasis_reply และ english_reply ลองคัดลอกคำตอบใหม่ทั้งหมด'};
+    const e=emphasisFrom(p.value.emphasis_reply),s=englishFrom(p.value.english_reply);
+    if(!e.picked)return {error:'คำเน้น: '+e.error};if(!s.picked)return {error:'ซับอังกฤษ: '+s.error};
+    return {...e,note:e.note+' · '+s.note,parts:{e,s}};},
+   apply:c=>{rounds.emphasis.apply(c.parts.e);rounds.english.apply(c.parts.s);}}
  };
- let round='emphasis';const opened={emphasis:false,english:false};
+ let round='emphasis';const opened={emphasis:false,english:false,both:false};
  function say(text,ok){$('emphasisStatus').textContent=text;$('emphasisStatus').dataset.state=ok?'ok':'error';$('emphasisStatus').hidden=false;}
  function action(label,icon,run,needsEdit){const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.icon=icon;b.onclick=run;if(needsEdit)b.disabled=!editable();return b;}
  async function copyRound(key){try{await navigator.clipboard.writeText(rounds[key].text());say(`คัดลอก ${key==='english'?englishManifest.cues.length:keptLines().length} ช่วงแล้ว วางในแชท AI ได้เลย`,true);}catch(error){say(error.message==='รอบันทึกงานและคำนวณช่วงซับให้เสร็จก่อน'||error.message===manifestError?error.message:'คัดลอกไม่ได้ ลองกดอีกครั้ง',false);loadManifest();}}
@@ -1084,7 +1099,9 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function drawLayerActions(){
   const host=$('layerActions');if(!host)return;
   const inStep4=!!$('editTrack').closest('#captionTransport')&&!!model();
-  host.replaceChildren(...Object.entries(rounds).map(([key,r])=>{
+  // nothing made yet: one button does both; afterwards each layer can be made on its own
+  const shown=rounds.both.has()||opened.emphasis||opened.english?['emphasis','english']:['both'];
+  host.replaceChildren(...shown.map(key=>[key,rounds[key]]).map(([key,r])=>{
    const slot=document.createElement('div');slot.className='layer-action';slot.dataset.role=key;
    slot.hidden=!inStep4 || (r.has()&&!opened[key]);
    if(!opened[key]){const make=action(r.make,'plus',()=>{opened[key]=true;drawLayerActions();},true);make.classList.add('primary');slot.append(make);}
@@ -1094,7 +1111,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    return slot;}));
   // a layer already made can be made again from the play row
   const redo=$('captionRedo');
-  if(redo){redo.replaceChildren(...Object.entries(rounds).filter(([key,r])=>inStep4&&r.has()&&!opened[key])
+  if(redo){redo.replaceChildren(...Object.entries(rounds).filter(([key,r])=>key!=='both'&&inStep4&&r.has()&&!opened[key])
    .map(([key,r])=>action(r.make+'ใหม่','retry',()=>{opened[key]=true;drawLayerActions();},true)));
    if(inStep4&&(read().text_roles || []).includes('english')){
     const badge=document.createElement('span');badge.className='badge';badge.setAttribute('role','status');
@@ -1106,7 +1123,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  }
  function checkEmphasisUi(){const c=rounds[round].check();
   const preview=$('emphasisPreview');preview.replaceChildren();preview.hidden=!c.picked;
-  if(c.picked){for(const [id,items] of Object.entries(c.picked)){const row=document.createElement('p');row.className='caption';row.textContent=round==='emphasis'?items.map(p=>p.text).join(' · '):items;preview.append(row);}for(const issue of c.issues || []){const row=document.createElement('p');row.className='field-warning';row.textContent=`“${issue.text}” · ${issue.reason} · เก็บคำเดิมของท่อนนี้`;preview.append(row);}}
+  if(c.picked){for(const [id,items] of Object.entries(c.picked)){const row=document.createElement('p');row.className='caption';row.textContent=round==='english'?items:items.map(p=>p.text).join(' · ');preview.append(row);}for(const issue of c.issues || []){const row=document.createElement('p');row.className='field-warning';row.textContent=`“${issue.text}” · ${issue.reason} · เก็บคำเดิมของท่อนนี้`;preview.append(row);}}
   $('emphasisApply').textContent=c.issues?.length?`ใช้ ${c.count} คำที่พร้อม`:'ใช้คำตอบนี้';$('emphasisCheck').textContent=c.picked?c.note:c.error;$('emphasisCheck').dataset.state=c.picked?'ok':'error';$('emphasisCheck').hidden=!$('emphasisCheck').textContent;$('emphasisApply').disabled=!c.picked || !editable();}
  $('emphasisAnswer').oninput=()=>{try{sessionStorage.setItem('caption-reply:'+project+':'+round,$('emphasisAnswer').value);}catch(_){}checkEmphasisUi();};
  $('emphasisApply').onclick=event=>{

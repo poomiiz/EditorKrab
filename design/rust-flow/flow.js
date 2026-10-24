@@ -570,4 +570,13 @@ try {
 }
 render(); start();
 // Step 6 builds from the saved draft only, so it waits for autosave like the AI packet does.
-var exporter=createExport({project:projectId,planReady,analysisReady:()=>!stories.analysisPending(),saved:()=>!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved});
+// what the clips will carry, read from the work itself (P'Ohm 24 Oct: step 6 promised a headline that was not there)
+function exportChecklist(){
+ const s=[...stories.summary().values()].reduce((a,v)=>({n:a.n+v.stories,r:a.r+v.reviewed}),{n:0,r:0});
+ const roles=draft.text_roles || [],heads=headlineItems().filter(h=>h.text.trim()).length;
+ return [{ok:s.n>0,text:s.n?`${s.n} เรื่อง ได้ ${s.n} คลิป`:'ยังไม่มีเรื่อง (วางคำตอบ AI ที่ขั้น 2)'},
+  {ok:s.r===s.n,text:s.r===s.n?'ตรวจตัดต่อครบทุกเรื่อง':`ตรวจตัดต่อแล้ว ${s.r} จาก ${s.n} เรื่อง (ขั้น 3)`},
+  {ok:roles.includes('speech'),text:roles.includes('speech')?'มีซับคำพูด'+(roles.includes('emphasis')?' + คำเน้น':'')+(roles.includes('english')?' + อังกฤษ':''):'ไม่มีซับ (ติ๊กที่ขั้น 4)'},
+  {ok:heads>0,text:heads?'มีหัวคลิป':'ไม่มีหัวคลิป (ใส่ที่ขั้น 5)'}];
+}
+var exporter=createExport({project:projectId,planReady,checklist:exportChecklist,analysisReady:()=>!stories.analysisPending(),saved:()=>!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved});
