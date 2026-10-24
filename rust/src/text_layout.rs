@@ -31,7 +31,8 @@ pub fn preview_font(family: &str, bold: bool, italic: bool) -> Option<Vec<u8>> {
 pub fn width(text: &str, style: &Value) -> f64 {
     let db = database();
     let family = crate::export::font(style["font"].as_str().unwrap_or("system"));
-    let families = [fontdb::Family::Name(family), fontdb::Family::Name("Leelawadee UI"), fontdb::Family::Name("Tahoma"), fontdb::Family::SansSerif];
+    // Thonburi is macOS's built-in Thai font; without it a Mac measured Thai as missing glyphs and split short lines
+    let families = [fontdb::Family::Name(family), fontdb::Family::Name("Leelawadee UI"), fontdb::Family::Name("Tahoma"), fontdb::Family::Name("Thonburi"), fontdb::Family::SansSerif];
     let face = db.query(&fontdb::Query {
         families: &families,
         weight: if style["bold"].as_bool() == Some(false) { fontdb::Weight::NORMAL } else { fontdb::Weight::BOLD },
