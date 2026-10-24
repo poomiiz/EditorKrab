@@ -102,7 +102,7 @@ fn repeated_source_passages_have_distinct_translation_ids_and_output_clocks() {
 #[test]
 fn replay_with_internal_dead_air_round_trips_every_english_cue() {
     let a=Piece{source:0,start_ms:0,end_ms:1000,text:"A B".into(),words:vec![("A".into(),100,500)],timed:true,segment:"s0".into()};
-    let b=Piece{source:0,start_ms:2000,end_ms:3000,text:"A B".into(),words:vec![("B".into(),2100,2500)],timed:true,segment:"s0".into()};
+    let b=Piece{source:0,start_ms:2000,end_ms:3000,text:"A B".into(),words:vec![("B".into(),2400,2800)],timed:true,segment:"s0".into()};
     let story=editorkrab::export::Story{id:"one".into(),title:String::new(),sources:vec!["a.mp4".into()],pieces:vec![a.clone(),b.clone(),a,b]};
     let mut doc=json!({"text_roles":["english"]});let cues=editorkrab::export::translation_cues(&story,&doc);
     assert_eq!(cues.len(),4);assert_eq!(cues.iter().map(|c|&c.id).collect::<std::collections::HashSet<_>>().len(),4);

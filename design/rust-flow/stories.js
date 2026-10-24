@@ -644,7 +644,9 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   const row=[...rows].reverse().find(r=>r[0].at<=now);
   // Nina's stack: the white setup line stays on while the orange punch line said after it is on (export.rs hold_for_emphasis)
   const held=row&&list.length&&pickGroups(line).some(g=>{const a=g[0].start_ms,b=Math.max(g.at(-1).end_ms+EMPHASIS_TAIL_MS,a+EMPHASIS_HOLD_MS);return a>=row[0].at&&a<=row.at(-1).end_ms+1500&&now<b;});
-  if(!row||(now>=row.at(-1).end_ms+180&&!held))return '';
+  // a card stays on until the next one when the gap is a second or less (export.rs CARD_HOLD_MS)
+  const next=row&&rows[rows.indexOf(row)+1]?.[0]?.at,until=row&&(Number.isFinite(next)&&next-row.at(-1).end_ms<=1000?next:row.at(-1).end_ms+180);
+  if(!row||(now>=until&&!held))return '';
   return row.filter(w=>!reveal || w.at<=now).map(w=>w.text).reduce(captionJoin,'');
  }
  // The preview and timeline use final playback-time windows, including dead-air removal.
@@ -905,7 +907,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
      const occurrence=story.kept.slice(0,index+1).filter(l=>l.segment_id===next.segment_id&&l.source_id===next.source_id).length;
      replay=englishManifest.cues.some(c=>c.story_id===story.id&&c.segment_id===next.segment_id&&c.occurrence===occurrence);
     }
-    if(next.start_ms>now+40||next.start_ms<line.start_ms||replay){video.currentTime=next.start_ms/1000;return;}
+    // a gap of 250 ms or less to the next line is played, as the export does (export.rs JOIN_GAP_MS)
+    if(next.start_ms>now+250||next.start_ms<line.start_ms||replay){video.currentTime=next.start_ms/1000;return;}
    }
   }
   const story=current(),activeIndex=story&&queue[0]?.segment_id?story.kept.length-queue.length:-1;

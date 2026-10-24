@@ -329,7 +329,7 @@ fn unticked_layers_stay_absent_and_missing_english_is_reported() {
 #[test]
 fn native_camera_follows_shared_face_crops_and_preserves_continuous_audio_ranges() {
     let story = Story { id:"camera".into(), title:"".into(), sources:vec!["a.mp4".into()],
-        pieces:vec![piece(0,1000,10000,"")] };
+        pieces:vec![piece(0,1000,11000,"")] };
     let doc=json!({"files":[{"path":"a.mp4","source_id":"src"}],"text_roles":[],"follow_speaker":true,
         "crops":{"src":{"speakers":{"0":{"zoom":1.5}}}},
         "voice":{"src":{"faces":[{"cx":0.62,"cy":0.48},{"cx":0.4,"cy":0.5}],
@@ -338,7 +338,8 @@ fn native_camera_follows_shared_face_crops_and_preserves_continuous_audio_ranges
     let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/camera"),1).unwrap();
     let video=tracks(&draft,"video");let segments=video[0]["segments"].as_array().unwrap();
     assert_eq!(segments.len(),3,"speaker changes and unknown-gap expiry must also reach native video");
-    let expected=[(1000,4000,1.5,-0.36,-0.06),(4000,9201,1.2,0.2,0.0),(9201,10000,1.0,0.0,0.0)];
+    // the wide shot after the unknown gap is at least MIN_SHOT_MS long here, so it stays
+    let expected=[(1000,4000,1.5,-0.36,-0.06),(4000,9201,1.2,0.2,0.0),(9201,11000,1.0,0.0,0.0)];
     let mut target=0;
     for (seg,(a,b,scale,x,y)) in segments.iter().zip(expected) {
         assert_eq!(seg["source_timerange"],json!({"start":a*1000,"duration":(b-a)*1000}));
@@ -367,4 +368,18 @@ fn native_crop_fills_the_selected_canvas_and_honours_manual_slack_position() {
     assert_eq!(draft.content["canvas_config"]["width"],1920);
     assert_eq!(draft.content["canvas_config"]["height"],1080);
     assert_eq!(tracks(&draft,"video")[0]["segments"][0]["clip"]["scale"],json!({"x":1.0,"y":1.0}));
+}
+
+#[test]
+fn the_camera_never_cuts_to_a_shot_under_a_second() {
+    // the unknown-gap wide shot would be 0.8 s at the end of the piece: the close-up holds instead
+    let story = Story { id:"short".into(), title:"".into(), sources:vec!["a.mp4".into()], pieces:vec![piece(0,1000,10000,"")] };
+    let doc=json!({"files":[{"path":"a.mp4","source_id":"src"}],"text_roles":[],"follow_speaker":true,
+        "voice":{"src":{"faces":[{"cx":0.62,"cy":0.48},{"cx":0.4,"cy":0.5}],
+            "seen":[{"start_ms":0,"end_ms":4000,"person":0},{"start_ms":4000,"end_ms":8000,"person":1}]}}});
+    let media=vec![Media{duration_ms:12000,width:2160,height:3840,has_audio:true}];
+    let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/short"),1).unwrap();
+    let segments=tracks(&draft,"video")[0]["segments"].as_array().unwrap().clone();
+    let ranges:Vec<_>=segments.iter().map(|s|s["source_timerange"]["duration"].as_u64().unwrap()/1000).collect();
+    assert_eq!(ranges,[3000,6000]);
 }

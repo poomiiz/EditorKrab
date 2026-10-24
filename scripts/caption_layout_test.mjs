@@ -12,7 +12,9 @@ assert.notEqual(revision,captionInputRevision('other',{},[line]));
 assert.equal(revision,captionInputRevision('p',{dead_min_ms:300,quiet:{source:[[0,100]]}},[line]),'analysis settings cannot invalidate identical public word anchors');
 assert.notEqual(revision,captionInputRevision('p',{},[{...line,text:'แก้'}]));
 assert.notEqual(revision,captionInputRevision('p',{},[{...line,words:line.words.map(w=>({...w,start_ms:w.start_ms+1}))}]));
-const rows=captionRows(line.words,{},2200,()=>10);
+// a 0.5 s breath stays inside a card (Nina 16); a pause of 0.65 s or more starts a new one
+assert.equal(captionRows(line.words,{},2200,()=>10).length,1,'a breath stays inside the card');
+const rows=captionRows([line.words[0],{...line.words[1],start_ms:950,end_ms:1100}],{},2200,()=>10);
 assert.equal(rows.length,2,'separate speech beats after a pause');
 const text='WWWWWWWWWWWWWWWW',style={font:'tahoma',size:125,x:32,spacing:100};
 const fit=fittedCaptionSize(text,style);

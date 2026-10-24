@@ -24,7 +24,8 @@ export function captionWidth(style={}){
 export const captionJoin=(a,b)=>a+(a&&!/[\u0E00-\u0E7F]$/.test(a)&&b&&!/^[\u0E00-\u0E7F]/.test(b)?' ':'')+b;
 export function captionRows(words,style={},maxMs=2200,measure=captionMeasure){
  const rows=[];for(const w of words){const row=rows.at(-1),text=row?.reduce((t,x)=>captionJoin(t,x.text),'') || '',prev=row?.at(-1);
-  const phrase=prev&&((w.start_ms-prev.end_ms>=400)||(w.end_ms-row[0].start_ms>maxMs));
+  // a breath under 650 ms stays inside a card (export.rs PHRASE_PAUSE_MS; Nina 16 cards hold about 17 letters)
+  const phrase=prev&&((w.start_ms-prev.end_ms>=650)||(w.end_ms-row[0].start_ms>maxMs));
   if(row&&!phrase&&measure(captionJoin(text,w.text),style)<=captionWidth(style)*.96)row.push(w);else rows.push([w]);}
  return rows;
 }

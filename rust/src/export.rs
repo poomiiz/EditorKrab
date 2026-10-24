@@ -93,6 +93,11 @@ pub fn source_id<'a>(document: &'a Value, path: &Path) -> Option<&'a str> {
         .find(|f| f["path"].as_str().map(Path::new) == Some(path))
         .and_then(|f| f["source_id"].as_str())
 }
+/// Shortest shot a camera change may leave (24 Oct: 8 of 20 shots were under 1 s; Nina 16's median is 2.2 s).
+pub const MIN_SHOT_MS: u64 = 1000;
+/// A gap this short between two pieces of the same video is played, not cut: a 60-100 ms jump only shows
+/// as a stutter (Nina keeps breaths of 0.3-0.5 s).
+pub const JOIN_GAP_MS: u64 = 250;
 /// How much closer the camera goes on a speaker who has no zoom of their own (20%, P'Ohm 23 Oct).
 pub const FOLLOW_ZOOM: f64 = 1.2;
 /// Shortest turn the camera cuts to; a shorter one (a "yes" from the other side) keeps the shot.
@@ -329,14 +334,14 @@ pub fn speaker_cuts(document: &Value, id: &str, start: u64, end: u64) -> Vec<(u6
     let mut edges: Vec<u64> = follow_turns(document, id)
         .into_iter()
         .flat_map(|(a, b, _)| [a, b, b.saturating_add(1201)])
-        .filter(|&t| t > start + 200 && t + 200 < end)
+        .filter(|&t| t >= start + MIN_SHOT_MS && t + MIN_SHOT_MS <= end)
         .collect();
     edges.sort();
     edges.dedup();
     let mut parts = Vec::new();
     let mut at = start;
     for t in edges {
-        if speaker_at(document, id, t) != speaker_at(document, id, at) {
+        if t >= at + MIN_SHOT_MS && speaker_at(document, id, t) != speaker_at(document, id, at) {
             parts.push((at, t));
             at = t;
         }
@@ -468,6 +473,13 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
         }
         // a line the trim before it swallowed (nearly) whole is gone, not a 1 ms clip
         pieces.retain(|p| p.end_ms >= p.start_ms + 200);
+        // a short gap to the next piece of the same video is played instead of jumped
+        for i in 1..pieces.len() {
+            let (end, next) = (pieces[i - 1].end_ms, pieces[i].start_ms);
+            if pieces[i - 1].source == pieces[i].source && next > end && next - end <= JOIN_GAP_MS {
+                pieces[i - 1].end_ms = next;
+            }
+        }
         if pieces.is_empty() {
             return Err(format!("story_empty:{}", n + 1));
         }
@@ -710,6 +722,11 @@ pub fn lines(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
 
 
 /// Word-clocked one-line phrases. Unaligned corrections retain the original cue's clock.
+/// A pause this long starts a new card; a breath shorter than it stays inside one (Nina 16 cards: median
+/// 17 letters, 1.4 s; 400 ms made 13 letters, 1.1 s). Matches captionRows in text-style.js.
+pub const PHRASE_PAUSE_MS: u64 = 650;
+/// A card stays on until the next one starts when the gap is no longer than this (Nina's cards follow on).
+pub const CARD_HOLD_MS: u64 = 1000;
 pub fn layout_lines(piece: &Piece, style: &Value) -> Vec<(u64, u64, String)> {
     let length = piece.end_ms - piece.start_ms;
     if piece.words.is_empty() {
@@ -721,7 +738,7 @@ pub fn layout_lines(piece: &Piece, style: &Value) -> Vec<(u64, u64, String)> {
     for (word, from, to) in &piece.words {
         if word.trim().is_empty() { continue; }
         let mut candidate = text.clone(); join(&mut candidate, word.trim());
-        let phrase = !text.is_empty() && (from.saturating_sub(end) >= 400 || to.saturating_sub(start) > 2200);
+        let phrase = !text.is_empty() && (from.saturating_sub(end) >= PHRASE_PAUSE_MS || to.saturating_sub(start) > 2200);
         if !text.is_empty() && (phrase || !crate::text_layout::fits(&candidate, style)) {
             let stop = local(end.saturating_add(180)).min(local(*from)).max(local(start)+1).min(length);
             rows.push((local(start), stop, std::mem::take(&mut text)));
@@ -1064,6 +1081,12 @@ pub fn speech_cues(story: &Story, document: &Value) -> Vec<(u64,u64,String)> {
     for (a,b,text) in cues {
         if let Some(last)=unique.last_mut().filter(|last|last.0==a&&last.2==text) {last.1=last.1.max(b);}
         else {unique.push((a,b,text));}
+    }
+    for i in 1..unique.len() {
+        let next = unique[i].0;
+        if next > unique[i - 1].1 && next - unique[i - 1].1 <= CARD_HOLD_MS {
+            unique[i - 1].1 = next;
+        }
     }
     hold_for_emphasis(&mut unique, &emphasis_lines(story, document));
     unique
