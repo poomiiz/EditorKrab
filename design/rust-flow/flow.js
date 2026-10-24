@@ -7,6 +7,9 @@ import {createExport} from './export.js';
 import {createStories,checkPlan} from './stories.js';
 import {createStyleEditor,validTextStyles,validHeadlineItems,defaults} from './text-style.js';
 const $ = id => document.getElementById(id);
+// which build is open, at the bottom of the ... menu (P'Ohm 24 Oct: could not tell the old app from the new one)
+fetch('/api/v1/version',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('version');return r.json();})
+ .then(v=>{$('appBuild').textContent='รุ่น '+v.build;}).catch(()=>{$('appBuild').textContent='รุ่น: อ่านไม่ได้';});
 // dialogs live in the body: one opened from another step's hidden page would be invisible yet still block the page
 for (const dialog of document.querySelectorAll('dialog')) document.body.append(dialog);
 // a note shows when its text is set or it is unhidden, then hides itself after 3 seconds

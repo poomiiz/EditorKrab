@@ -1785,6 +1785,10 @@ async fn reload_asr(runtime: &Runtime) -> Result<(), String> {
 }
 
 /// GPU speed-up: offered on an NVIDIA machine, used when installed unless "CPU only" is on.
+/// Which build this is; the page shows it in the ... menu.
+async fn app_version() -> Json<Value> {
+    Json(json!({"version": env!("CARGO_PKG_VERSION"), "build": env!("EDITORKRAB_BUILD")}))
+}
 async fn gpu_status(State(runtime): State<Runtime>) -> Json<Value> {
     let data = runtime.setup.data.clone();
     let item = editorkrab::asr_download::gpu_plan(&data);
@@ -2104,6 +2108,7 @@ async fn serve(
             "/api/v1/transcription/download/cancel",
             post(cancel_download),
         )
+        .route("/api/v1/version", get(app_version))
         .route("/api/v1/transcription/gpu", get(gpu_status).put(set_gpu))
         .route(
             "/api/v1/transcription/gpu/download",
