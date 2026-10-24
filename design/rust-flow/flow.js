@@ -24,7 +24,7 @@ let draft = {flow_version:2,headline_items:[],step: 1, title: '', language: 'aut
 let unsaved = false;
 let session, pendingLocal = 0, editingAllowed = false, jobWatcher;
 let activeUpload;
-const textEditor=createStyleEditor(()=>draft.text_styles,value=>{draft.text_styles=value;save();},()=>({stage:activeStep(draft),roles:draft.text_roles || [],items:headlineItems()}),items=>{draft.headline_items=items;save();renderHeadline();renderSteps();});
+const textEditor=createStyleEditor(()=>draft.text_styles,value=>{draft.headline_items??=headlineItems();draft.text_styles=value;save();},()=>({stage:activeStep(draft),roles:draft.text_roles || [],items:headlineItems()}),items=>{draft.headline_items=items;save();renderHeadline();renderSteps();});
 document.querySelector('#textStyleWorkspace .text-inspector').prepend($('timingStatus'),$('timingDetails'));
 function headlineItems(){return draft.headline_items ?? (draft.text_styles?.headline ? [{id:'headline-main',...draft.text_styles.headline}] : []);}
 function headlinePreset(){return defaults().headline;}
@@ -334,7 +334,7 @@ $('headlineReply').oninput=()=>{if(editingAllowed){draft.headline_reply=$('headl
 function renderHeadline(){
  const ready=planReady();
  $('headlinePacket').disabled=!editingAllowed || !ready;
- $('headlinePrerequisite').textContent=ready?'ส่งไฟล์นี้ให้ AI แล้ววางคำตอบด้านบน':'วางคำตอบ AI ในขั้น 3 ก่อน';
+ $('headlinePrerequisite').textContent=ready?'ส่งไฟล์นี้ให้ AI แล้ววางคำตอบด้านบน':'วางคำตอบ AI ในขั้น 2 ก่อน';
 }
 function headlineContent(){return {title:draft.title,plan:planCheck().plan,headline_slots:headlineItems().map(v=>({id:v.id,text:v.text})),sources:draft.files.map(f=>({id:f.source_id || f.upload_id,name:f.name,size:f.size,modified_ns:f.modified_ns}))};}
 async function headlineInput(){
