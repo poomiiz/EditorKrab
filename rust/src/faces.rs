@@ -139,24 +139,28 @@ pub fn mouth_motion(people: &[Face], frames: &[Vec<u8>], w: u32, h: u32) -> Vec<
 /// own usual movement, in 1 s steps, joined into turns. Diarization could not tell two women apart on IMG_6779
 /// (one voice for 70 of 73 s at every threshold, 23 Oct), so the camera follows faces, not voices.
 pub fn visual_turns(motion: &[Vec<f64>], speech: &[(u64, u64)]) -> Vec<(u64, u64, usize)> {
-    if motion.is_empty() {
+    if motion.is_empty() || motion.iter().any(|m|m.is_empty()) {
         return Vec::new();
     }
     let usual: Vec<f64> = motion.iter().map(|m| { let mut v = m.clone(); v.sort_by(f64::total_cmp); v[v.len() / 2].max(1e-6) }).collect();
     let step = FPS as usize;
-    let frames = motion[0].len();
+    let frames = motion.iter().map(Vec::len).min().unwrap_or(0);
     let mut out: Vec<(u64, u64, usize)> = Vec::new();
     for s in (0..frames).step_by(step) {
         let (a, b) = (s as u64 * 1000 / FPS as u64, ((s + step).min(frames)) as u64 * 1000 / FPS as u64);
         if !speech.iter().any(|&(x, y)| x < b && a < y) {
             continue;
         }
-        let who = (0..motion.len())
-            .max_by(|&i, &j| {
-                let score = |k: usize| motion[k][s..(s + step).min(frames)].iter().sum::<f64>() / usual[k];
-                score(i).total_cmp(&score(j))
-            })
-            .unwrap_or(0);
+        let mut ranked:Vec<_>=(0..motion.len()).map(|k|{
+            let count=(s+step).min(frames)-s;
+            let score=motion[k][s..(s+step).min(frames)].iter().sum::<f64>() / count.max(1) as f64 / usual[k];
+            (k,score)
+        }).filter(|(_,score)|score.is_finite()).collect();
+        ranked.sort_by(|a,b|b.1.total_cmp(&a.1));
+        let Some(&(who,best))=ranked.first() else {continue};
+        let runner=ranked.get(1).map_or(0.0,|p|p.1);
+        // Both mouths moving equally (camera shake/listening) is unknown, not a forced winner.
+        if best<1.15 || best<runner*1.3 {continue;}
         match out.last_mut() {
             Some(last) if last.2 == who && last.1 >= a => last.1 = b,
             _ => out.push((a, b, who)),
@@ -172,6 +176,13 @@ pub const MODEL_SHA256: &str = "c4619d066ed35e84d9a8e842860b0dff567aba0cbb139881
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn uncertain_motion_never_forces_a_speaker() {
+        assert!(visual_turns(&[vec![1.0;16],vec![1.0;16]],&[(0,4000)]).is_empty());
+        assert!(visual_turns(&[vec![],vec![]],&[(0,4000)]).is_empty());
+        let mut active=vec![1.0;16];active[4..8].fill(3.0);
+        assert_eq!(visual_turns(&[active,vec![1.0;16]],&[(0,4000)]),vec![(1000,2000,0)]);
+    }
     /// Real-clip check, run by hand: EDITORKRAB_FACE_MODEL=<seeta .bin> EDITORKRAB_FACE_VIDEO=<video> EDITORKRAB_FFMPEG=<ffmpeg>
     #[tokio::test]
     #[ignore]

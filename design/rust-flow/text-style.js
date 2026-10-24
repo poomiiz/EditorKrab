@@ -1,6 +1,6 @@
 // Style samples live in a separate draft field; they never replace dialogue or the AI plan.
 export const roles=['headline','speech','emphasis','english'];
-const fonts={system:'"Segoe UI","Leelawadee UI",Tahoma,system-ui,sans-serif',tahoma:'Tahoma,"Leelawadee UI",sans-serif',thai:'"Leelawadee UI",Tahoma,sans-serif'};
+const fonts={system:'"Leelawadee UI",Tahoma,system-ui,sans-serif',tahoma:'Tahoma,"Leelawadee UI",sans-serif',thai:'"Leelawadee UI",Tahoma,sans-serif'};
 // a font hovered in the font list, tried on the preview text being edited
 let hoverFont=null;
 const fontLabels={system:'ฟอนต์ระบบ',tahoma:'Tahoma',thai:'Leelawadee UI'};
@@ -8,12 +8,40 @@ export function validFont(value){return typeof value==='string' && (Object.hasOw
 function fontValue(name){return Object.keys(fontLabels).find(key=>fontLabels[key]===name) || 'family:'+name;}
 function fontName(value){return fontLabels[value] ?? value.slice(7);}
 function fontCss(value){return fonts[value] ?? JSON.stringify(value.slice(7))+','+fonts.system;}
+
+let measureContext;
+export function captionMeasure(text,style={}){
+ if(!measureContext&&typeof document!=='undefined')measureContext=document.createElement('canvas').getContext('2d');
+ const size=Number(style.size)||64,shown=style.case==='upper'?text.toUpperCase():style.case==='lower'?text.toLowerCase():text;
+ if(measureContext)measureContext.font=(style.italic?'italic ':'')+(style.bold===false?400:700)+' '+size+'px '+fontCss(style.font || 'system');
+ const plain=[...shown].filter(c=>!/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/.test(c)).length;
+ return (measureContext?measureContext.measureText(shown).width:plain*size)+(Number(style.spacing)||0)*Math.max(0,plain-1);
+}
+export function captionWidth(style={}){
+ const x=(Number.isFinite(style.x)?style.x:50)*10.8,edge=54+(style.outline ?? 4)+(style.box_on?(style.box_pad_x ?? 12):0);
+ return Math.max(24,style.align==='left'?1080-edge-x:style.align==='right'?x-edge:2*Math.min(x-edge,1080-edge-x));
+}
+export const captionJoin=(a,b)=>a+(a&&!/[\u0E00-\u0E7F]$/.test(a)&&b&&!/^[\u0E00-\u0E7F]/.test(b)?' ':'')+b;
+export function captionRows(words,style={},maxMs=2200,measure=captionMeasure){
+ const rows=[];for(const w of words){const row=rows.at(-1),text=row?.reduce((t,x)=>captionJoin(t,x.text),'') || '',prev=row?.at(-1);
+  const phrase=prev&&((w.start_ms-prev.end_ms>=400)||(w.end_ms-row[0].start_ms>maxMs));
+  if(row&&!phrase&&measure(captionJoin(text,w.text),style)<=captionWidth(style)*.96)row.push(w);else rows.push([w]);}
+ return rows;
+}
+export function fittedCaptionSize(text,style={},aspect=16/9){
+ const size=Number(style.size)||64,width=captionMeasure(text,style);
+ const y=(Number.isFinite(style.y)?style.y:50)/100,pad=(style.outline ?? 4)+(style.box_on?(style.box_pad_y ?? 12):0);
+ const vertical=Math.max(1,1080*aspect*Math.min(y,1-y)-16-pad)*2/1.5;
+ return Math.max(1,Math.floor(Math.min(vertical,size*Math.min(1,captionWidth(style)*.96/Math.max(1,width)))));
+}
+
 const labels={headline:'หัวคลิป',speech:'คำพูด',emphasis:'คำสำคัญ',english:'คำแปลอังกฤษ'};
 export function defaults(){
  // Clip text colours are video output, not UI theme tokens.
- const white='#ececf1',orange='#f59e0b';
- return {headline:{text:'หัวข้อคลิป',font:'system',size:80,color:white,x:50,y:16},speech:{text:'ตัวอย่างข้อความพูด',font:'system',size:64,color:white,x:50,y:69},
-  emphasis:{text:'คำเน้นสำคัญ',font:'system',size:84,color:orange,x:50,y:55},english:{text:'English subtitle',font:'system',size:56,color:white,x:50,y:78}};
+ // orange, size and place of Nina's punch line (white 21 at y -0.5, orange 24 at y -0.615 in CapCut)
+ const white='#ececf1',orange='#ff8000';
+ return {headline:{text:'หัวข้อคลิป',font:'system',size:80,color:white,x:50,y:16},speech:{text:'ตัวอย่างข้อความพูด',font:'family:DB Heavent',size:125,color:white,x:50,y:75,outline:4,shadow:1},
+  emphasis:{text:'คำเน้นสำคัญ',font:'family:DB Heavent',size:143,color:orange,x:50,y:81,outline:4,shadow:1},english:{text:'English subtitle',font:'system',size:47,color:white,x:50,y:90,outline:2}};
 }
 // optional text effects; absent fields mean the export defaults: every effect off (no stroke, shadow, box or glow)
 export const effectDefaults={outline:0,outline_color:'#000000',shadow:0,shadow_blur:0,shadow_color:'#000000',shadow_opacity:60,shadow_angle:45,box_on:false,box_color:'#000000',box_opacity:100,enter:'none',blend:'normal',
@@ -134,18 +162,19 @@ export function createStyleEditor(read,write,layout,writeItems){
  function paint(){
   if(!frame.clientWidth)return;
   for(const [key,node] of nodes){
-   node.hidden=!visibleRoles().includes(key);if(node.hidden)continue;
+   node.hidden=!visibleRoles().includes(key)||(live.has(key)&&!live.get(key).trim());if(node.hidden)continue;
    const v=values()[key];node.setAttribute('aria-label',`ปรับ${label(key)}`);
+   ensureFont(v.font,v.bold!==false,!!v.italic);
    node.firstElementChild.textContent=live.get(key) || v.text || '…';
    node.style.left=v.x+'%';node.style.top=v.y+'%';node.style.color=v.color;
-   node.firstElementChild.style.fontFamily=key===selected&&hoverFont?JSON.stringify(hoverFont)+','+fonts.system:fontCss(v.font);node.firstElementChild.style.fontSize=(v.size*frame.clientWidth/1080)+'px';
+   node.firstElementChild.style.fontFamily=key===selected&&hoverFont?JSON.stringify(hoverFont)+','+fonts.system:fontCss(v.font);node.firstElementChild.style.fontSize=(fittedCaptionSize(node.firstElementChild.textContent,v,frame.clientHeight/frame.clientWidth)*frame.clientWidth/1080)+'px';
    const e={...roleEffects(key),...v},k=frame.clientWidth/1080,span=node.firstElementChild;
    span.style.webkitTextStroke='';span.style.textShadow=!e.box_on&&e.outline?ring(e.outline*k,e.outline_color):'';
    const alpha=p=>Math.round(p*2.55).toString(16).padStart(2,'0'),a=(Number.isInteger(e.shadow_angle)?e.shadow_angle:45)*Math.PI/180,d=e.shadow*k*Math.SQRT2;
    span.style.filter=[!e.box_on&&e.glow_on?`drop-shadow(0 0 ${e.glow_range*k/2}px ${e.glow_color}${alpha(e.glow_strength)})`:'',
     !e.box_on&&e.shadow?`drop-shadow(${(d*Math.cos(a)).toFixed(2)}px ${(d*Math.sin(a)).toFixed(2)}px ${e.shadow_blur*k}px ${e.shadow_color}${alpha(e.shadow_opacity)})`:''].filter(Boolean).join(' ');
    span.style.fontWeight=e.bold===false?'400':'700';span.style.fontStyle=e.italic?'italic':'';span.style.textDecoration=e.underline?'underline':'';
-   span.style.textTransform={upper:'uppercase',lower:'lowercase',title:'capitalize'}[e.case] || '';span.style.letterSpacing=e.spacing?(e.spacing*k)+'px':'';
+   span.style.textTransform={upper:'uppercase',lower:'lowercase',title:'capitalize'}[e.case] || '';span.style.letterSpacing=e.spacing?(e.spacing*k*fittedCaptionSize(span.textContent,v,frame.clientHeight/frame.clientWidth)/v.size)+'px':'';
    node.style.transform={left:'translate(0,-50%)',right:'translate(-100%,-50%)'}[e.align] || '';
    node.style.mixBlendMode={add:'plus-lighter',screen:'screen',multiply:'multiply'}[e.blend] || '';
    span.style.background=e.box_on?e.box_color+alpha(Number.isInteger(e.box_opacity)?e.box_opacity:100):'';span.style.padding=e.box_on?`${boxPad(e,'y')*k}px ${boxPad(e,'x')*k}px`:'';
@@ -183,7 +212,7 @@ export function createStyleEditor(read,write,layout,writeItems){
   for(const row of document.querySelectorAll('[data-role-row]'))row.dataset.selected=String(row.dataset.roleRow===selected);
   $('text-color-hex').removeAttribute('aria-invalid');
   $('text-color-hex').value=current?.color ?? '';$('text-color-hex').disabled=!enabled || !current;
-  $('localFonts').disabled=!enabled || !current || fontLoading;checkFont(current?.font);
+  $('localFonts').disabled=!enabled || !current || fontLoading;checkFont(current?.font,current?.bold!==false,!!current?.italic);
   $('textRoleTitle').textContent=selected?label(selected):'เลือกข้อความบนจอ';
   showEffects();
 
@@ -199,7 +228,7 @@ export function createStyleEditor(read,write,layout,writeItems){
     control.setAttribute('aria-invalid','true');$('textFieldError').textContent=key==='font'?'ใช้ชื่อฟอนต์ 1–128 ตัวอักษร ไม่มีอัญประกาศหรือเครื่องหมายพิเศษ':'ใช้ขนาด 24–160 และข้อความไม่เกิน 80 ตัวอักษร';$('textFieldError').hidden=false;return;
    }
    for(const input of Object.values(controls))input.removeAttribute('aria-invalid');
-   $('textFieldError').hidden=true;commit(next);$('text-color-hex').removeAttribute('aria-invalid');$('text-color-hex').value=next[selected].color;checkFont(next[selected].font);paint();
+   $('textFieldError').hidden=true;commit(next);$('text-color-hex').removeAttribute('aria-invalid');$('text-color-hex').value=next[selected].color;checkFont(next[selected].font,next[selected].bold!==false,!!next[selected].italic);paint();
   });
  }
  const effectInputs={outline:$('fx-outline'),outline_color:$('fx-outline-color'),shadow:$('fx-shadow'),shadow_blur:$('fx-shadow-blur'),shadow_color:$('fx-shadow-color'),shadow_opacity:$('fx-shadow-opacity'),box_on:$('fx-box'),box_color:$('fx-box-color'),box_pad_x:$('fx-box-x'),box_pad_y:$('fx-box-y'),box_opacity:$('fx-box-opacity'),shadow_angle:$('fx-shadow-angle'),
@@ -222,7 +251,7 @@ export function createStyleEditor(read,write,layout,writeItems){
   const value=input.type==='checkbox'?input.checked:input.type==='number'?input.valueAsNumber:input.value;
   const next=structuredClone(values());next[selected][key]=value;
   const {id,...style}=next[selected];if(!validTextStyle(style)){input.setAttribute('aria-invalid','true');return;}
-  input.removeAttribute('aria-invalid');commit(next);showEffects();paint();if(key==='enter')replay(selected);
+  input.removeAttribute('aria-invalid');commit(next);showEffects();if(key==='bold'||key==='italic')checkFont(next[selected].font,next[selected].bold!==false,!!next[selected].italic);paint();if(key==='enter')replay(selected);
  });
  // entrance tiles: each plays its own effect on a small sample; picking one sets the hidden select
  // sliders drive their number box; segmented buttons set their hidden select; the stroke and shadow ticks
@@ -233,11 +262,19 @@ export function createStyleEditor(read,write,layout,writeItems){
  for(const tile of document.querySelectorAll('[data-enter-pick]'))tile.onclick=()=>{const pick=$('fx-enter');pick.value=tile.dataset.enterPick;pick.dispatchEvent(new Event('change'));};
  let fontLoading=false,fontRequest=0;
  const fontChecks=new Map();
- function checkFont(value){
-  const request=++fontRequest;
-  if(!value || !value.startsWith('family:')){$('fontStatus').textContent='';return;}
-  if(!fontChecks.has(value))fontChecks.set(value,new FontFace('EditorKrabCheck','local('+JSON.stringify(value.slice(7))+')').load().then(()=>true,()=>false));
-  fontChecks.get(value).then(found=>{if(request===fontRequest){$('fontStatus').textContent=found?'ใช้ฟอนต์ในเครื่อง':'ไม่พบฟอนต์นี้ · แสดงฟอนต์สำรอง';paint();}});
+ function ensureFont(value,bold=true,italic=false){
+  if(!value)return Promise.resolve(false);
+  const cacheKey=value+'|'+bold+'|'+italic;
+  if(!fontChecks.has(cacheKey)){
+   const family=value==='tahoma'?'Tahoma':value==='system'||value==='thai'?'Leelawadee UI':value.slice(7),query=new URLSearchParams({family,bold:String(bold),italic:String(italic)});
+   const face=new FontFace(family,`url("/api/v1/fonts/preview?${query}")`,{weight:bold?'700':'400',style:italic?'italic':'normal'});
+   fontChecks.set(cacheKey,face.load().then(loaded=>{document.fonts.add(loaded);document.dispatchEvent(new Event('caption-font-ready'));return true;},()=>false));
+  }
+  return fontChecks.get(cacheKey);
+ }
+ function checkFont(value,bold=true,italic=false){
+  const request=++fontRequest;if(!value){$('fontStatus').textContent='';return;}
+  ensureFont(value,bold,italic).then(found=>{if(request===fontRequest){$('fontStatus').textContent=found?'':'ไม่พบฟอนต์นี้ · แสดงฟอนต์สำรอง';paint();}});
  }
  // the read fonts as a list under the field, each shown in its own face and narrowed by what is typed
  let localNames=[];

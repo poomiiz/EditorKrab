@@ -58,6 +58,74 @@ fn document(plan: Value) -> Value {
 }
 
 #[test]
+fn english_cue_anchors_survive_camera_cuts_and_map_retained_source_ranges() {
+    use editorkrab::export::{Story,translation_cues,subtitle_lines};
+    let p=|start,end,words|Piece{source:0,start_ms:start,end_ms:end,text:"Alpha Beta Gamma".into(),words,timed:true,segment:"s0".into()};
+    let alpha=("Alpha".into(),1500,1900);let beta=("Beta".into(),1900,2200);let gamma=("Gamma".into(),3000,3200);
+    let story=Story{id:"one".into(),title:String::new(),sources:vec!["a.mp4".into()],pieces:vec![
+        p(1000,2000,vec![alpha.clone(),beta.clone()]),p(2000,2500,vec![beta.clone()]),p(3000,4000,vec![gamma.clone()])
+    ]};
+    let mut doc=json!({"files":[{"source_id":"source","path":"a.mp4"}],"text_roles":["english"],
+        "text_styles":{"speech":{"size":24,"font":"system","x":50}},"subtitles":{"s0":"Preserved legacy."}});
+    let cues=translation_cues(&story,&doc);assert_eq!(cues.len(),1);
+    assert_eq!(cues[0].text,"Alpha Beta Gamma");assert_eq!((cues[0].output_start_ms,cues[0].output_end_ms),(500,1880));
+    assert_eq!(cues[0].ranges.len(),2,"camera splits merge; removed source silence remains an explicit gap");
+    assert_eq!((cues[0].ranges[0].start_ms,cues[0].ranges[0].end_ms),(1500,2500));
+    assert_eq!((cues[0].ranges[1].start_ms,cues[0].ranges[1].end_ms),(3000,3380));
+    let mut same=story.clone();same.pieces=vec![p(1000,2500,vec![alpha,beta]),p(3000,4000,vec![gamma])];
+    assert_eq!(translation_cues(&same,&doc),cues,"camera geometry never changes translation anchors");
+    doc["english_cues"]=json!({"input_revision":"checked","translations":{cues[0].id.clone():"Keep working."}});
+    assert_eq!(subtitle_lines(&story,&doc),vec![(500,1880,"Keep working.".into())]);
+    let mut changed=story.clone();changed.pieces[0].words[0].0="Changed".into();
+    assert!(subtitle_lines(&changed,&doc).is_empty(),"an obsolete translation cannot attach to different Thai words");
+    assert_eq!(doc["subtitles"]["s0"],"Preserved legacy.");
+}
+
+#[test]
+fn legacy_english_remains_one_known_cue_without_proportional_word_pages() {
+    let story=editorkrab::export::Story{id:"one".into(),title:String::new(),sources:vec!["a.mp4".into()],
+        pieces:vec![Piece{source:0,start_ms:1000,end_ms:6000,text:"Thai".into(),words:vec![],timed:false,segment:"s0".into()}]};
+    let text="This existing long translation stays on its original known segment rather than inventing the timing of these individual English words.";
+    let doc=json!({"text_roles":["english"],"subtitles":{"s0":text},"text_styles":{"english":{"size":160,"x":50}}});
+    assert_eq!(editorkrab::export::subtitle_lines(&story,&doc),vec![(0,5000,text.into())]);
+}
+
+#[test]
+fn repeated_source_passages_have_distinct_translation_ids_and_output_clocks() {
+    let p=Piece{source:0,start_ms:1000,end_ms:2000,text:"Again".into(),words:vec![("Again".into(),1100,1400)],timed:true,segment:"s0".into()};
+    let story=editorkrab::export::Story{id:"one".into(),title:String::new(),sources:vec!["a.mp4".into()],pieces:vec![p.clone(),p]};
+    let cues=editorkrab::export::translation_cues(&story,&json!({}));
+    assert_eq!(cues.len(),2);assert_ne!(cues[0].id,cues[1].id);
+    assert_eq!((cues[0].output_start_ms,cues[1].output_start_ms),(100,1100));
+}
+
+#[test]
+fn replay_with_internal_dead_air_round_trips_every_english_cue() {
+    let a=Piece{source:0,start_ms:0,end_ms:1000,text:"A B".into(),words:vec![("A".into(),100,500)],timed:true,segment:"s0".into()};
+    let b=Piece{source:0,start_ms:2000,end_ms:3000,text:"A B".into(),words:vec![("B".into(),2100,2500)],timed:true,segment:"s0".into()};
+    let story=editorkrab::export::Story{id:"one".into(),title:String::new(),sources:vec!["a.mp4".into()],pieces:vec![a.clone(),b.clone(),a,b]};
+    let mut doc=json!({"text_roles":["english"]});let cues=editorkrab::export::translation_cues(&story,&doc);
+    assert_eq!(cues.len(),4);assert_eq!(cues.iter().map(|c|&c.id).collect::<std::collections::HashSet<_>>().len(),4);
+    assert_eq!(cues.iter().map(|c|c.occurrence).collect::<Vec<_>>(),vec![1,1,2,2]);
+    let translations:serde_json::Map<String,Value>=cues.iter().enumerate().map(|(i,c)|(c.id.clone(),json!(format!("Cue {i}")))).collect();
+    doc["english_cues"]=json!({"input_revision":"validated","translations":translations});
+    assert_eq!(editorkrab::export::subtitle_lines(&story,&doc),cues.iter().enumerate().map(|(i,c)|(c.output_start_ms,c.output_end_ms,format!("Cue {i}"))).collect::<Vec<_>>());
+}
+
+#[test]
+fn english_manifest_revision_tracks_final_anchors_not_the_translation_response() {
+    let jobs=vec![job("j","succeeded","a.mp4",json!([{"id":"s0","text":"Alpha Beta","start_ms":1000,"end_ms":4000,"words":[
+        {"text":"Alpha","start_ms":1100,"end_ms":1400},{"text":"Beta","start_ms":1900,"end_ms":2300}
+    ]}]))];
+    let mut doc=json!({"plan":json!({"stories":[{"id":"one","segment_ids":["s0"]}]}).to_string(),"files":[{"source_id":"s","path":"a.mp4"}]});
+    let first=editorkrab::export::translation_manifest(&doc,&jobs).unwrap();assert!(!first.cues.is_empty());
+    doc["english_cues"]=json!({"input_revision":first.input_revision,"translations":{first.cues[0].id.clone():"Translated"}});
+    assert_eq!(editorkrab::export::translation_manifest(&doc,&jobs).unwrap().input_revision,first.input_revision);
+    doc["word_times"]=json!({"s0":[[1200,1400],[1900,2300]]});
+    assert_ne!(editorkrab::export::translation_manifest(&doc,&jobs).unwrap().input_revision,first.input_revision);
+}
+
+#[test]
 fn stories_follow_the_plan_order_across_files_with_corrections() {
     let doc = document(json!({"stories": [
         {"id": "s1", "title": "One", "segment_ids": ["a2", "a0", "b0", "a1"]},
@@ -193,14 +261,15 @@ fn text_effects_become_ass_tags_and_the_box_style() {
     doc["text_styles"]["speech"]["outline_color"] = json!("#ff0000");
     doc["text_styles"]["speech"]["enter"] = json!("pop");
     let (ass, _) = subtitles(story, &doc);
-    assert!(ass.contains("\\bord8\\shad0\\3c&H0000FF&\\4c&H000000&\\fscx70\\fscy70\\t(0,180,\\fscx100\\fscy100)"), "{ass}");
+    assert!(ass.contains("\\bord8\\shad0\\3c&H0000FF&\\4c&H000000&\\fad(120,0)\\fscx85\\fscy85\\t(0,300,\\fscx100\\fscy100)"), "{ass}");
     doc["text_styles"]["speech"]["box_on"] = json!(true);
     doc["text_styles"]["speech"]["box_color"] = json!("#112233");
     doc["text_styles"]["speech"]["enter"] = json!("wipe");
     let (ass, _) = subtitles(story, &doc);
     assert!(ass.contains("Style: Box,"));
     assert!(ass.contains(",Box,,0,0,0,,"), "{ass}");
-    assert!(ass.contains("\\bord8\\shad0\\3c&H332211&\\clip(0,0,0,1920)\\t(0,400,\\clip(0,0,1080,1920))"), "{ass}");
+    assert!(ass.contains("\\bord8\\shad0\\3c&H332211&\\clip(") && ass.contains("\\t(0,300,\\clip("), "{ass}");
+    assert!(!ass.contains("\\clip(0,0,1080,1920)"), "reveal follows measured text bounds");
 }
 
 #[test]
@@ -233,35 +302,38 @@ fn speech_appears_word_by_word_and_picked_words_show_as_emphasis() {
     );
     let story = editorkrab::export::Story { id: "s".into(), title: String::new(), sources: vec!["a.mp4".into()], pieces: vec![piece] };
     let doc = json!({"text_roles": ["speech", "emphasis"], "emphasis": {"a1": [2000]}});
-    assert_eq!(editorkrab::export::emphasis_lines(&story, &doc), vec![(1000, 3000, "สอง".to_owned())]);
+    assert_eq!(editorkrab::export::emphasis_lines(&story, &doc), vec![(1000, 1580, "สอง".to_owned())]);
     // a dictionary word split out of a timed phrase is stored with its own text and start
     let split = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "สาม", "start_ms": 3100, "end_ms": 3400}, 2000]}});
     // picks apart in time show one at a time, each as it is said (clocked from the words), until the next one starts
     assert_eq!(
         editorkrab::export::emphasis_lines(&story, &split),
-        vec![(1000, 2000, "สอง".to_owned()), (2000, 3000, "สาม".to_owned())]
+        vec![(1000, 1580, "สอง".to_owned()), (2000, 2780, "สาม".to_owned())]
     );
     // neighbouring dictionary words read as one name: no space between Thai words, a space between Latin ones
     let name = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "มอน", "start_ms": 3000, "end_ms": 3300}, {"text": "สเตอร์", "start_ms": 3300, "end_ms": 3600}]}});
-    assert_eq!(editorkrab::export::emphasis_lines(&story, &name), vec![(2000, 3000, "มอนสเตอร์".to_owned())]);
+    let mut names=story.clone();names.pieces[0].words=vec![("มอน".into(),3000,3300),("สเตอร์".into(),3300,3600)];
+    assert_eq!(editorkrab::export::emphasis_lines(&names, &name), vec![(2000, 2780, "มอนสเตอร์".to_owned())]);
     let latin = json!({"text_roles": ["emphasis"], "emphasis": {"a1": [{"text": "Gentle", "start_ms": 3000, "end_ms": 3300}, {"text": "Monster", "start_ms": 3300, "end_ms": 3600}]}});
-    assert_eq!(editorkrab::export::emphasis_lines(&story, &latin), vec![(2000, 3000, "Gentle Monster".to_owned())]);
+    names.pieces[0].words=vec![("Gentle".into(),3000,3300),("Monster".into(),3300,3600)];
+    assert_eq!(editorkrab::export::emphasis_lines(&names, &latin), vec![(2000, 2780, "Gentle Monster".to_owned())]);
     // by default the speech line shows whole (P'Ohm 23 Oct), still without the picked word
     let (ass, _) = subtitles(&story, &doc);
-    assert!(ass.contains("}หนึ่งสาม\n") && !ass.contains("}หนึ่ง\n") && !ass.contains("}หนึ่งสอง"), "{ass}");
+    assert!(ass.contains("}หนึ่ง\n") && ass.contains("}สาม\n") && !ass.contains("}หนึ่งสาม"), "separate speech beats: {ass}");
     // word by word only when that entrance is picked
     let doc = json!({"text_roles": ["speech", "emphasis"], "emphasis": {"a1": [2000]},
         "text_styles": {"speech": {"font":"system","size":64,"color":"#ffffff","x":50,"y":69,"enter":"words"}}});
     let (ass, skipped) = subtitles(&story, &doc);
     // the picked word is on screen as emphasis, so the speech line leaves it out
-    assert!(ass.contains("0:00:00.20,0:00:02.00,Text") && ass.contains("}หนึ่ง\n") && ass.contains("}หนึ่งสาม\n"), "{ass}");
+    // and "หนึ่ง" stays on until the orange "สอง" after it ends (Nina stack)
+    assert!(ass.contains("0:00:00.20,0:00:01.58,Text") && ass.contains("}หนึ่ง\n") && ass.contains("}สาม\n"), "{ass}");
     assert!(!ass.contains("}หนึ่งสอง"), "{ass}");
-    assert!(ass.contains("0:00:01.00,0:00:03.00,Text") && ass.contains("}สอง\n"), "{ass}");
+    assert!(ass.contains("0:00:01.00,0:00:01.58,Text") && ass.contains("}สอง\n"), "{ass}");
     assert!(skipped.is_empty(), "emphasis is drawn now: {skipped:?}");
 }
 
 #[test]
-fn a_one_word_line_before_a_pause_reads_with_the_line_it_runs_into() {
+fn separate_transcript_beats_never_show_the_next_cues_words_early() {
     let piece = |segment: &str, start_ms, end_ms, text: &str| Piece {
         source: 0, start_ms, end_ms, text: text.into(), words: vec![], timed: false, segment: segment.into(),
     };
@@ -281,9 +353,10 @@ fn a_one_word_line_before_a_pause_reads_with_the_line_it_runs_into() {
     };
     let (lines, _) = editorkrab::export::speech_lines(&story, &json!({"text_roles": ["speech"]}));
     let texts: Vec<&str> = lines.iter().map(|l| l.2.as_str()).collect();
-    assert_eq!(texts, ["ว่าเรื่องนี้เป็นปัญหา", "การตอบคำถามไม่ได้", "คือฉันน่ะคิด", "ใช่", "แล้วก็ต่อ"], "{lines:?}");
-    // the joined line runs from "การ" to the end of the next line
-    assert_eq!((lines[1].0, lines[1].1), (1420, 7780));
+    assert_eq!(texts, ["ว่าเรื่องนี้เป็นปัญหา", "การ", "ตอบคำถามไม่ได้", "คือ", "ฉันน่ะคิด", "ใช่", "แล้วก็ต่อ"], "{lines:?}");
+    // No word clocks here: retain each supplied cue, never guess when the next word is spoken.
+    assert_eq!((lines[1].0, lines[1].1), (1420, 5620));
+    assert_eq!((lines[2].0, lines[2].1), (5620, 7780));
 }
 
 #[test]
@@ -355,7 +428,7 @@ fn dead_air_inside_a_line_is_cut_and_the_line_still_reads_as_one() {
         ],
     };
     let (lines, _) = editorkrab::export::speech_lines(&story, &json!({"text_roles": ["speech"]}));
-    assert_eq!(lines, vec![(0, 3200, "ตอบคำถามไม่ได้".to_owned())]);
+    assert_eq!(lines, vec![(0, 2380, "ตอบคำถามไม่ได้".to_owned())]);
 }
 
 #[test]
@@ -442,12 +515,13 @@ fn emphasised_words_leave_the_speech_line() {
         "emphasis": {"a1": [{"text": "สาม", "start_ms": 2800, "end_ms": 3600}]}});
     let (ass, _) = subtitles(&story, &doc);
     let speech: Vec<&str> = ass.lines().filter(|l| l.contains(r"\pos(540,1325)")).collect();
-    assert!(speech.iter().any(|l| l.ends_with("}หนึ่งสอง")), "{ass}");
+    assert!(speech.iter().any(|l| l.ends_with("}หนึ่ง")) && speech.iter().any(|l| l.ends_with("}สอง")), "{ass}");
+    assert!(!speech.iter().any(|l| l.contains("สาม")), "pick must leave speech");
     assert!(ass.lines().any(|l| l.ends_with("}สาม")), "the pick still shows as emphasis: {ass}");
     // with emphasis off the speech keeps every word
     doc["text_roles"] = json!(["speech"]);
     let (ass, _) = subtitles(&story, &doc);
-    assert!(ass.lines().any(|l| l.ends_with("}หนึ่งสองสาม")), "{ass}");
+    assert!(ass.lines().any(|l| l.ends_with("}หนึ่ง")) && ass.lines().any(|l| l.ends_with("}สองสาม")), "{ass}");
 }
 
 #[test]
@@ -516,4 +590,72 @@ fn retimed_words_and_the_subtitle_shift_move_speech_and_emphasis() {
     doc["word_times"] = json!({"a1": [[0, 1]]});
     doc["subtitle_offset_ms"] = json!(0);
     assert_eq!(plan(&doc, &jobs()).unwrap()[0].pieces[0].words, base);
+}
+
+#[test]
+fn repeated_asr_token_at_the_same_clock_does_not_create_a_one_ms_overlay() {
+    let story=editorkrab::export::Story {id:"s".into(),title:"".into(),sources:vec!["a.mp4".into()],pieces:vec![Piece {
+        source:0,start_ms:0,end_ms:3000,text:"คือ".into(),segment:"a".into(),timed:true,
+        words:vec![("คือ".into(),0,0),("คือ".into(),0,2680)],
+    }]};
+    let cues=editorkrab::export::speech_cues(&story,&json!({"text_roles":["speech"]}));
+    assert_eq!(cues,vec![(0,2860,"คือ".to_owned())]);
+}
+
+#[test]
+fn emphasis_phrases_cross_small_gaps_and_camera_splits_but_end_on_the_spoken_beat() {
+    use editorkrab::export::{emphasis_lines,Story};
+    let piece=|a,b,words|Piece {source:0,start_ms:a,end_ms:b,text:String::new(),words,timed:true,segment:"a".into()};
+    let mut story=Story{id:"s".into(),title:String::new(),sources:vec!["a.mp4".into()],pieces:vec![
+        piece(0,1200,vec![("Brand".into(),1000,1100)]),
+        piece(1200,5000,vec![("Manager".into(),1230,1500),("today".into(),3000,3300)])]};
+    let mut doc=json!({"text_roles":["emphasis"],"emphasis":{"a":[
+        {"text":"Brand","start_ms":1000,"end_ms":1100},
+        {"text":"Manager","start_ms":1230,"end_ms":1500}]}});
+    assert_eq!(emphasis_lines(&story,&doc),vec![(1000,1680,"Brand Manager".into())]);
+    doc["emphasis"]["a"]=json!([{ "text":"Brand Manager","start_ms":1000,"end_ms":1500,"word_ids":["w0","w1"]},
+        {"text":"today","start_ms":3000,"end_ms":3300,"word_ids":["w2"]}]);
+    assert_eq!(emphasis_lines(&story,&doc),vec![(1000,1680,"Brand Manager".into()),(3000,3480,"today".into())]);
+    // An actual removed source gap shortens the phrase clock; the phrase remains a single event.
+    story.pieces[1].start_ms=1230;
+    assert_eq!(emphasis_lines(&story,&doc)[0],(1000,1650,"Brand Manager".into()));
+}
+
+#[test]
+fn retimed_words_cannot_export_using_a_previous_quiet_analysis() {
+    let jobs=vec![job("j1","succeeded","C:/clips/a.mp4",json!([{
+        "id":"a","text":"พูด","start_ms":0,"end_ms":2000,
+        "words":[{"text":"พูด","start_ms":100,"end_ms":600}]}]))];
+    let mut doc=json!({"plan":json!({"stories":[{"segment_ids":["a"]}]}).to_string(),
+        "files":[{"path":"C:/clips/a.mp4","source_id":"src"}],"dead_min_ms":100,
+        "voice":{"src":{"turns":[{"speaker":0,"start_ms":0,"end_ms":2000}]}},
+        "quiet_key":{"src":json!([300,4,[0],[[100,600]]]).to_string()}});
+    assert!(plan(&doc,&jobs).is_ok(),"effective minimum matches the UI's300ms");
+    doc["word_times"]=json!({"a":[[150,650]]});
+    assert_eq!(plan(&doc,&jobs).unwrap_err(),"pause_analysis_stale");
+    doc["quiet_key"]["src"]=json!(json!([300,4,[0],[[150,650]]]).to_string());
+    assert!(plan(&doc,&jobs).is_ok());
+    doc["speakers_keep"]=json!({"src":[1]});
+    assert_eq!(plan(&doc,&jobs).unwrap_err(),"pause_analysis_stale");
+}
+
+#[test]
+fn camera_boundary_duplicates_one_clocked_word_once_but_keeps_a_real_repeat() {
+    let piece=|a,b,words|Piece{source:0,start_ms:a,end_ms:b,text:"คำ".into(),words,timed:true,segment:"s".into()};
+    let merged=editorkrab::export::join_short_lines(&[
+        piece(0,4000,vec![("คำ".into(),3900,4300)]),
+        piece(4000,6000,vec![("คำ".into(),3900,4300),("คำ".into(),5000,5200)])]);
+    assert_eq!(merged.len(),1);assert_eq!(merged[0].words,vec![("คำ".into(),3900,4300),("คำ".into(),5000,5200)]);
+}
+
+#[test]
+fn the_white_setup_line_stays_on_until_the_orange_punch_line_ends() {
+    // Nina 16: "เพราะว่าเขาก็ไม่รู้สึกว่า" 12.2-14.6 s, orange "ถูกยัดเยียดไง" 14.63-15.33 s, both end together
+    let mut cues = vec![(12_200, 14_600, "เพราะว่าเขาก็ไม่รู้สึกว่า".to_owned()), (15_330, 16_700, "มันเหมือนเรา".to_owned())];
+    editorkrab::export::hold_for_emphasis(&mut cues, &[(14_630, 15_330, "ถูกยัดเยียดไง".to_owned())]);
+    assert_eq!(cues[0].1, 15_330);
+    // never into the next line, and an emphasis far from any line holds nothing
+    let mut cues = vec![(0, 1_000, "ก".to_owned()), (1_200, 2_000, "ข".to_owned())];
+    editorkrab::export::hold_for_emphasis(&mut cues, &[(500, 1_800, "ค".to_owned()), (9_000, 9_500, "ง".to_owned())]);
+    assert_eq!((cues[0].1, cues[1].1), (1_200, 2_000));
 }

@@ -2,7 +2,7 @@
 //! The footage is cut exactly like the MP4 export and the subtitles and headline items use the step
 //! 4/5 font, size, colour and position. Projects are written into the folder CapCut lists projects
 //! from, under a new name, so nothing that already exists there is replaced.
-use crate::export::{self, HEIGHT, Story, WIDTH};
+use crate::export::{self, Story};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs::File;
@@ -30,6 +30,7 @@ pub struct Draft {
     pub meta: Value,
     /// Step 4/5 fonts this machine does not have; CapCut shows the fallback font instead.
     pub missing_fonts: Vec<String>,
+    pub missing_roles: Vec<String>,
 }
 
 fn id() -> String {
@@ -91,7 +92,10 @@ fn text(
     duration_ms: u64,
     style: &Value,
     font: &Path,
+    frame: (u32, u32),
 ) -> Value {
+    let fitted = crate::text_layout::fitted_in(style, words, frame.1 as f64 * 1080.0 / frame.0 as f64);
+    let style = &fitted;
     let family = export::font(style["font"].as_str().unwrap_or("system"));
     let size = (style["size"].as_f64().unwrap_or(64.0) / PX_PER_UNIT * 100.0).round() / 100.0;
     let colour = style["color"].as_str().unwrap_or("#ffffff");
@@ -103,6 +107,17 @@ fn text(
     look["size"] = json!(size);
     look["fill"]["content"]["solid"]["color"] = rgb(colour);
     look["font"] = json!({"path": posix(font), "id": ""});
+    let outline=style["outline"].as_f64().unwrap_or(0.0)/100.0;
+    let border=style["outline_color"].as_str().unwrap_or("#000000");
+    look["strokes"]=if outline>0.0 {json!([{"content":{"render_type":"solid","solid":{"color":rgb(border)}},"width":outline,"mode":0}])} else {json!([])};
+    material["border_width"]=json!(outline);
+    material["border_color"]=json!(border);
+    material["has_shadow"]=json!(style["shadow"].as_f64().unwrap_or(0.0)>0.0);
+    material["shadow_color"]=json!(style["shadow_color"].as_str().unwrap_or("#000000"));
+    material["shadow_alpha"]=json!(style["shadow_opacity"].as_f64().unwrap_or(60.0)/100.0);
+    material["shadow_distance"]=json!(style["shadow"].as_f64().unwrap_or(0.0));
+    material["italic_degree"]=json!(if style["italic"]==true {10} else {0});
+    material["underline"]=json!(style["underline"]==true);
     body["text"] = json!(words);
     body["styles"] = json!([look]);
     material["content"] = json!(body.to_string());
@@ -129,7 +144,7 @@ fn track(kind: &str, segments: Vec<Value>) -> Value {
     json!({"type": kind, "attribute": 0, "flag": 0, "is_default_name": true, "id": id(), "segments": segments})
 }
 /// Texts that overlap in time cannot share a CapCut track, so each one goes on the first free lane.
-fn text_tracks(mut texts: Vec<Value>, render_index: u64) -> Vec<Value> {
+fn text_tracks(mut texts: Vec<Value>, render_index: u64, name: &str) -> Vec<Value> {
     let start = |s: &Value| s["target_timerange"]["start"].as_u64().unwrap_or(0);
     let end = |s: &Value| start(s) + s["target_timerange"]["duration"].as_u64().unwrap_or(0);
     texts.sort_by_key(start);
@@ -144,7 +159,23 @@ fn text_tracks(mut texts: Vec<Value>, render_index: u64) -> Vec<Value> {
             None => lanes.push(vec![seg]),
         }
     }
-    lanes.into_iter().map(|lane| track("text", lane)).collect()
+    lanes.into_iter().map(|lane| {let mut t=track("text",lane);t["name"]=json!(name);t["is_default_name"]=json!(false);t}).collect()
+}
+
+/// CapCut scale 1 contains the entire source in the canvas. Its translation is in half-canvas
+/// units, positive Y upwards (also used by native text positioning above). Project the exact
+/// source window used by the shared FFmpeg crop into those native coordinates.
+fn video_transform(document: &Value, source: &Path, media: &Media, ms: u64, frame: (u32,u32)) -> (f64,f64,f64) {
+    let (iw,ih)=(media.width as f64,media.height as f64);
+    let (width,height)=(frame.0 as f64,frame.1 as f64);
+    let (cx,cy,zoom,centred)=export::crop_at(document,source,ms);
+    let shape=width/height;
+    let (ow,oh)=(iw.min(ih*shape)/zoom,ih.min(iw/shape)/zoom);
+    let (left,top)=if centred {((iw*cx-ow/2.0).clamp(0.0,iw-ow),(ih*cy-oh/2.0).clamp(0.0,ih-oh))}
+        else {((iw-ow)*cx,(ih-oh)*cy)};
+    let fit=(width/iw).min(height/ih);
+    let scale=(width/ow)/fit;
+    (scale,(iw-ow-2.0*left)/ow,(2.0*top+oh-ih)/oh)
 }
 
 /// The CapCut project for one story. `media` describes each of `story.sources`; `fonts` finds the
@@ -158,6 +189,7 @@ pub fn build(
     folder: &Path,
     now_us: u64,
 ) -> Result<Draft, String> {
+    let frame=export::frame(document);
     let template: Value = serde_json::from_str(TEMPLATE).expect("capcut_template.json is JSON");
     let mut content = template["draft"].clone();
     let mut materials = content["materials"].clone();
@@ -178,39 +210,46 @@ pub fn build(
     for piece in &story.pieces {
         let source = &story.sources[piece.source];
         let info = media.get(piece.source).ok_or("capcut_media_missing")?;
-        let length = piece.end_ms - piece.start_ms;
-        let name = source
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let mut material = template["video"]["mat"].clone();
-        material["path"] = json!(posix(source));
-        material["material_name"] = json!(name);
-        material["name"] = json!(name);
-        material["type"] = json!("video");
-        material["duration"] = json!(us(info.duration_ms));
-        material["width"] = json!(info.width);
-        material["height"] = json!(info.height);
-        material["has_audio"] = json!(info.has_audio);
-        material["local_material_id"] = json!(id());
-        material["unique_id"] = json!(uuid::Uuid::new_v4().simple().to_string());
-        let mut seg = segment(&mut materials, &template["video"], "videos", material);
-        seg["source_timerange"] = json!({"start": us(piece.start_ms), "duration": us(length)});
-        seg["target_timerange"] = json!({"start": us(at), "duration": us(length)});
-        seg["volume"] = json!(1.0);
-        seg["last_nonzero_volume"] = json!(1.0);
-        seg["render_index"] = json!(0);
-        seg["track_render_index"] = json!(0);
-        // scale 1 fits the whole picture inside the 9:16 frame, like the export's black bars
-        seg["clip"]["scale"] = json!({"x": 1.0, "y": 1.0});
-        seg["clip"]["transform"] = json!({"x": 0.0, "y": 0.0});
-        footage.push(seg);
-        at += length;
+        if info.width==0 || info.height==0 {return Err("capcut_media_dimensions_invalid".to_owned());}
+        let spans=if document["follow_speaker"]==true {
+            export::source_id(document,source).map(|id|export::speaker_cuts(document,id,piece.start_ms,piece.end_ms))
+                .unwrap_or_else(||vec![(piece.start_ms,piece.end_ms)])
+        } else {vec![(piece.start_ms,piece.end_ms)]};
+        for (start,end) in spans {
+            let length = end-start;
+            let name = source
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let mut material = template["video"]["mat"].clone();
+            material["path"] = json!(posix(source));
+            material["material_name"] = json!(name);
+            material["name"] = json!(name);
+            material["type"] = json!("video");
+            material["duration"] = json!(us(info.duration_ms));
+            material["width"] = json!(info.width);
+            material["height"] = json!(info.height);
+            material["has_audio"] = json!(info.has_audio);
+            material["local_material_id"] = json!(id());
+            material["unique_id"] = json!(uuid::Uuid::new_v4().simple().to_string());
+            let mut seg = segment(&mut materials, &template["video"], "videos", material);
+            seg["source_timerange"] = json!({"start": us(start), "duration": us(length)});
+            seg["target_timerange"] = json!({"start": us(at), "duration": us(length)});
+            seg["volume"] = json!(1.0);
+            seg["last_nonzero_volume"] = json!(1.0);
+            seg["render_index"] = json!(0);
+            seg["track_render_index"] = json!(0);
+            let (scale,x,y)=video_transform(document,source,info,start,frame);
+            seg["clip"]["scale"] = json!({"x": scale, "y": scale});
+            seg["clip"]["transform"] = json!({"x": x, "y": y});
+            footage.push(seg);
+            at += length;
+        }
     }
     let total = at;
 
     let block = &template["text"];
-    let (lines, _) = export::speech_lines(story, document);
+    let lines = export::speech_cues(story, document);
     let speech_style = export::speech_style(document);
     let speech_font = if lines.is_empty() {
         PathBuf::new()
@@ -228,19 +267,36 @@ pub fn build(
                 end - start,
                 &speech_style,
                 &speech_font,
+                frame,
             )
         })
         .collect();
+    let mut extra = Vec::new();
+    let mut missing_roles = Vec::new();
+    for (role,name,index,cues) in [
+        ("emphasis","คำเน้น",14002,export::emphasis_lines(story,document)),
+        ("english","อังกฤษ",14003,export::subtitle_lines(story,document)),
+    ] {
+        if cues.is_empty() {
+            if document["text_roles"].as_array().is_some_and(|roles|roles.iter().any(|r|r==role)) {missing_roles.push(role.to_owned());}
+            continue;
+        }
+        let style=export::text_style(document,role);
+        let font=font_file(&style);
+        let segments=cues.iter().map(|(a,b,words)|text(&mut materials,block,words,*a,b-a,&style,&font,frame)).collect();
+        extra.extend(text_tracks(segments,index,name));
+    }
     let mut titles = Vec::new();
     for item in export::headlines(document) {
         let font = font_file(&item);
         let words = item["text"].as_str().unwrap_or("").trim();
-        titles.push(text(&mut materials, block, words, 0, total, &item, &font));
+        titles.push(text(&mut materials, block, words, 0, total, &item, &font,frame));
     }
 
     let mut tracks = vec![track("video", footage)];
-    tracks.extend(text_tracks(speech, 14001));
-    tracks.extend(text_tracks(titles, 14002));
+    tracks.extend(text_tracks(speech, 14001,"คำพูด"));
+    tracks.extend(extra);
+    tracks.extend(text_tracks(titles, 14004,"หัวคลิป"));
     let name = folder
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -250,7 +306,7 @@ pub fn build(
     content["name"] = json!(name);
     content["duration"] = json!(us(total));
     content["canvas_config"] =
-        json!({"ratio": "original", "width": WIDTH, "height": HEIGHT, "background": null});
+        json!({"ratio": "original", "width": frame.0, "height": frame.1, "background": null});
     content["tracks"] = Value::Array(tracks);
     content["materials"] = materials;
 
@@ -266,6 +322,7 @@ pub fn build(
         content,
         meta,
         missing_fonts,
+        missing_roles,
     })
 }
 

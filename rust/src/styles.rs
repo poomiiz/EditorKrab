@@ -125,7 +125,19 @@ fn valid_text(v: &Text) -> bool {
 }
 /// How a text layer mixes with the video under it.
 pub const BLENDS: [&str; 4] = ["normal", "add", "screen", "multiply"];
+fn valid_english_cues(value: &Value) -> bool {
+    let Some(map) = value.as_object() else { return false; };
+    if map.keys().any(|k| k != "input_revision" && k != "translations") { return false; }
+    let hex16 = |s: &str| s.len() == 16 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    if !value["input_revision"].as_str().is_some_and(hex16) { return false; }
+    let Some(translations) = value["translations"].as_object() else { return false; };
+    translations.len() <= 20000 && translations.iter().all(|(id, text)| {
+        id.strip_prefix("e_").is_some_and(hex16) && text.as_str().is_some_and(|s|
+            !s.trim().is_empty() && s.encode_utf16().count() <= 60 && !s.chars().any(char::is_control))
+    })
+}
 pub fn valid(document: &Value) -> bool {
+    if document.get("english_cues").is_some_and(|v| !valid_english_cues(v)) { return false; }
     if !crate::transcript_edits::valid(document) {
         return false;
     }
@@ -227,6 +239,18 @@ mod tests {
     use crate::drafts::{Error, Store};
     use serde_json::json;
     use std::path::Path;
+    #[test]
+    fn english_cues_have_bounded_single_line_text_and_anchored_ids() {
+        let good = json!({"input_revision":"1234567890abcdef","translations":{"e_1234567890abcdef":"A short subtitle."}});
+        assert!(valid_english_cues(&good));
+        for text in ["".to_owned(), "line\nbreak".to_owned(), "x".repeat(61)] {
+            let mut bad=good.clone();bad["translations"]["e_1234567890abcdef"]=json!(text);
+            assert!(!valid_english_cues(&bad));
+        }
+        assert!(!valid_english_cues(&json!({"input_revision":"old","translations":{}})));
+        assert!(!valid_english_cues(&json!({"input_revision":"1234567890abcdef","translations":{"wrong":"text"}})));
+        let mut bad=good.clone();bad["extra"]=json!(true);assert!(!valid_english_cues(&bad));
+    }
     #[test]
     fn custom_font_family_keeps_legacy_values_and_rejects_css() {
         for font in [

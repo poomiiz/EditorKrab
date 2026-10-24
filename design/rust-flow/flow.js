@@ -2,7 +2,7 @@ import {DraftSession} from './autosave.js';
 import {watchJobs} from './jobs.js';
 import {uploadFile} from './uploads.js';
 import {createTranscription,validTranscriptEdits} from './transcription.js';
-import {createTextQc} from './text-qc.js';
+import {createTextQc,alignWordClocks,wordClockIssues,validEnglishCues} from './text-qc.js';
 import {createExport} from './export.js';
 import {createStories,checkPlan} from './stories.js';
 import {createStyleEditor,validTextStyles,validHeadlineItems,defaults} from './text-style.js';
@@ -25,6 +25,7 @@ let unsaved = false;
 let session, pendingLocal = 0, editingAllowed = false, jobWatcher;
 let activeUpload;
 const textEditor=createStyleEditor(()=>draft.text_styles,value=>{draft.text_styles=value;save();},()=>({stage:activeStep(draft),roles:draft.text_roles || [],items:headlineItems()}),items=>{draft.headline_items=items;save();renderHeadline();renderSteps();});
+document.querySelector('#textStyleWorkspace .text-inspector').prepend($('timingStatus'),$('timingDetails'));
 function headlineItems(){return draft.headline_items ?? (draft.text_styles?.headline ? [{id:'headline-main',...draft.text_styles.headline}] : []);}
 function headlinePreset(){return defaults().headline;}
 function activeStep(d){return d.flow_version===2?d.step:d.step===5?6:d.step;}
@@ -54,7 +55,7 @@ window.addEventListener('beforeunload', event => { if (unsaved || activeUpload) 
 function valid(d) {
   // one built-in look; drafts saved under its earlier id move to the current one
   if (typeof d?.style === 'string' && /^[a-z]+16$/.test(d.style)) d.style = 'bold16';
-  if (!Array.isArray(d?.files) || !validTranscriptEdits(d.transcript_edits) || !validTextStyles(d.text_styles) || !validHeadlineItems(d.headline_items) || (d.flow_version!==undefined && d.flow_version!==2) ||
+  if (!Array.isArray(d?.files) || !validTranscriptEdits(d.transcript_edits) || !validTextStyles(d.text_styles) || !validHeadlineItems(d.headline_items) || !validEnglishCues(d.english_cues) || (d.flow_version!==undefined && d.flow_version!==2) ||
     (d.text_roles!==undefined && (!Array.isArray(d.text_roles) || d.text_roles.some(r=>!['speech','emphasis','english'].includes(r)) || new Set(d.text_roles).size!==d.text_roles.length)) ||
     (d.headline_template!==undefined && !['plain','plate','emphasis'].includes(d.headline_template)) ||
     (d.headline_reply!==undefined && (typeof d.headline_reply!=='string' || d.headline_reply.length>32000))) return false;
@@ -138,9 +139,11 @@ const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('t
   const id=finding.id.slice('headline:'.length);draft.headline_items=headlineItems().map(h=>h.id===id?{...h,text}:h);save();textEditor.render();renderHeadline();
  }});
 const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,
+ captionState:()=>({revision:session?.record?.revision||0,saved:!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved}),
  editLine:(line,text)=>{if(!editingAllowed)throw Error('not_editable');speech.edit(line.id,text);textQc.run(true);},listen:line=>speech.listen(line.id),caption:text=>textEditor.live('speech',text),emphasis:text=>textEditor.live('emphasis',text),subtitle:text=>textEditor.live('english',text),
  write:change=>{if(!editingAllowed)return;change(draft);save();render();},
  go:step=>document.querySelector(`[data-step="${step}"]`).click()});
+document.addEventListener('caption-font-ready',()=>stories.renderEditor());
 const shortClock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
 // Step 2's timeline: one box per transcript line, in time order; a box plays its own stretch of the video.
 function renderTimeline(){
@@ -167,13 +170,12 @@ function fitPreview(){
   for(const ws of document.querySelectorAll('#captionHost .text-workspace')){
     // the preview area is always a 16:9 box (P'Ohm 21 Oct): a 9:16 clip sits in it, the panel keeps its width
     const stage=ws.querySelector('.text-stage'),[w,h]=[16,9];
-    if(!stage || !ws.clientHeight){ws.style.gridTemplateColumns='';continue;}
+    if(!stage || !ws.clientHeight || innerWidth<=760){ws.style.gridTemplateColumns='';continue;}
     const want=Math.round((ws.clientHeight-16)*w/h+16);
     ws.style.gridTemplateColumns=`minmax(0,${want}px) minmax(360px,1fr)`;
   }
 }
 new ResizeObserver(fitPreview).observe(document.getElementById('captionHost'));
-for(const d of document.querySelectorAll('.text-inspector details')){d.open=true;d.querySelector('summary')?.addEventListener('click',e=>e.preventDefault());}
 function applyAspect(){showOffset();const aspect=ratios[draft.output?.aspect]?draft.output.aspect:'9:16';$('frameAspect').value=aspect;$('editAspect').value=aspect;document.documentElement.style.setProperty('--frame-ratio',ratios[aspect]);setTimeout(fitPreview);}
 for(const id of ['frameAspect','editAspect'])$(id).onchange=()=>{if(!editingAllowed){applyAspect();return;}draft.output={...(draft.output || {}),aspect:$(id).value};save();applyAspect();requestAnimationFrame(()=>textEditor.render());};
 function render() {
@@ -193,7 +195,7 @@ function render() {
 for(const button of document.querySelectorAll('[data-go]'))button.onclick=()=>{document.querySelector(`[data-step="${button.dataset.go}"]`).click();$('workspace').focus();$('workspace').scrollIntoView({block:'start'});};
 const planCheck=()=>checkPlan(draft.plan,speech.texts());
 function planReady(){return !!planCheck().plan;}
-function stepsDone(){return {1:speech.complete(),2:planReady(),3:stories.allReviewed(),4:!!draft.text_roles?.length,5:headlineItems().length>0};}
+function stepsDone(){return {1:speech.complete(),2:planReady(),3:stories.allReviewed(),4:!!draft.text_roles?.length&&!wordClockIssues(speech.texts(),Number(draft.subtitle_offset_ms)||0).length,5:headlineItems().length>0};}
 function validate() {
   $('planStatus').hidden=!draft.plan.trim();
   const check=planCheck();
@@ -286,25 +288,13 @@ for(const button of document.querySelectorAll('[data-role-pick]'))button.onclick
 };
 $('planOpen').onclick=()=>{$('planDialog').showModal();$('plan').focus();};
 // whole-project subtitle shift, 0.1 s a step (+ later, - earlier); stored in the draft, used by preview and export
-function showOffset(){const ms=Number(draft.subtitle_offset_ms) || 0;$('subOffsetValue').textContent=(ms>0?'+':'')+(ms/1000).toFixed(1)+' วิ';$('subOffsetLess').disabled=$('subOffsetMore').disabled=$('retime').disabled=!editingAllowed;}
+function showOffset(){const ms=Number(draft.subtitle_offset_ms) || 0;$('subOffsetValue').textContent=(ms>0?'+':'')+(ms/1000).toFixed(1)+' วิ';$('subOffsetLess').disabled=$('subOffsetMore').disabled=$('retime').disabled=!editingAllowed;
+ const issues=wordClockIssues(speech.texts(),Number(draft.subtitle_offset_ms)||0),status=$('timingStatus');status.hidden=!issues.length;$('timingDetails').hidden=!issues.length;status.textContent=issues.length?`ตรวจเวลาคำ ${issues.length} จุด`:'';status.title=issues.map(w=>`${(w.start_ms/1000).toFixed(1)} วิ · ${w.text} · ${w.problem}`).join('\n');
+ const list=$('timingIssues');list.replaceChildren(...issues.map(w=>{const li=document.createElement('li'),b=document.createElement('button');b.type='button';b.textContent=`${shortClock(w.start_ms)} · ${w.text} · ${w.problem}`;b.onclick=()=>speech.listen(speech.texts().find(l=>(l.segment_id || l.id)===w.id)?.id);li.append(b);return li;}));
+}
 for(const [id,step] of [['subOffsetLess',-100],['subOffsetMore',100]])$(id).onclick=()=>{if(!editingAllowed)return;draft.subtitle_offset_ms=Math.max(-5000,Math.min(5000,(Number(draft.subtitle_offset_ms) || 0)+step));save();showOffset();stories.renderEditor();};
 // re-time words: transcribe each finished piece again with aligned clocks and map the new words onto the
 // existing lines by their letters; the lines, stories, emphasis and cuts stay as they are
-function alignWords(oldWords,fresh,start,end){
- const old=[];oldWords.forEach((w,n)=>{for(const c of [...w.text.replace(/\s+/g,'')])old.push({c,n});});
- const now=[];for(const w of fresh){const t=[...w.text.replace(/\s+/g,'')],span=w.end_ms-w.start_ms;t.forEach((c,k)=>now.push({c,a:w.start_ms+span*k/t.length,b:w.start_ms+span*(k+1)/t.length}));}
- if(!old.length || !now.length)return null;
- const n=old.length,m=now.length,dp=Array.from({length:n+1},()=>new Uint16Array(m+1));
- for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)dp[i][j]=old[i].c===now[j].c?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
- if(dp[0][0]<n*0.6)return null;
- const at=new Array(n).fill(null);for(let i=0,j=0;i<n&&j<m;){if(old[i].c===now[j].c){at[i]=now[j];i++;j++;}else if(dp[i+1][j]>=dp[i][j+1])i++;else j++;}
- // a word takes the clock of its first and last matched letters; an unmatched one sits between its
- // neighbours; clocks stay in the line and never run backwards
- const clamp=v=>Math.round(Math.min(Math.max(v,start),end));
- const got=oldWords.map((w,k)=>{const hits=old.map((o,i)=>o.n===k?at[i]:null).filter(Boolean);return hits.length?[clamp(hits[0].a),clamp(hits.at(-1).b)]:null;});
- for(let k=0;k<got.length;k++)if(!got[k]){const s=k?got[k-1]?.[1] ?? start:start,next=got.slice(k+1).find(Boolean)?.[0] ?? end;got[k]=[Math.min(s,next),next];}
- let last=start;return got.map(([s,e])=>{s=Math.max(s,last);e=Math.max(e,s);last=s;return [s,e];});
-}
 $('retime').onclick=async()=>{
  if(!editingAllowed)return;const pieces=speech.pieces();if(!pieces.length)return;
  $('retime').disabled=true;const times={...(draft.word_times || {})};let done=0,skipped=0;
@@ -316,13 +306,13 @@ $('retime').onclick=async()=>{
    for(const segment of job.result?.transcript?.segments || []){
     if(!segment.words?.length)continue;
     // the new words said within this line's span (by their middle), so a neighbour's letters are not borrowed
-    const near=value.words.filter(w=>{const mid=(w.start_ms+w.end_ms)/2;return mid>segment.start_ms-300&&mid<segment.end_ms+300;});
-    const mapped=alignWords(segment.words,near,segment.start_ms,segment.end_ms);
+    const near=value.words.filter(w=>w.end_ms>segment.start_ms&&w.start_ms<segment.end_ms);
+    const mapped=alignWordClocks(segment.words,near,segment.start_ms,segment.end_ms);
     if(mapped){times[segment.id]=mapped;done++;}else skipped++;
    }
   }
   draft.word_times=times;await save();render();
-  $('toast').textContent=`จัดเวลาคำใหม่แล้ว ${done} ท่อน`+(skipped?` · ${skipped} ท่อนข้อความไม่ตรง คงเวลาเดิม`:'');$('toast').hidden=false;
+  $('toast').textContent=`จัดเวลาคำใหม่แล้ว ${done} ท่อน`+(skipped?` · ${skipped} ท่อนยังจับเวลาคำไม่ครบ คงเวลาเดิม`:'');$('toast').hidden=false;
  }catch(error){$('toast').textContent='จัดเวลาคำใหม่ไม่ได้ ('+error.message+')';$('toast').hidden=false;}
  finally{$('retime').disabled=!editingAllowed;}
 };
@@ -580,4 +570,4 @@ try {
 }
 render(); start();
 // Step 6 builds from the saved draft only, so it waits for autosave like the AI packet does.
-var exporter=createExport({project:projectId,planReady,saved:()=>!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved});
+var exporter=createExport({project:projectId,planReady,analysisReady:()=>!stories.analysisPending(),saved:()=>!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved});

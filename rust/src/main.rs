@@ -29,6 +29,14 @@ type Shared = Arc<Mutex<Store>>;
 type Asr = Arc<(AsrConfig, AsrSettings)>;
 type ApiError = (StatusCode, Json<Value>);
 
+#[derive(Deserialize)]
+struct PreviewFont { family: String, #[serde(default)] bold: bool, #[serde(default)] italic: bool }
+async fn preview_font(Query(q): Query<PreviewFont>) -> Result<impl IntoResponse, ApiError> {
+    let data = editorkrab::text_layout::preview_font(&q.family, q.bold, q.italic)
+        .ok_or((StatusCode::NOT_FOUND, Json(json!({"error":"font_not_found"}))))?;
+    Ok(([("content-type", "font/ttf"), ("cache-control", "private, max-age=3600")], data))
+}
+
 #[derive(Clone)]
 struct Runtime {
     store: Shared,
@@ -429,7 +437,7 @@ async fn capcut_export(
                     missing.push(font);
                 }
             }
-            skipped = editorkrab::export::speech_lines(story, &document).1;
+            for role in made.missing_roles {if !skipped.contains(&role) {skipped.push(role);}}
             folders.push(folder.display().to_string());
         }
         Ok(json!({"folders": folders, "missing_fonts": missing, "skipped": skipped}))
@@ -725,6 +733,29 @@ async fn read(
     Ok(Json(json!(draft)))
 }
 
+#[derive(Deserialize)]
+struct CaptionCueRevision { draft_revision: i64 }
+async fn caption_cues(
+    State(runtime): State<Runtime>, Path(project): Path<String>, Query(query): Query<CaptionCueRevision>,
+) -> Result<Json<Value>, ApiError> {
+    let id = project.clone();
+    let (draft, jobs) = database(runtime, move |store| {
+        let draft = store.read(&id)?.ok_or(Error::NotFound)?;
+        let jobs = store.list_jobs(&id)?;
+        Ok((draft, jobs))
+    }).await?;
+    if draft.revision != query.draft_revision {
+        return Err((StatusCode::CONFLICT, Json(json!({"error":"draft_revision_conflict","draft_revision":draft.revision}))));
+    }
+    let revision = draft.revision;
+    let manifest = tokio::task::spawn_blocking(move || editorkrab::export::translation_manifest(&draft.document, &jobs))
+        .await.map_err(|e| export_error(format!("caption_cues_failed:{e}")))?.map_err(export_error)?;
+    let mut value = serde_json::to_value(manifest).map_err(|e| export_error(format!("caption_cues_failed:{e}")))?;
+    value["project_id"] = json!(project);
+    value["draft_revision"] = json!(revision);
+    Ok(Json(value))
+}
+
 async fn list_drafts(State(runtime): State<Runtime>) -> Result<Json<Value>, ApiError> {
     let projects = database(runtime, |store| store.list()).await?;
     Ok(Json(json!(projects)))
@@ -959,8 +990,8 @@ async fn source_path(runtime: &Runtime, project: String, source_id: String) -> R
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct VoiceBody {
-    /// start times of the transcribed words in this video (ms): they name the main speaker and are never cut
-    words: Vec<u64>,
+    /// the transcribed words in this video, [start, end] ms: they name the main speaker and are never cut
+    words: Vec<(u64, u64)>,
     min_ms: u64,
     /// speakers whose talk is kept; the main speaker when not given
     #[serde(default)]
@@ -1028,8 +1059,10 @@ async fn source_voice(
     .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
     let (speech, n) = speech;
     let total_ms = n as u64 * 1000 / editorkrab::voice::RATE as u64;
-    let main = editorkrab::voice::main_speaker(&turns, &body.words);
-    let keep = body.keep.unwrap_or_else(|| main.into_iter().collect());
+    let starts: Vec<u64> = body.words.iter().map(|w| w.0).collect();
+    let main = editorkrab::voice::main_speaker(&turns, &starts);
+    // everyone's talk is kept until the person drops someone (Nina clips keep the listener)
+    let keep = body.keep.unwrap_or_default();
     let dead = editorkrab::voice::dead_air(&speech, &turns, &keep, &body.words, total_ms, body.min_ms);
     let talk = speech.clone();
     let (faces, seen) = tokio::task::spawn_blocking(move || -> Result<_, String> {
@@ -1049,7 +1082,7 @@ async fn source_voice(
 struct DeadAirBody {
     speech: Vec<(u64, u64)>,
     turns: Vec<editorkrab::voice::Turn>,
-    words: Vec<u64>,
+    words: Vec<(u64, u64)>,
     total_ms: u64,
     min_ms: u64,
     #[serde(default)]
@@ -1057,8 +1090,9 @@ struct DeadAirBody {
 }
 /// Dead air again from a video's stored speech and speakers, for a new shortest pause; no audio is read.
 async fn dead_air(Json(body): Json<DeadAirBody>) -> Json<Value> {
-    let main = editorkrab::voice::main_speaker(&body.turns, &body.words);
-    let keep = body.keep.unwrap_or_else(|| main.into_iter().collect());
+    let starts: Vec<u64> = body.words.iter().map(|w| w.0).collect();
+    let main = editorkrab::voice::main_speaker(&body.turns, &starts);
+    let keep = body.keep.unwrap_or_default();
     let dead = editorkrab::voice::dead_air(&body.speech, &body.turns, &keep, &body.words, body.total_ms, body.min_ms);
     Json(json!({"main": main, "dead": dead}))
 }
@@ -2010,7 +2044,9 @@ async fn serve(
                 )
             }),
         )
+        .route("/api/v1/fonts/preview", get(preview_font))
         .route("/api/v1/drafts/{project}", get(read).put(save))
+        .route("/api/v1/projects/{project}/caption-cues", get(caption_cues))
         .route("/api/v1/drafts/{project}/copy", post(copy_draft))
         .route(
             "/text-qc.js",

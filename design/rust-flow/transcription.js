@@ -209,12 +209,27 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  // Every subtitle line as it will show (hand edit if any), timed on its own source file.
  // a segment's words with the draft's re-timed clocks (one [start,end] per word) and the whole-project
  // subtitle shift; the transcript itself never changes (export.rs spoken() does the same)
- function timedWords(segment){
+ function timedWords(segment,source){
   const words=segment.words || [],times=read().word_times?.[segment.id],offset=Math.max(-5000,Math.min(5000,Number(read().subtitle_offset_ms) || 0));
-  return words.map((w,i)=>{const t=Array.isArray(times)&&times.length===words.length&&Array.isArray(times[i])&&times[i][1]>=times[i][0]?times[i]:[w.start_ms,w.end_ms];
-   return {...w,start_ms:Math.max(0,t[0]+offset),end_ms:Math.max(0,t[1]+offset)};});
+  const clocks=fitWords(words.map((w,i)=>Array.isArray(times)&&times.length===words.length&&Array.isArray(times[i])&&times[i][1]>=times[i][0]?times[i]:[w.start_ms,w.end_ms]),read().voice?.[source]?.speech);
+  return words.map((w,i)=>({...w,start_ms:Math.max(0,clocks[i][0]+offset),end_ms:Math.max(0,clocks[i][1]+offset)}));
  }
- function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name,words:correction(job,segment)?[]:timedWords(segment)})));}
+ // word clocks fitted to the speech VAD heard (the same rule as voice.rs fit_words): a word starting in a pause
+ // starts with the next speech it reaches, one running over 150 ms past its speech ends there, a zero-length
+ // word gets 200 ms; a word with no speech under it is left alone
+ function fitWords(clocks,speech){
+  if(!Array.isArray(speech) || !speech.length)return clocks;
+  const SLACK=150,LEAST=200,spanAt=t=>speech.find(([a,b])=>a<=t+SLACK&&t<b);
+  return clocks.map(([s0,e0],i)=>{
+   let s=s0,e=Math.max(e0,s0),span=spanAt(s);
+   if(!span){span=speech.find(([a])=>a>s&&a<e);if(span)s=span[0];}
+   if(!span)return [s0,e0];
+   const b=span[1];if(e>b+SLACK)e=Math.max(b,s);
+   if(e<=s){const n=clocks[i+1]?.[0],next=n>s?n:Infinity;e=Math.min(s+LEAST,next,Math.max(b,s+1));}
+   return [s,Math.max(e,s)];
+  });
+ }
+ function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name,words:correction(job,segment)?[]:timedWords(segment,file.source_id)})));}
  // the finished transcription pieces, for re-timing their words
  function pieces(){return eligible().flatMap(file=>chunks(file).filter(j=>j?.status==='succeeded'));}
  function find(id){for(const file of eligible())for(const row of segments(file))if(row.job.id+'|'+row.segment.id===id)return {file,...row};throw Error('line_not_found');}

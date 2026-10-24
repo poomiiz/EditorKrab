@@ -161,29 +161,54 @@ pub fn main_speaker(turns: &[Turn], words: &[u64]) -> Option<i32> {
     score.into_iter().max_by_key(|&(_, v)| v).map(|(s, _)| s)
 }
 
-/// How long after a transcribed word starts it is kept from being cut, however long the engine stretched it.
+/// A word with a positive clock protects its actual span. Only zero/reversed clocks use WORD_HOLD_MS;
+/// an end stretched past WORD_MAX_MS is not trusted.
 pub const WORD_HOLD_MS: u64 = 600;
+pub const WORD_MAX_MS: u64 = 2500;
+/// Gaps between words and breaths are shorter than this; a smaller shortest pause would cut into speech
+/// (23 Oct: 0.1 s chopped a two-person talk into pieces). Nina clips keep 0.3-0.5 s breaths.
+pub const MIN_PAUSE_MS: u64 = 300;
 
 /// Dead air: stretches of at least `min_ms` with no speech from the people kept (`keep`, the main speaker unless
 /// the person picks others): VAD speech where diarization hears one of them (all VAD speech when `keep` is empty). Laughs, a café and other people's voices are
 /// dead air. Diarization misses soft speech (23 Oct, IMG_6779: no turn at 8.8-14.2 s where a line is said), so
-/// WORD_HOLD_MS after every transcribed word start (`words`, ms) is never cut either.
-pub fn dead_air(speech: &[(u64, u64)], turns: &[Turn], keep: &[i32], words: &[u64], total_ms: u64, min_ms: u64) -> Vec<(u64, u64)> {
+/// every transcribed word (`words`, [start, end] ms) is never cut either. Only the talk of people the person
+/// dropped is taken out of the speech; speech diarization gave to nobody stays.
+pub fn dead_air(speech: &[(u64, u64)], turns: &[Turn], keep: &[i32], words: &[(u64, u64)], total_ms: u64, min_ms: u64) -> Vec<(u64, u64)> {
+    let min_ms = min_ms.max(MIN_PAUSE_MS);
+    let dropped: Vec<&Turn> = match keep.is_empty() {
+        true => Vec::new(),
+        false => turns.iter().filter(|t| !keep.contains(&t.speaker)).collect(),
+    };
     let mut talk: Vec<(u64, u64)> = Vec::new();
     for &(a, b) in speech {
-        match keep.is_empty() {
-            true => talk.push((a, b)),
-            false => {
-                for t in turns.iter().filter(|t| keep.contains(&t.speaker)) {
-                    let (x, y) = (a.max(t.start_ms), b.min(t.end_ms));
-                    if y > x {
-                        talk.push((x, y));
-                    }
-                }
+        // the speech left after the dropped people's turns are taken out of it
+        let mut at = a;
+        let mut cuts: Vec<(u64, u64)> = dropped.iter().map(|t| (t.start_ms.max(a), t.end_ms.min(b))).filter(|(x, y)| y > x).collect();
+        cuts.sort();
+        for (x, y) in cuts {
+            if x > at {
+                talk.push((at, x));
+            }
+            at = at.max(y);
+        }
+        if b > at {
+            talk.push((at, b));
+        }
+        // and a kept person talking over a dropped one is still talk
+        for t in turns.iter().filter(|t| keep.contains(&t.speaker)) {
+            let (x, y) = (a.max(t.start_ms), b.min(t.end_ms));
+            if y > x {
+                talk.push((x, y));
             }
         }
     }
-    talk.extend(words.iter().map(|&w| (w, (w + WORD_HOLD_MS).min(total_ms.max(w)))));
+    talk.extend(words.iter().filter_map(|&(w, e)| {
+        if w >= total_ms { return None; }
+        let end = if e > w { e.min(w.saturating_add(WORD_MAX_MS)) }
+            else { w.saturating_add(WORD_HOLD_MS) };
+        Some((w, end.min(total_ms)))
+    }));
     talk.sort();
     let mut out = Vec::new();
     let mut at = 0u64;
@@ -197,6 +222,48 @@ pub fn dead_air(speech: &[(u64, u64)], turns: &[Turn], keep: &[i32], words: &[u6
         out.push((at, total_ms));
     }
     out
+}
+
+/// How far a word may run past the speech it starts in (quiet word endings VAD trims), ms.
+pub const WORD_SLACK_MS: u64 = 150;
+/// Length given to a word the engine timed at zero, ms (never past the next word or its speech).
+pub const WORD_LEAST_MS: u64 = 200;
+
+/// Word clocks fitted to the speech VAD hears (`speech`, sorted [start, end] ms). The engine stretches a word
+/// over the pause after it, starts a word said after a pause at the pause, and times some words at zero
+/// (24 Oct, IMG_6779: 11 words of 221 at 0 s, one 2.7 s long across a 1.7 s pause). Such clocks move subtitles,
+/// emphasis and cuts, so: a word starting in silence starts where the next speech it reaches begins; a word
+/// running more than WORD_SLACK_MS past its speech ends there; a zero-length word gets WORD_LEAST_MS.
+/// A word with no speech under it at all is left alone (VAD misses soft speech).
+pub fn fit_words(words: &mut [(u64, u64)], speech: &[(u64, u64)]) {
+    if speech.is_empty() {
+        return;
+    }
+    let span_at = |t: u64| speech.iter().copied().find(|&(a, b)| a <= t + WORD_SLACK_MS && t < b);
+    let starts: Vec<u64> = words.iter().map(|w| w.0).collect();
+    for (i, w) in words.iter_mut().enumerate() {
+        let (mut s, mut e) = (w.0, w.1.max(w.0));
+        let span = match span_at(s) {
+            Some(span) => Some(span),
+            // starts in a pause: move to the first speech it reaches
+            None => match speech.iter().copied().find(|&(a, _)| a > s && a < e) {
+                Some(span) => {
+                    s = span.0;
+                    Some(span)
+                }
+                None => None,
+            },
+        };
+        let Some((_, b)) = span else { continue };
+        if e > b + WORD_SLACK_MS {
+            e = b.max(s);
+        }
+        if e <= s {
+            let next = starts.get(i + 1).copied().filter(|&n| n > s).unwrap_or(u64::MAX);
+            e = (s + WORD_LEAST_MS).min(next).min(b.max(s + 1));
+        }
+        *w = (s, e.max(s));
+    }
 }
 
 pub const VAD_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx";
@@ -250,12 +317,55 @@ mod tests {
         ];
         let main = main_speaker(&turns, &[100, 900, 2000, 3600, 9500, 11000, 4500]);
         assert_eq!(main, Some(0));
-        assert_eq!(dead_air(&speech, &turns, &[0], &[], 12500, 400), vec![(3000, 3500), (4000, 9000), (12000, 12500)]);
+        // speech after the laugh that diarization gave to nobody (5.5-6.0 s) stays
+        assert_eq!(dead_air(&speech, &turns, &[0], &[], 12500, 400), vec![(3000, 3500), (4000, 5500), (6000, 9000), (12000, 12500)]);
         // keeping both people: the laugh is speech too
-        assert_eq!(dead_air(&speech, &turns, &[0, 1], &[], 12500, 400), vec![(3000, 3500), (5500, 9000), (12000, 12500)]);
+        assert_eq!(dead_air(&speech, &turns, &[0, 1], &[], 12500, 400), vec![(3000, 3500), (6000, 9000), (12000, 12500)]);
         // nobody known: any speech counts
         assert_eq!(dead_air(&speech, &turns, &[], &[], 12500, 400), vec![(3000, 3500), (6000, 9000), (12000, 12500)]);
-        // a transcribed word said in a gap keeps WORD_HOLD_MS after it (soft speech diarization missed)
-        assert_eq!(dead_air(&speech, &turns, &[0], &[7000], 12500, 400), vec![(3000, 3500), (4000, 7000), (7600, 9000), (12000, 12500)]);
+        // a short word uses its actual end; soft speech missed by diarization still stays
+        assert_eq!(dead_air(&speech, &turns, &[0], &[(7000, 7100)], 12500, 400), vec![(3000, 3500), (4000, 5500), (6000, 7000), (7100, 9000), (12000, 12500)]);
+        assert_eq!(dead_air(&speech, &turns, &[0], &[(7000, 8000)], 12500, 400), vec![(3000, 3500), (4000, 5500), (6000, 7000), (8000, 9000), (12000, 12500)]);
+        // an end stretched past WORD_MAX_MS is not trusted
+        assert_eq!(dead_air(&speech, &turns, &[], &[(6000, 12000)], 13500, 400), vec![(3000, 3500), (8500, 9000), (12000, 13500)]);
+    }
+    #[test]
+    fn positive_word_clocks_do_not_create_a_six_hundred_ms_tail() {
+        assert_eq!(dead_air(&[], &[], &[], &[(1000, 1100)], 2000, 300), vec![(0, 1000), (1100, 2000)]);
+        // A real end longer than the old blanket hold is preserved too.
+        assert_eq!(dead_air(&[], &[], &[], &[(1000, 1800)], 2500, 300), vec![(0, 1000), (1800, 2500)]);
+    }
+    #[test]
+    fn missing_word_end_is_protected_conservatively_within_the_source() {
+        for end in [1000, 900] {
+            assert_eq!(dead_air(&[], &[], &[], &[(1000, end)], 2500, 300), vec![(0, 1000), (1600, 2500)]);
+        }
+        // Unknown clocks close to the source end cannot extend the clip.
+        assert_eq!(dead_air(&[], &[], &[], &[(1800, 1800)], 2000, 300), vec![(0, 1800)]);
+        assert_eq!(dead_air(&[], &[], &[], &[(2500, 2500)], 2000, 300), vec![(0, 2000)]);
+    }
+    #[test]
+    fn word_clocks_are_fitted_to_the_speech_heard() {
+        let speech = [(1000, 2000), (3000, 5000)];
+        let mut words = [
+            (1000, 1400),
+            (1400, 2800), // stretched over the pause: ends where speech ends
+            (2200, 3400), // starts in the pause: starts with the next speech
+            (3400, 3400), // timed at zero: gets WORD_LEAST_MS
+            (3600, 5100), // within the slack: kept
+            (6000, 6500), // no speech heard: left alone
+        ];
+        fit_words(&mut words, &speech);
+        assert_eq!(words, [(1000, 1400), (1400, 2000), (3000, 3400), (3400, 3600), (3600, 5100), (6000, 6500)]);
+        // no speech known: nothing changes
+        let mut same = [(0, 0)];
+        fit_words(&mut same, &[]);
+        assert_eq!(same, [(0, 0)]);
+    }
+    #[test]
+    fn a_shortest_pause_under_a_breath_is_raised() {
+        // gaps of 200 ms between words are never cut, whatever is asked
+        let speech = [(0, 1000), (1200, 2000), (2600, 3000)];
+        assert_eq!(dead_air(&speech, &[], &[], &[], 3000, 100), vec![(2000, 2600)]);
     }
 }

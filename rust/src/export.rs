@@ -3,6 +3,7 @@
 use crate::jobs::{Job, Task};
 use serde::Serialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -40,7 +41,7 @@ pub fn crop_at(document: &Value, path: &Path, ms: u64) -> (f64, f64, f64, bool) 
     let Some(who) = speaker_at(document, id, ms) else { return base };
     let c = &document["crops"][id]["speakers"][who.to_string()];
     // an entry of exactly x 0.5, y 0.5 was written by the first zoom picker (people were voices then): unset
-    let c = if c["x"].as_f64() == Some(0.5) && c["y"].as_f64() == Some(0.5) { &Value::Null } else { c };
+    let c = if c["x"].as_f64() == Some(0.5) && c["y"].as_f64() == Some(0.5) && !c["zoom"].is_number() { &Value::Null } else { c };
     let at = |v: &Value, d: f64| v.as_f64().filter(|v| v.is_finite()).unwrap_or(d).clamp(0.0, 1.0);
     let zoom = c["zoom"].as_f64().filter(|v| v.is_finite()).unwrap_or(FOLLOW_ZOOM).clamp(1.0, 3.0);
     if c["x"].is_number() || c["y"].is_number() {
@@ -54,18 +55,35 @@ pub fn crop_at(document: &Value, path: &Path, ms: u64) -> (f64, f64, f64, bool) 
 }
 /// Whether step 3 saw who talks (faces and mouth movement); the camera then follows people on screen, not voices.
 fn seen(document: &Value, id: &str) -> bool {
-    document["voice"][id]["seen"].as_array().is_some_and(|s| !s.is_empty())
+    document["voice"][id]["seen"].is_array() && document["voice"][id]["faces"].as_array().is_some_and(|s| !s.is_empty())
 }
 /// The turns the camera follows: who is seen talking (`voice[id].seen`, by person on screen) when step 3 found
 /// faces, else who is heard (`voice[id].turns`, by diarization).
 fn follow_turns(document: &Value, id: &str) -> Vec<(u64, u64, i64)> {
-    let (list, who) = if seen(document, id) { ("seen", "person") } else { ("turns", "speaker") };
-    document["voice"][id][list]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|t| Some((t["start_ms"].as_u64()?, t["end_ms"].as_u64()?, t[who].as_i64()?)))
-        .collect()
+    let visual=seen(document,id);
+    let (list,who)=if visual {("seen","person")} else {("turns","speaker")};
+    let mut input:Vec<_>=document["voice"][id][list].as_array().into_iter().flatten()
+        .filter_map(|t|Some((t["start_ms"].as_u64()?,t["end_ms"].as_u64()?,t[who].as_i64()?)))
+        .filter(|(a,b,_)|b>a).collect();
+    input.sort_by_key(|t|t.0);
+    let mut turns:Vec<(u64,u64,i64)>=vec![];
+    for (a,b,person) in input {
+        if let Some(last)=turns.last_mut().filter(|last|last.2==person&&a.saturating_sub(last.1)<=1200) {last.1=last.1.max(b);}
+        else {turns.push((a,b,person));}
+    }
+    let speech=document["voice"][id]["speech"].as_array();
+    let spans:Vec<(u64,u64)>=speech.into_iter().flatten().filter_map(|p|Some((p[0].as_u64()?,p[1].as_u64()?))).collect();
+    turns.into_iter().filter(|(a,b,_)|b-a>=if visual {2500} else {FOLLOW_MIN_MS})
+        .filter(|(a,b,_)|!visual||spans.is_empty()||spans.iter().any(|&(x,y)|b.min(&y).saturating_sub(*a.max(&x))>=600))
+        .map(|(a,b,who)|(snap(a,spans.iter().map(|s|s.0)),snap(b,spans.iter().map(|s|s.1)),who))
+        .filter(|(a,b,_)|b>a).collect()
+}
+/// How far a camera cut moves to the nearest pause edge, ms.
+pub const CUT_SNAP_MS: u64 = 1000;
+/// A camera cut lands where speech starts or stops (`edges`), not on the 1 s grid mouth motion is
+/// measured in (24 Oct: cuts in the middle of words); with no edge within CUT_SNAP_MS it stays.
+fn snap(at: u64, edges: impl Iterator<Item = u64>) -> u64 {
+    edges.filter(|e| e.abs_diff(at) <= CUT_SNAP_MS).min_by_key(|e| e.abs_diff(at)).unwrap_or(at)
 }
 /// The draft's source id for the video at `path`.
 pub fn source_id<'a>(document: &'a Value, path: &Path) -> Option<&'a str> {
@@ -86,9 +104,9 @@ pub fn speaker_at(document: &Value, id: &str, ms: u64) -> Option<i32> {
         .into_iter()
         .filter(|(a, b, _)| b >= &(a + FOLLOW_MIN_MS))
         .collect();
-    let inside = turns.iter().filter(|(a, b, _)| *a <= ms && ms < *b).min_by_key(|(a, b, _)| b - a);
-    let before = turns.iter().filter(|(a, _, _)| *a <= ms).max_by_key(|(a, _, _)| *a);
-    inside.or(before).or_else(|| turns.first()).map(|t| t.2 as i32)
+    let inside = turns.iter().filter(|(a, b, _)| *a <= ms && ms < *b).min_by_key(|(a, _, _)| *a);
+    let before = turns.iter().filter(|(_, b, _)| *b <= ms && ms-*b<=1200).max_by_key(|(_, b, _)| *b);
+    inside.or(before).map(|t| t.2 as i32)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -148,9 +166,16 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
         .collect();
     let mut found = HashMap::new();
     for job in jobs.iter().filter(|j| j.status == "succeeded") {
-        let Task::Transcribe { path, .. } = &job.task else {
+        let Task::Transcribe { path, context, .. } = &job.task else {
             continue;
         };
+        // the speech VAD heard in this video (step 4 "ตัดช่วงเงียบ"), to fit word clocks to
+        let speech: Vec<(u64, u64)> = document["voice"][context.source.id.as_str()]["speech"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| Some((p[0].as_u64()?, p[1].as_u64()?)))
+            .collect();
         let segments = job
             .result
             .as_ref()
@@ -194,6 +219,11 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
                         }
                     }
                 }
+            }
+            let mut clocks: Vec<(u64, u64)> = words.iter().map(|w| (w.1, w.2)).collect();
+            crate::voice::fit_words(&mut clocks, &speech);
+            for (w, c) in words.iter_mut().zip(clocks) {
+                (w.1, w.2) = c;
             }
             let offset = subtitle_offset(document);
             for w in &mut words {
@@ -298,7 +328,7 @@ pub fn unquiet(quiet: &[(u64, u64)], trim: &Value, start: u64, end: u64) -> (u64
 pub fn speaker_cuts(document: &Value, id: &str, start: u64, end: u64) -> Vec<(u64, u64)> {
     let mut edges: Vec<u64> = follow_turns(document, id)
         .into_iter()
-        .flat_map(|(a, b, _)| [a, b])
+        .flat_map(|(a, b, _)| [a, b, b.saturating_add(1201)])
         .filter(|&t| t > start + 200 && t + 200 < end)
         .collect();
     edges.sort();
@@ -333,6 +363,19 @@ pub fn inner_cuts(quiet: &[(u64, u64)], start: u64, end: u64) -> Vec<(u64, u64)>
     parts
 }
 
+/// Match the browser's quietTimingKey; a changed clock must be analysed before export.
+fn quiet_key(document: &Value, source: &str, spoken: &HashMap<String,Spoken>) -> String {
+    let min=document["dead_min_ms"].as_u64().unwrap_or(1000);let min=if min==0 {0} else {min.max(300)};
+    let mut keep:Vec<i64>=if let Some(values)=document["speakers_keep"][source].as_array() {values.iter().filter_map(Value::as_i64).collect()}
+        else {document["voice"][source]["turns"].as_array().into_iter().flatten().filter_map(|v|v["speaker"].as_i64()).collect()};
+    keep.sort_unstable();keep.dedup();
+    let path=document["files"].as_array().into_iter().flatten().find(|v|v["source_id"]==source).and_then(|v|v["path"].as_str());
+    let mut segments:Vec<_>=spoken.iter().filter(|(_,v)|path.is_some_and(|path|v.path==Path::new(path))).collect();
+    segments.sort_by(|a,b|(a.1.start_ms,a.0).cmp(&(b.1.start_ms,b.0)));
+    let words:Vec<_>=segments.iter().flat_map(|(_,v)|v.words.iter().map(|(_,a,b)|[*a,*b])).collect();
+    serde_json::json!([min,4,keep,words]).to_string()
+}
+
 /// The stories to render, in plan order. Any unknown segment is an error, never a silent skip.
 pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
     let raw = document["plan"].as_str().unwrap_or("").trim();
@@ -347,6 +390,15 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
         .filter(|s| !s.is_empty())
         .ok_or("plan_has_no_stories")?;
     let spoken = spoken(document, jobs);
+    if document["dead_min_ms"].as_u64()!=Some(0) {
+        for file in document["files"].as_array().into_iter().flatten() {
+            if let Some(source)=file["source_id"].as_str() {
+                if let Some(saved)=document["quiet_key"][source].as_str() {
+                    if saved!=quiet_key(document,source,&spoken) {return Err("pause_analysis_stale".into());}
+                }
+            }
+        }
+    }
     let mut out = Vec::new();
     for (n, story) in stories.iter().enumerate() {
         let ids = story["segment_ids"]
@@ -481,7 +533,8 @@ fn event(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text
             .join(" "),
         _ => text.to_owned(),
     };
-    event_raw(frame, layer, start, end, style, &escape(&text))
+    let style = crate::text_layout::fitted_in(style, &text, 1080.0 * frame.1 as f64 / frame.0 as f64);
+    event_raw(frame, layer, start, end, &style, &escape(&text))
 }
 /// `text` is already escaped ASS (it may hold override tags such as karaoke).
 fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, text: &str) -> String {
@@ -495,6 +548,11 @@ fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, 
         Some("right") => 6,
         _ => 5,
     };
+    let reveal = if style["enter"] == "wipe" {
+        let w = crate::text_layout::width(text, style) * scale;
+        let left = match style["align"].as_str() { Some("left") => x, Some("right") => x - w, _ => x - w / 2.0 };
+        format!("\\clip({:.0},0,{:.0},{})\\t(0,300,\\clip({:.0},0,{:.0},{}))", left - 8.0, left - 8.0, frame.1, left - 8.0, left + w + 8.0, frame.1)
+    } else { String::new() };
     let line = |layer: u8, extra: &str| {
         format!(
             "Dialogue: {layer},{},{},{},,0,0,0,,{{\\an{an}\\pos({x:.0},{y:.0})\\fn{}\\fs{}\\1c{}{}{extra}}}{}\n",
@@ -504,7 +562,7 @@ fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, 
             font(style["font"].as_str().unwrap_or("system")),
             size,
             colour(style["color"].as_str().unwrap_or("#ffffff")),
-            effects(style, scale, frame),
+            format!("{}{}", effects(style, scale, frame), reveal),
             text
         )
     };
@@ -533,7 +591,7 @@ fn event_raw(frame: (u32, u32), layer: u8, start: u64, end: u64, style: &Value, 
 }
 
 /// Outline, shadow, box and entrance as ASS override tags; sizes are reference px on a 1080-wide frame.
-fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
+fn effects(style: &Value, scale: f64, _frame: (u32, u32)) -> String {
     let px = |key: &str, default: f64| (style[key].as_f64().unwrap_or(default) * scale * 10.0).round() / 10.0;
     let mut tags = String::new();
     if style["box_on"].as_bool() == Some(true) {
@@ -581,10 +639,10 @@ fn effects(style: &Value, scale: f64, frame: (u32, u32)) -> String {
     }
     match style["enter"].as_str() {
         Some("fade") => tags += "\\fad(250,0)",
-        Some("pop") => tags += "\\fscx70\\fscy70\\t(0,180,\\fscx100\\fscy100)",
+        Some("pop") => tags += "\\fad(120,0)\\fscx85\\fscy85\\t(0,300,\\fscx100\\fscy100)",
         // a clip that opens left to right across the frame, so the text is revealed as it passes
         // "words" is drawn as one event per word (see karaoke)
-        Some("wipe") => tags += &format!("\\clip(0,0,0,{h})\\t(0,400,\\clip(0,0,{w},{h}))", w = frame.0, h = frame.1),
+        Some("wipe") => {},
         _ => {}
     }
     tags
@@ -650,6 +708,55 @@ pub fn lines(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
     out
 }
 
+
+/// Word-clocked one-line phrases. Unaligned corrections retain the original cue's clock.
+pub fn layout_lines(piece: &Piece, style: &Value) -> Vec<(u64, u64, String)> {
+    let length = piece.end_ms - piece.start_ms;
+    if piece.words.is_empty() {
+        return if piece.timed || piece.text.trim().is_empty() { vec![] } else { vec![(0, length, piece.text.clone())] };
+    }
+    let local = |v: u64| v.clamp(piece.start_ms, piece.end_ms) - piece.start_ms;
+    let mut rows = Vec::new();
+    let (mut text, mut start, mut end) = (String::new(), 0, 0);
+    for (word, from, to) in &piece.words {
+        if word.trim().is_empty() { continue; }
+        let mut candidate = text.clone(); join(&mut candidate, word.trim());
+        let phrase = !text.is_empty() && (from.saturating_sub(end) >= 400 || to.saturating_sub(start) > 2200);
+        if !text.is_empty() && (phrase || !crate::text_layout::fits(&candidate, style)) {
+            let stop = local(end.saturating_add(180)).min(local(*from)).max(local(start)+1).min(length);
+            rows.push((local(start), stop, std::mem::take(&mut text)));
+        }
+        if text.is_empty() { start = *from; }
+        join(&mut text, word.trim()); end = *to;
+    }
+    if !text.is_empty() {
+        rows.push((local(start), local(end.saturating_add(180)).max(local(start)+1).min(length), text));
+    }
+    rows.retain(|(a,b,_)| b > a);
+    rows
+}
+
+fn speech_person(story: &Story, document: &Value, p: &Piece) -> Option<i64> {
+    let id = source_id(document, &story.sources[p.source])?;
+    document["voice"][id]["turns"].as_array()?.iter()
+        .filter_map(|t| {
+            let overlap = t["end_ms"].as_u64()?.min(p.end_ms).saturating_sub(t["start_ms"].as_u64()?.max(p.start_ms));
+            (overlap > 0).then_some((overlap, t["speaker"].as_i64()?))
+        }).max_by_key(|(overlap,_)| *overlap).map(|(_, who)| who)
+}
+
+fn speech_pieces(story: &Story, document: &Value) -> Vec<Piece> {
+    let mut out = Vec::new();
+    let mut batch: Vec<Piece> = Vec::new();
+    for p in &story.pieces {
+        if batch.last().is_some_and(|last| speech_person(story, document, last) != speech_person(story, document, p)) {
+            out.extend(join_short_lines(&batch)); batch.clear();
+        }
+        batch.push(p.clone());
+    }
+    out.extend(join_short_lines(&batch)); out
+}
+
 /// What step 4/5 shows on screen, as ASS: headline items for the whole clip, speech lines in time.
 /// Returns the subtitle file and the text roles that were asked for but have nothing to draw yet.
 pub fn subtitles(story: &Story, document: &Value) -> (String, Vec<String>) {
@@ -674,32 +781,19 @@ pub fn blend_modes(document: &Value) -> Vec<String> {
 pub fn subtitles_in(story: &Story, document: &Value, mode: &str) -> (String, Vec<String>) {
     let (width, height) = frame(document);
     let mut ass = format!(
-        "[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n\
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n\
 [V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n\
 Style: Text,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,1,5,60,60,0,1\n\
 Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,3,12,0,5,60,60,0,1\n\n\
 [Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     );
     let total = story.duration_ms();
-    let spoken = speech_story(story, document);
-    let (speech, mut skipped) = speech_lines(&spoken, document);
+    let mut skipped = vec!["emphasis".to_owned(), "english".to_owned()];
+    skipped.retain(|role| document["text_roles"].as_array().is_some_and(|roles| roles.iter().any(|r|r.as_str()==Some(role.as_str()))));
     let style = speech_style(document);
-    // a speech layer with another blend mode is drawn in that mode's own file
-    let speech = if blend_of(&style) == mode { speech } else { Vec::new() };
-    if speech.is_empty() {
-    } else if style["enter"].as_str() == Some("words") {
-        let size = style["size"].as_f64().unwrap_or(64.0);
-        let limit = (0.86 * WIDTH as f64 / (size * 0.55)).max(4.0) as usize;
-        let mut at = 0;
-        for p in &spoken.pieces {
-            for (start, end, text) in karaoke(p, limit) {
-                ass.push_str(&event((width, height), 0, at + start, at + end, &style, &text));
-            }
-            at += p.end_ms - p.start_ms;
-        }
-    } else {
-        for (start, end, text) in &speech {
-            ass.push_str(&event((width, height), 0, *start, *end, &style, text));
+    if blend_of(&style) == mode {
+        for (start,end,text) in speech_cues(story, document) {
+            ass.push_str(&event((width,height),0,start,end,&style,&text));
         }
     }
     let emphasis = emphasis_lines(story, document);
@@ -707,7 +801,7 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
         skipped.retain(|role| role != "emphasis");
         let style = match &document["text_styles"]["emphasis"] {
             s @ Value::Object(_) => s.clone(),
-            _ => serde_json::json!({"font":"system","size":84,"color":"#f59e0b","x":50,"y":55}),
+            _ => default_style("emphasis"),
         };
         if blend_of(&style) == mode {
             for (start, end, text) in &emphasis {
@@ -720,7 +814,7 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
         skipped.retain(|role| role != "english");
         let style = match &document["text_styles"]["english"] {
             s @ Value::Object(_) => s.clone(),
-            _ => serde_json::json!({"font":"system","size":56,"color":"#ffffff","x":50,"y":78}),
+            _ => default_style("english"),
         };
         if blend_of(&style) == mode {
             for (start, end, text) in &translated {
@@ -745,7 +839,9 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
 /// showing the line up to that word, so words not yet said take no space on screen (karaoke tags would
 /// still draw their shadow). Pieces without timed words fall back to whole lines.
 pub fn karaoke(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
-    let plain = lines(piece, limit);
+    karaoke_from(piece, lines(piece, limit))
+}
+fn karaoke_from(piece: &Piece, plain: Vec<(u64,u64,String)>) -> Vec<(u64,u64,String)> {
     if piece.words.is_empty() {
         return plain;
     }
@@ -789,55 +885,52 @@ pub fn karaoke(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
     out
 }
 
-/// Emphasis words picked in step 3 (by each word's start time on its transcript line), on screen in output
-/// time from the first picked word to the end of its piece.
-pub fn emphasis_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)> {
-    let ticked = document["text_roles"]
-        .as_array()
-        .is_some_and(|r| r.iter().any(|v| v == "emphasis"));
-    let mut out = Vec::new();
-    if !ticked {
-        return out;
+/// Short readable emphasis beat, followed by a small tail; matches stories.js.
+pub const EMPHASIS_HOLD_MS: u64 = 450;
+pub const EMPHASIS_TAIL_MS: u64 = 180;
+pub const EMPHASIS_GAP_MS: u64 = 160;
+
+/// Explicit word_ids form one phrase. Legacy adjacent fragments can be coalesced without borrowing letters.
+fn emphasis_groups(p: &Piece, document: &Value) -> Vec<Vec<(u64,String,u64)>> {
+    let explicit=|word: &(u64,String,u64)|document["emphasis"][&p.segment].as_array().into_iter().flatten()
+        .any(|v|v["word_ids"].is_array()&&v["text"].as_str()==Some(word.1.as_str()));
+    let mut groups:Vec<Vec<(u64,String,u64)>>=vec![];
+    for word in picks(p,document) {
+        let merge=groups.last().is_some_and(|g| {
+            let last=g.last().unwrap();let mut text=String::new();for w in g {join(&mut text,&w.1);}join(&mut text,&word.1);
+            !explicit(last)&&!explicit(&word)&&word.0>=last.2&&word.0-last.2<=EMPHASIS_GAP_MS
+                &&locate(p,&text,g[0].0).is_some_and(|(a,_)|a.abs_diff(g[0].0)<=1)
+        });
+        if merge {groups.last_mut().unwrap().push(word);} else {groups.push(vec![word]);}
     }
-    let mut at = 0;
-    for p in &story.pieces {
-        // one event per group of picks as it is said (neighbouring picks read as one), shown until the
-        // next group starts or the piece ends; the preview does the same (emphasisNow in stories.js)
-        let mut groups: Vec<Vec<(u64, String, u64)>> = Vec::new();
-        for w in picks(p, document) {
-            match groups.last_mut() {
-                Some(g) if w.0 <= g.last().map_or(0, |l| l.2) + 1 => g.push(w),
-                _ => groups.push(vec![w]),
-            }
-        }
-        let latin = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
-        for (n, words) in groups.iter().enumerate() {
-            let mut text = String::new();
-            for (i, w) in words.iter().enumerate() {
-                if i > 0 && latin(words[i - 1].1.chars().last()) && latin(w.1.chars().next()) {
-                    text.push(' ');
-                }
-                text.push_str(&w.1);
-            }
-            let from = words[0].0.clamp(p.start_ms, p.end_ms) - p.start_ms;
-            let to = groups.get(n + 1).map_or(p.end_ms, |g| g[0].0.clamp(p.start_ms, p.end_ms)) - p.start_ms;
-            if to > from {
-                out.push((at + from, at + to, text));
-            }
-        }
-        at += p.end_ms - p.start_ms;
-    }
-    // a word picked at the very end of its line was up for a blink ("ปัญหา" for 0.4 s, P'Ohm 23 Oct): each
-    // stays at least EMPHASIS_HOLD_MS, into the next line if need be, but never over the next pick
-    let total = story.duration_ms();
-    for i in 0..out.len() {
-        let next = out.get(i + 1).map_or(total, |e| e.0);
-        out[i].1 = out[i].1.max((out[i].0 + EMPHASIS_HOLD_MS).min(next).min(total));
-    }
-    out
+    groups
 }
-/// Shortest time an emphasis word stays on screen; the preview uses the same (HOLD in stories.js).
-pub const EMPHASIS_HOLD_MS: u64 = 1200;
+
+/// Emphasis windows on the final playback clock. Camera/dead-air splits retain a phrase's identity.
+pub fn emphasis_lines(story: &Story, document: &Value) -> Vec<(u64,u64,String)> {
+    if !document["text_roles"].as_array().is_some_and(|r|r.iter().any(|v|v=="emphasis")) {return vec![];}
+    let mut events:HashMap<(usize,String,u64,String),(u64,u64,String)>=HashMap::new();let mut at=0;
+    for p in &story.pieces {
+        let same:Vec<_>=story.pieces.iter().filter(|other|other.source==p.source&&other.segment==p.segment).collect();
+        let mut full=p.clone();full.start_ms=same.iter().map(|v|v.start_ms).min().unwrap();full.end_ms=same.iter().map(|v|v.end_ms).max().unwrap();
+        full.words=same.iter().flat_map(|v|v.words.iter().cloned()).collect();full.words.sort_by_key(|v|(v.1,v.2));full.words.dedup();
+        for group in emphasis_groups(&full,document) {
+            let start=group[0].0;let end=group.last().unwrap().2;
+            if start>=p.end_ms||end<=p.start_ms {continue;}
+            let mut text=String::new();for word in group {join(&mut text,&word.1);}
+            let a=at+start.max(p.start_ms)-p.start_ms;let b=at+end.min(p.end_ms)-p.start_ms;
+            let key=(p.source,p.segment.clone(),start,text.clone());
+            events.entry(key).and_modify(|v|v.1=v.1.max(b)).or_insert((a,b,text));
+        }
+        at+=p.end_ms-p.start_ms;
+    }
+    let mut out:Vec<_>=events.into_values().collect();out.sort_by(|a,b|(a.0,&a.2).cmp(&(b.0,&b.2)));
+    for i in 0..out.len() {
+        let next=out.get(i+1).map_or(at,|e|e.0);
+        out[i].1=out[i].1.saturating_add(EMPHASIS_TAIL_MS).max(out[i].0+EMPHASIS_HOLD_MS).min(next).min(at);
+    }
+    out.retain(|(a,b,_)|b>a);out
+}
 
 /// A piece's emphasis picks as (start, text, end), in time order. A pick is {text, start_ms, end_ms}
 /// (step 4) or a bare start time of a timed word (older drafts).
@@ -937,11 +1030,53 @@ fn speech_story(story: &Story, document: &Value) -> Story {
     Story { pieces: story.pieces.iter().map(|p| without_picks(p, document)).collect(), ..story.clone() }
 }
 
+/// Defaults shared with the style panel; no entrance animation until explicitly chosen.
+fn default_style(role: &str) -> Value {
+    match role {
+        // Nina orange line: (1, 0.5, 0), size 24 under a white 21 (about 1.14x), just below the white line
+        "emphasis" => serde_json::json!({"font":"family:DB Heavent","size":143,"color":"#ff8000","x":50,"y":81,"outline":4,"shadow":1}),
+        "english" => serde_json::json!({"font":"system","size":47,"color":"#ececf1","x":50,"y":90,"outline":2}),
+        _ => serde_json::json!({"font":"family:DB Heavent","size":125,"color":"#ececf1","x":50,"y":75,"outline":4,"shadow":1}),
+    }
+}
 /// Step 4's speech style; a draft that never opened its style panel uses that panel's defaults.
-pub fn speech_style(document: &Value) -> Value {
-    match &document["text_styles"]["speech"] {
+pub fn speech_style(document: &Value) -> Value { text_style(document,"speech") }
+pub fn text_style(document: &Value, role: &str) -> Value {
+    match &document["text_styles"][role] {
         style @ Value::Object(_) => style.clone(),
-        _ => serde_json::json!({"font":"system","size":64,"color":"#ffffff","x":50,"y":69}),
+        _ => default_style(role),
+    }
+}
+/// The same final speech cues feed video and native CapCut output. Emphasised words are removed once.
+pub fn speech_cues(story: &Story, document: &Value) -> Vec<(u64,u64,String)> {
+    if !document["text_roles"].as_array().is_some_and(|roles|roles.iter().any(|r|r=="speech")) {return vec![];}
+    let spoken=speech_story(story,document);
+    let style=speech_style(document);
+    let mut cues=vec![]; let mut at=0;
+    for piece in speech_pieces(&spoken,document) {
+        let rows=layout_lines(&piece,&style);
+        let rows=if style["enter"].as_str()==Some("words") {karaoke_from(&piece,rows)} else {rows};
+        cues.extend(rows.into_iter().map(|(a,b,text)|(at+a,at+b,text)));
+        at+=piece.end_ms-piece.start_ms;
+    }
+    // A zero-length ASR token can repeat the next word at the same clock. Draw that event once.
+    let mut unique: Vec<(u64,u64,String)>=Vec::new();
+    for (a,b,text) in cues {
+        if let Some(last)=unique.last_mut().filter(|last|last.0==a&&last.2==text) {last.1=last.1.max(b);}
+        else {unique.push((a,b,text));}
+    }
+    hold_for_emphasis(&mut unique, &emphasis_lines(story, document));
+    unique
+}
+/// How long before an emphasis starts its setup line may have ended and still be held for it, ms.
+pub const STACK_REACH_MS: u64 = 1500;
+/// Nina's stacked cards (Nina 16-19: 132 of 132 orange cards sit under a white one): the white setup line
+/// stays on until the orange punch line said after it ends, and both go together; never into the next line.
+pub fn hold_for_emphasis(cues: &mut [(u64,u64,String)], emphasis: &[(u64,u64,String)]) {
+    for &(a,b,_) in emphasis {
+        let Some(i)=cues.iter().rposition(|c|c.0<=a&&a<=c.1+STACK_REACH_MS) else {continue};
+        let next=cues.get(i+1).map_or(u64::MAX,|c|c.0);
+        cues[i].1=cues[i].1.max(b.min(next));
     }
 }
 /// Speech as one-line subtitles in output time (empty when speech is not ticked), and the
@@ -955,11 +1090,10 @@ pub fn speech_lines(story: &Story, document: &Value) -> (Vec<(u64, u64, String)>
         .collect();
     let mut out = Vec::new();
     if roles.contains(&"speech") {
-        let size = speech_style(document)["size"].as_f64().unwrap_or(64.0);
-        let limit = (0.86 * WIDTH as f64 / (size * 0.55)).max(4.0) as usize;
+        let style = speech_style(document);
         let mut at = 0;
-        for p in &join_short_lines(&story.pieces) {
-            for (start, end, text) in lines(p, limit) {
+        for p in &speech_pieces(story, document) {
+            for (start, end, text) in layout_lines(p, &style) {
                 out.push((at + start, at + end, text));
             }
             at += p.end_ms - p.start_ms;
@@ -980,17 +1114,13 @@ pub const BACKCHANNEL: [&str; 16] = ["ใช่", "อืม", "อือ", "เ
 /// A piece of one short word ("การ" said before a pause, P'Ohm 23 Oct) joins the piece it runs straight into,
 /// same video and no gap, so it is not on screen alone; the joined line is split again if it is too long.
 pub fn join_short_lines(pieces: &[Piece]) -> Vec<Piece> {
-    let short = |p: &Piece| {
-        let t = p.text.trim();
-        !t.is_empty() && !t.contains(char::is_whitespace) && t.chars().count() <= SHORT_LINE && !BACKCHANNEL.contains(&t)
-    };
     let mut out: Vec<Piece> = Vec::new();
     for p in pieces {
         match out.last_mut() {
             // the next piece of the same video; the dead air between them is cut, so the joined piece is
             // as long as the two together and the second one's words move up by the gap
             // pieces of one line (its inner dead air cut out) read as that one line
-            Some(last) if last.source == p.source && p.start_ms >= last.end_ms && (short(last) || last.segment == p.segment) => {
+            Some(last) if last.source == p.source && p.start_ms >= last.end_ms && last.segment == p.segment => {
                 let gap = p.start_ms - last.end_ms;
                 if last.segment != p.segment {
                     last.text = format!("{}{}", last.text.trim_end(), p.text.trim_start());
@@ -1002,6 +1132,9 @@ pub fn join_short_lines(pieces: &[Piece]) -> Vec<Piece> {
                     last.text = text;
                 }
                 last.words.extend(p.words.iter().map(|(w, from, to)| (w.clone(), from - gap, to - gap)));
+                // A camera boundary may include the same timed word on both sides; do not speak it twice.
+                // Distinct repetitions have different clocks and remain separate.
+                let mut seen=std::collections::HashSet::new();last.words.retain(|word|seen.insert(word.clone()));
                 last.end_ms += p.end_ms - p.start_ms;
                 last.timed &= p.timed;
             }
@@ -1010,6 +1143,108 @@ pub fn join_short_lines(pieces: &[Piece]) -> Vec<Piece> {
     }
     out
 }
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct TranslationRange {
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub output_start_ms: u64,
+    pub output_end_ms: u64,
+}
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct TranslationCue {
+    pub id: String,
+    pub story_id: String,
+    pub segment_id: String,
+    pub occurrence: u32,
+    pub source_id: String,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub output_start_ms: u64,
+    pub output_end_ms: u64,
+    pub text: String,
+    pub timing: &'static str,
+    pub ranges: Vec<TranslationRange>,
+}
+#[derive(Clone, Debug, Serialize)]
+pub struct TranslationManifest {
+    pub schema_version: u8,
+    pub input_revision: String,
+    pub cues: Vec<TranslationCue>,
+    pub legacy_count: usize,
+    pub timing_verified: bool,
+    pub timing_warning_count: usize,
+}
+fn cue_digest(value: &impl Serialize) -> String {
+    let bytes=serde_json::to_vec(value).expect("serializable caption anchors");
+    format!("{:x}",Sha256::digest(bytes))[..16].to_owned()
+}
+/// Full Thai phrases, including highlighted words. The final retained source pieces supply
+/// all clocks; a camera boundary never creates a new word or an arbitrary translation page.
+pub fn translation_cues(story: &Story, document: &Value) -> Vec<TranslationCue> {
+    struct Run { source:usize, segment:String, occurrence:u32, source_end:u64, at:u64, end:u64, text:String, timed:bool,
+        words:Vec<(String,u64,u64)>, identities:HashMap<(String,u64,u64),usize> }
+    let mut runs:Vec<Run>=vec![];
+    let mut occurrences:HashMap<(usize,String),u32>=HashMap::new();
+    let mut slices:Vec<(usize,u64,&Piece)>=vec![];
+    let mut at=0;
+    for p in &story.pieces {
+        let length=p.end_ms-p.start_ms;
+        slices.push((p.source,at,p));
+        if !runs.last().is_some_and(|r|r.source==p.source&&r.segment==p.segment&&p.start_ms>=r.source_end) {
+            let occurrence=occurrences.entry((p.source,p.segment.clone())).or_default();*occurrence+=1;
+            runs.push(Run{source:p.source,segment:p.segment.clone(),occurrence:*occurrence,source_end:p.end_ms,at,end:at+length,text:p.text.clone(),timed:p.timed,
+                words:vec![],identities:HashMap::new()});
+        }
+        let run=runs.last_mut().unwrap();run.end=at+length;run.source_end=p.end_ms;
+        if run.text!=p.text && !p.text.trim().is_empty() {join(&mut run.text,p.text.trim());}
+        for (word,a,b) in &p.words {
+            if *a>p.end_ms || *b<p.start_ms {continue;}
+            let from=at+(*a).clamp(p.start_ms,p.end_ms)-p.start_ms;
+            let to=at+(*b).clamp(p.start_ms,p.end_ms)-p.start_ms;
+            let key=(word.clone(),*a,*b);
+            if let Some(&index)=run.identities.get(&key) {run.words[index].1=run.words[index].1.min(from);run.words[index].2=run.words[index].2.max(to);}
+            else {run.identities.insert(key,run.words.len());run.words.push((word.clone(),from,to));}
+        }
+        at+=length;
+    }
+    let style=speech_style(document);
+    let mut cues=vec![];
+    for run in runs {
+        let piece=Piece{source:run.source,start_ms:run.at,end_ms:run.end,text:run.text,words:run.words,timed:run.timed,segment:run.segment.clone()};
+        for (a,b,text) in layout_lines(&piece,&style) {
+            let (start,end)=(run.at+a,run.at+b);
+            let mut ranges:Vec<TranslationRange>=vec![];
+            for (source,from,p) in &slices {
+                if *source!=run.source || p.segment!=run.segment {continue;}
+                let left=start.max(*from);let right=end.min(from+p.end_ms-p.start_ms);
+                if right<=left {continue;}
+                let source_start=p.start_ms+left-from;let source_end=p.start_ms+right-from;
+                if let Some(last)=ranges.last_mut().filter(|r|r.end_ms==source_start&&r.output_end_ms==left) {last.end_ms=source_end;last.output_end_ms=right;}
+                else {ranges.push(TranslationRange{start_ms:source_start,end_ms:source_end,output_start_ms:left,output_end_ms:right});}
+            }
+            let (Some(first),Some(last))=(ranges.first(),ranges.last()) else {continue;};
+            let source=source_id(document,&story.sources[run.source]).unwrap_or("").to_owned();
+            let id=format!("e_{}",cue_digest(&(&story.id,&source,run.source,&run.segment,run.occurrence,first.start_ms,last.end_ms,&text)));
+            cues.push(TranslationCue{id,story_id:story.id.clone(),segment_id:run.segment.clone(),occurrence:run.occurrence,source_id:source,
+                start_ms:first.start_ms,end_ms:last.end_ms,output_start_ms:start,output_end_ms:end,text,
+                timing:if piece.words.is_empty(){"segment"}else{"words"},ranges});
+        }
+    }
+    cues
+}
+/// Saved-draft anchors used by the AI round, browser, native CapCut and video export.
+pub fn translation_manifest(document: &Value, jobs: &[Job]) -> Result<TranslationManifest,String> {
+    let stories=plan(document,jobs)?;
+    let selected:std::collections::HashSet<_>=stories.iter().flat_map(|story|story.pieces.iter().map(|p|p.segment.as_str())).collect();
+    let timing_warning_count=spoken(document,jobs).iter().filter(|(id,_)|selected.contains(id.as_str())).map(|(_,s)|{
+        if s.words.is_empty()&&!s.text.trim().is_empty(){return 1;}
+        s.words.iter().enumerate().filter(|(i,(_,a,b))|b<=a||b.saturating_sub(*a)>=1000||*a<s.start_ms||*b>s.end_ms||(*i>0&&*a<s.words[*i-1].2)).count()
+    }).sum();
+    let cues:Vec<_>=stories.iter().flat_map(|story|translation_cues(story,document)).collect();
+    let input_revision=cue_digest(&(1,&cues));
+    Ok(TranslationManifest{schema_version:1,input_revision,cues,legacy_count:document["subtitles"].as_object().map_or(0,|v|v.len()),timing_verified:false,timing_warning_count})
+}
+
 /// The step 4 subtitle layer (lines translated by a chat AI, by segment id), each line on screen for its
 /// pieces in output time; empty when the layer is not ticked or nothing was translated.
 pub fn subtitle_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)> {
@@ -1019,6 +1254,12 @@ pub fn subtitle_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)
     let mut out = Vec::new();
     if !ticked {
         return out;
+    }
+    if document["english_cues"].is_object() {
+        let cues=translation_cues(story,document);
+        let texts=&document["english_cues"]["translations"];
+        if cues.iter().any(|cue|!texts[&cue.id].as_str().is_some_and(|s|!s.trim().is_empty())) {return vec![];}
+        return cues.into_iter().map(|cue|(cue.output_start_ms,cue.output_end_ms,texts[&cue.id].as_str().unwrap().trim().to_owned())).collect();
     }
     let mut at = 0;
     for p in &story.pieces {
@@ -1032,6 +1273,8 @@ pub fn subtitle_lines(story: &Story, document: &Value) -> Vec<(u64, u64, String)
         }
         at += length;
     }
+    // Preserve legacy translations on their known segment spans. Splitting their English
+    // words by elapsed-time percentages would invent speech alignment.
     out
 }
 /// Step 5's headline items that have text; each stays on screen for the whole clip.

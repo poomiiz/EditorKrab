@@ -3,6 +3,38 @@ const clock=ms=>`${String(Math.floor(ms/60000)).padStart(2,'0')}:${(ms/1000%60).
 const kinds={headline:'หัวคลิป',super:'ข้อความซ้อน',subtitle:'ซับ',emphasis:'คำเน้น',english:'ซับอังกฤษ',graphic:'กราฟิก'};
 const levels={critical:'ร้ายแรง',moderate:'ปานกลาง',minor:'เล็กน้อย'};
 const order=['critical','moderate','minor'];
+export function validEnglishCues(value){
+ if(value===undefined)return true;
+ if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!['input_revision','translations'].includes(k))||!/^[a-f0-9]{16}$/.test(value.input_revision || '')||!value.translations||typeof value.translations!=='object'||Array.isArray(value.translations))return false;
+ const items=Object.entries(value.translations);return items.length<=20000&&items.every(([id,text])=>/^e_[a-f0-9]{16}$/.test(id)&&typeof text==='string'&&text.trim().length>0&&text.length<=60&&!/[\u0000-\u001f\u007f]/u.test(text));
+}
+// Only transfer clocks measured for complete source tokens. Missing text and token splits
+// require review; interpolating characters would manufacture word-level precision.
+const clockText=text=>String(text || '').normalize('NFKC').replace(/[\s\p{P}\p{S}]/gu,'').toLocaleLowerCase();
+export function alignWordClocks(oldWords,fresh,start,end){
+ const tokens=fresh.filter(w=>clockText(w.text));
+ if(!oldWords.length || !tokens.length)return null;
+ let joined='',bounds=new Map();
+ for(const [i,w] of tokens.entries()){
+  if(!Number.isFinite(w.start_ms)||!Number.isFinite(w.end_ms)||w.end_ms<=w.start_ms||w.start_ms<start||w.end_ms>end||(i&&w.start_ms<tokens[i-1].end_ms))return null;
+  bounds.set(joined.length,{...bounds.get(joined.length),start:w.start_ms});joined+=clockText(w.text);bounds.set(joined.length,{...bounds.get(joined.length),end:w.end_ms});
+ }
+ if(oldWords.map(w=>clockText(w.text)).join('')!==joined)return null;
+ const result=[];let cursor=0,lastEnd=start;
+ for(const word of oldWords){const text=clockText(word.text);if(!text)return null;let at=joined.indexOf(text,cursor),found=null;
+  while(at>=0){const a=bounds.get(at)?.start,b=bounds.get(at+text.length)?.end;
+   if(a!==undefined&&b!==undefined&&a>=lastEnd&&b>a){found=[a,b];break;}at=joined.indexOf(text,at+1);}
+  if(!found)return null;result.push(found);lastEnd=found[1];cursor=at+text.length;
+ }
+ return result;
+}
+export function wordClockIssues(lines,offset=0){
+ return lines.flatMap(line=>!line.words?.length&&line.text?.trim()?[{id:line.segment_id || line.id,text:line.text,start_ms:line.start_ms,end_ms:line.end_ms,problem:'ท่อนนี้ยังไม่มีเวลาคำ'}]:(line.words || []).flatMap((w,i)=>{
+  const span=w.end_ms-w.start_ms,previous=line.words[i-1];
+  const problem=!Number.isFinite(w.start_ms)||!Number.isFinite(w.end_ms)?'ไม่มีเวลาคำ':span<=0?'ไม่มีระยะเวลาคำ':(Number.isFinite(line.start_ms)&&w.start_ms<line.start_ms+offset)||(Number.isFinite(line.end_ms)&&w.end_ms>line.end_ms+offset)?'คำเลยขอบท่อน':previous&&w.start_ms<previous.end_ms?'เวลาคำซ้อนกัน':span>=1000?'คำค้างเกิน 1 วินาที':null;
+  return problem?[{id:line.segment_id || line.id,text:w.text,start_ms:w.start_ms,end_ms:w.end_ms,problem}]:[];
+ }));
+}
 export function createTextQc({texts,summary,list,listen,edit,go,verdicts=()=>{}}){
  let lastKey='',running=false,again=false;
  async function run(force=false){
