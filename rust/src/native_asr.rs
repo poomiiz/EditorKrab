@@ -303,6 +303,50 @@ pub async fn run_progress(
     .await
 }
 
+/// The whole video's sound as a 16 kHz mono wav (what the speech engines read), made once per source file and kept
+/// beside the scratch folders, named by the file's SHA-256. A video with no audio track fails here, as before.
+async fn whole_audio(
+    config: &Config,
+    source: &Artifact,
+    ffmpeg: &Path,
+    cancel: &watch::Receiver<bool>,
+) -> Result<PathBuf, String> {
+    let dir = config.workspace.join("audio");
+    std::fs::create_dir_all(&dir).map_err(|_| "transcription_workspace_unavailable")?;
+    let whole = dir.join(format!("{}.wav", source.sha256));
+    // a finished wav is complete by construction: it is written under another name and renamed
+    if std::fs::metadata(&whole).is_ok_and(|m| m.len() > 44) {
+        return Ok(whole);
+    }
+    let part = dir.join(format!(
+        "{}.part-{}-{}.wav",
+        source.sha256,
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos())
+    ));
+    let mut extract = Command::new(ffmpeg);
+    extract
+        .args(["-nostdin", "-v", "error", "-i"])
+        .arg(&source.path)
+        .args(["-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-n"])
+        .arg(&part);
+    let made = command(extract, cancel.clone(), config.timeout).await;
+    if let Err(e) = made {
+        let _ = std::fs::remove_file(&part);
+        return Err(e);
+    }
+    if std::fs::rename(&part, &whole).is_err() {
+        // another chunk finished the same wav first
+        let _ = std::fs::remove_file(&part);
+        if !std::fs::metadata(&whole).is_ok_and(|m| m.len() > 44) {
+            return Err("transcription_workspace_unavailable".into());
+        }
+    }
+    Ok(whole)
+}
+
 pub async fn run_cached(
     config: &Config,
     source_path: &Path,
@@ -433,33 +477,24 @@ pub async fn run_cached(
     let scratch = Scratch::create(&config.workspace)?;
     let audio = scratch.0.join("audio.wav");
     let prefix = scratch.0.join("transcript");
+    if let Some(p) = &progress {
+        let _ = p.send("extracting");
+    }
+    // the video is read once into a 16 kHz mono wav; every chunk is cut from that wav
+    let whole = whole_audio(config, &source, &ffmpeg.path, &cancel).await?;
     let mut extract = Command::new(&ffmpeg.path);
     extract
         .args(["-nostdin", "-v", "error", "-ss"])
         .arg(format!("{:.3}", context.start_ms as f64 / 1000.0))
         .arg("-i")
-        .arg(&source.path)
+        .arg(&whole)
         .arg("-t")
         .arg(format!(
             "{:.3}",
             (context.end_ms - context.start_ms) as f64 / 1000.0
         ))
-        .args([
-            "-map",
-            "0:a:0",
-            "-vn",
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            "-c:a",
-            "pcm_s16le",
-            "-n",
-        ])
+        .args(["-map", "0:a:0", "-c:a", "pcm_s16le", "-n"])
         .arg(&audio);
-    if let Some(p) = &progress {
-        let _ = p.send("extracting");
-    }
     command(extract, cancel.clone(), config.timeout).await?;
     if let Some(p) = &progress {
         let _ = p.send("transcribing");
