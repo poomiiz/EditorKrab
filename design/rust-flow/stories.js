@@ -1011,7 +1011,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  // only another project's reply is refused: every pick is checked by its words against the line as it is now
  // (validateEmphasisSelections), so re-timed words (24 Oct: fitted to speech) do not make a good reply stale
  function checkReply(value){return value?.project_id!==project?'คำตอบเป็นร่างเก่า คัดลอกคำสั่งใหม่แล้วให้ AI ตอบอีกครั้ง':'';}
- function emphasisText(){
+ function emphasisText(part=false){
   const sent=new Map(keptLines().map(({line})=>[line.segment_id,line]));
   const packet={schema_version:3,step:'emphasis',project_id:project,input_revision:captionRevision(),speakers_keep:read().speakers_keep ?? null,
    stories:(model()?.stories || []).filter(s=>s.kept.length).map(s=>({title:s.title,lines:s.kept.map(k=>{const l=sent.get(k.segment_id);return {id:l.segment_id,text:l.text,start_ms:l.start_ms,end_ms:l.end_ms,source_id:l.source_id,speakers:(read().voice?.[l.source_id]?.turns || []).filter(t=>t.start_ms<l.end_ms&&t.end_ms>l.start_ms),words:(l.words || []).map((w,i)=>({id:'w'+i,...w,has_duration:w.end_ms>w.start_ms}))};})})),
@@ -1028,7 +1028,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    '5. เลือกด้วย word_ids ที่ติดกันจาก words เท่านั้น ให้รวมรหัสจนได้คำหรือชื่อเต็ม ห้ามแต่งคำ แปล หรือเดาเวลา ถ้าคำถอดผิดให้ข้ามไป',
    'คำที่ has_duration=false รวมได้เฉพาะด้านในระหว่างคำที่มีเวลาจริง ถ้าอยู่ต้นหรือท้ายวลีให้ข้าม ห้ามเดาเวลา',
    '6. คืน project_id และ input_revision ตามที่ให้ ห้ามแก้รหัส ถ้าไม่มีคำเหมาะสมคืน emphasis เป็น {}',
-   'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย',''].join('\n')+'\n'+JSON.stringify(packet,null,1);
+   ...(part?[]:['ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย']),''].join('\n')+'\n'+JSON.stringify(packet,null,1);
  }
  function pasted(){
   const raw=$('emphasisAnswer').value.trim();if(!raw)return {error:''};
@@ -1045,7 +1045,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  }
  // step 4 makes two layers with a chat AI: emphasis words, and subtitles translated to English. An empty layer
  // shows its "create" button in the middle of its row; pressing it opens the send-and-paste box there
- function subtitleText(){
+ function subtitleText(part=false){
   if(!manifestReady())throw Error(manifestError || 'รอบันทึกงานและคำนวณช่วงซับให้เสร็จก่อน');
   const packet={schema_version:4,step:'subtitles',project_id:project,input_revision:englishManifest.input_revision,language:'en',
    cues:englishManifest.cues.map(({id,story_id,text,output_start_ms,output_end_ms,timing})=>({id,story_id,text,start_ms:output_start_ms,end_ms:output_end_ms,timing})),
@@ -1056,7 +1056,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    '2. แปลตามความหมาย เป็นภาษาพูดที่เป็นธรรมชาติ ไม่ต้องแปลคำเติม เช่น อ่ะ อืม เออ',
    '3. ชื่อเฉพาะและชื่อแบรนด์เขียนแบบที่คนพูดอังกฤษใช้',
    '4. อ้างแต่ละช่วงด้วย id ที่ให้ คืน project_id และ input_revision ให้ตรง ห้ามรวม เพิ่ม หรือข้ามช่วง ห้ามเดาหรือเปลี่ยนเวลา',
-   'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย',''].join('\n')+'\n'+JSON.stringify(packet,null,1);
+   ...(part?[]:['ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย']),''].join('\n')+'\n'+JSON.stringify(packet,null,1);
  }
  function checkSubtitles(){const p=pasted();return p.value?englishFrom(p.value):p;}
  function englishFrom(value){
@@ -1070,7 +1070,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    // only the stand-out lines); lines that were not sent keep theirs
    apply:c=>{const sent=new Set(keptLines().map(({line})=>line.segment_id));
     for(const issue of c.issues || [])sent.delete(issue.id);
-    write(d=>{const all=Object.fromEntries(Object.entries(d.emphasis || {}).filter(([id])=>!sent.has(id)));d.emphasis={...all,...c.picked};if(d.caption_reply_drafts)delete d.caption_reply_drafts.emphasis;});}},
+    write(d=>{const all=Object.fromEntries(Object.entries(d.emphasis || {}).filter(([id])=>!sent.has(id)));d.emphasis={...all,...c.picked};if(d.caption_reply_drafts)delete d.caption_reply_drafts.emphasis;
+    if(!(d.text_roles || []).includes('emphasis'))d.text_roles=[...(d.text_roles || []),'emphasis'];});}},
   english:{make:'สร้างซับอังกฤษ',title:'วางคำตอบซับอังกฤษจาก AI',text:subtitleText,check:checkSubtitles,file:'editorkrab-ซับอังกฤษ.txt',
    has:()=>!!read().english_cues||Object.keys(read().subtitles || {}).length>0,
    apply:c=>write(d=>{d.english_cues={input_revision:englishManifest.input_revision,translations:c.picked};d.subtitle_language='en';
@@ -1078,10 +1079,10 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   // one trip to the chat for both layers (P'Ohm 24 Oct: too many copy-paste rounds)
   both:{make:'ให้ AI ทำคำเน้นและซับอังกฤษ',title:'วางคำตอบจาก AI (คำเน้นและซับอังกฤษ)',file:'editorkrab-คำเน้นและอังกฤษ.txt',
    has:()=>rounds.emphasis.has()||rounds.english.has(),
-   text:()=>{const only=t=>t.replace('ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n','');
+   text:()=>{
     return ['ทำ 2 งานแล้วตอบในคำตอบเดียว',
      'ตอบกลับเป็น JSON ก้อนเดียวอย่างเดียว ไม่ต้องมีคำอธิบาย: {"emphasis_reply": คำตอบงานที่ 1 ตาม response_schema ของงานที่ 1, "english_reply": คำตอบงานที่ 2 ตาม response_schema ของงานที่ 2}',
-     '','=== งานที่ 1: คำเน้น ===',only(emphasisText()),'','=== งานที่ 2: ซับอังกฤษ ===',only(subtitleText())].join('\n');},
+     '','=== งานที่ 1: คำเน้น ===',emphasisText(true),'','=== งานที่ 2: ซับอังกฤษ ===',subtitleText(true)].join('\n');},
    check:()=>{const p=pasted();if(!p.value)return p;
     if(!p.value.emphasis_reply||!p.value.english_reply)return {error:'คำตอบต้องมีทั้ง emphasis_reply และ english_reply ลองคัดลอกคำตอบใหม่ทั้งหมด'};
     const e=emphasisFrom(p.value.emphasis_reply),s=englishFrom(p.value.english_reply);
@@ -1092,7 +1093,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  let round='emphasis';const opened={emphasis:false,english:false,both:false};
  function say(text,ok){$('emphasisStatus').textContent=text;$('emphasisStatus').dataset.state=ok?'ok':'error';$('emphasisStatus').hidden=false;}
  function action(label,icon,run,needsEdit){const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.icon=icon;b.onclick=run;if(needsEdit)b.disabled=!editable();return b;}
- async function copyRound(key){try{await navigator.clipboard.writeText(rounds[key].text());say(`คัดลอก ${key==='english'?englishManifest.cues.length:keptLines().length} ช่วงแล้ว วางในแชท AI ได้เลย`,true);}catch(error){say(error.message==='รอบันทึกงานและคำนวณช่วงซับให้เสร็จก่อน'||error.message===manifestError?error.message:'คัดลอกไม่ได้ ลองกดอีกครั้ง',false);loadManifest();}}
+ async function copyRound(key){try{await navigator.clipboard.writeText(rounds[key].text());say(key==='both'?'คัดลอกแล้ว วางในแชท AI ได้เลย':`คัดลอก ${key==='english'?englishManifest.cues.length:keptLines().length} ช่วงแล้ว วางในแชท AI ได้เลย`,true);}catch(error){say(error.message==='รอบันทึกงานและคำนวณช่วงซับให้เสร็จก่อน'||error.message===manifestError?error.message:'คัดลอกไม่ได้ ลองกดอีกครั้ง',false);loadManifest();}}
  function downloadRound(key){try{const url=URL.createObjectURL(new Blob([rounds[key].text()],{type:'text/plain;charset=utf-8'}));
   const a=document.createElement('a');a.href=url;a.download=rounds[key].file;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){say(error.message,false);loadManifest();}}
  function openRound(key){round=key;$('emphasisTitle').textContent=rounds[key].title;$('emphasisAnswer').value=read().caption_reply_drafts?.[key] || sessionStorage.getItem('caption-reply:'+project+':'+key) || '';checkEmphasisUi();$('emphasisDialog').showModal();}
@@ -1128,7 +1129,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  $('emphasisAnswer').oninput=()=>{try{sessionStorage.setItem('caption-reply:'+project+':'+round,$('emphasisAnswer').value);}catch(_){}checkEmphasisUi();};
  $('emphasisApply').onclick=event=>{
   const c=rounds[round].check();if(!c.picked){event.preventDefault();return;}
-  opened[round]=false;sessionStorage.removeItem('caption-reply:'+project+':'+round);rounds[round].apply(c);say(c.note,true);drawLayerActions();
+  opened[round]=false;for(const k of round==='both'?['both','emphasis','english']:[round])sessionStorage.removeItem('caption-reply:'+project+':'+k);rounds[round].apply(c);say(c.note,true);drawLayerActions();
  };
  // leaving step 3: stop the preview and take its line off the subtitle frame
  function stop(){queue=[];if(!video.paused)video.pause();caption('');emphasis('');subtitle('');

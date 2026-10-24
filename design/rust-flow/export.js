@@ -1,5 +1,5 @@
 // Step 6: asks the app to build one 9:16 MP4 per AI story and reports progress until the files exist.
-const messages={plan_missing:'ยังไม่มีคำตอบจาก AI กลับไปวางคำตอบที่ขั้น 3',plan_invalid:'คำตอบจาก AI อ่านไม่ได้ กลับไปวางใหม่ที่ขั้น 3',plan_has_no_stories:'คำตอบจาก AI ไม่มีเรื่องให้ตัด กลับไปวางใหม่ที่ขั้น 3',
+const messages={plan_missing:'ยังไม่มีคำตอบจาก AI กลับไปวางคำตอบที่ขั้น 2',plan_invalid:'คำตอบจาก AI อ่านไม่ได้ กลับไปวางใหม่ที่ขั้น 2',plan_has_no_stories:'คำตอบจาก AI ไม่มีเรื่องให้ตัด กลับไปวางใหม่ที่ขั้น 2',
  segment_unknown:'คำตอบจาก AI อ้างช่วงพูดที่ไม่มีแล้ว ส่งไฟล์ให้ AI ใหม่ที่ขั้น 2',story_empty:'มีเรื่องที่ไม่มีช่วงพูด ส่งไฟล์ให้ AI ใหม่ที่ขั้น 2',source_missing:'หาไฟล์วิดีโอต้นฉบับไม่เจอ ใส่วิดีโอใหม่ที่ขั้น 1',
  transcription_not_configured:'ยังไม่มีตัวถอดเสียง',output_folder:'สร้างโฟลเดอร์เก็บคลิปไม่ได้',ffmpeg_failed:'สร้างวิดีโอไม่สำเร็จ',export_check_failed:'ตรวจวิดีโอที่ได้แล้วไม่ผ่าน จึงไม่ได้บันทึก',not_found:'ยังไม่ได้บันทึกงาน รอสักครู่แล้วลองใหม่',
  capcut_not_found:'ไม่เจอ CapCut ในเครื่องนี้ ติดตั้งและเปิด CapCut หนึ่งครั้งก่อน',capcut_write:'เขียนโปรเจกต์ลงโฟลเดอร์ของ CapCut ไม่ได้',source_unreadable:'อ่านไฟล์วิดีโอต้นฉบับไม่ได้',pause_analysis_stale:'จังหวะตัดยังคำนวณไม่ครบ กลับขั้นตัดต่อแล้วรอให้เสร็จ'};
@@ -15,7 +15,7 @@ export function createExport({project,saved,planReady,analysisReady=()=>true,che
   $('exportStart').classList.toggle('primary',!done);$('exportReveal').classList.toggle('primary',done);
   $('exportCancel').hidden=!running;
   $('exportProgress').hidden=!running;$('exportProgress').value=status.progress||0;
-  $('exportStatus').textContent=running?`กำลังสร้างคลิป ${status.story||1}/${status.stories} · ${Math.floor(100*(status.progress||0))}%`:done?`สร้างเสร็จ ${status.files.length} คลิป`:status.state==='cancelled'?'ยกเลิกแล้ว':!ready?'วางคำตอบจาก AI ที่ขั้น 3 ก่อน':'';
+  $('exportStatus').textContent=running?`กำลังสร้างคลิป ${status.story||1}/${status.stories} · ${Math.floor(100*(status.progress||0))}%`:done?`สร้างเสร็จ ${status.files.length} คลิป`:status.state==='cancelled'?'ยกเลิกแล้ว':!ready?'วางคำตอบจาก AI ที่ขั้น 2 ก่อน':'';
   const message=error||(status.state==='failed'?exportMessage(status.error):'');$('exportError').textContent=message;$('exportError').hidden=!message;
   if(!running&&!done&&ready&&!analysisReady())$('exportStatus').textContent='กำลังคำนวณจังหวะตัดและซูม';
   const skipped=(status.skipped||[]).map(r=>roleNames[r]||r);$('exportSkipped').hidden=!skipped.length;$('exportSkipped').textContent=skipped.length?`ยังขาด ${skipped.join(' และ ')} ในวิดีโอ`:'';

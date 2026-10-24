@@ -618,7 +618,7 @@ textarea{font-size:.75rem}
 /* an empty AI layer: a dark band over its row with the create button, then the send-and-paste box, in the middle */
 #captionTransport>#layerActions{grid-column:2;grid-row:2;position:relative;pointer-events:none;z-index:3}
 .layer-action{position:absolute;left:1px;right:1px;display:flex;align-items:center;justify-content:center;gap:var(--space-sm);background:oklch(12% .02 var(--h) / .86);border-top:1px solid var(--line);pointer-events:auto}
-.layer-action[data-role=emphasis]{top:64px;height:54px}.layer-action[data-role=english]{top:118px;height:54px}
+.layer-action[data-role=emphasis]{top:64px;height:54px}.layer-action[data-role=english]{top:118px;height:54px}.layer-action[data-role=both]{top:64px;height:108px}
 .layer-action[hidden]{display:none}
 .layer-action>span{font-size:.8125rem;color:var(--txt-sub);margin-right:var(--space-xs)}
 .layer-action button{min-height:36px;padding:0 14px;font-size:.8125rem}
@@ -1116,7 +1116,7 @@ main,.workspace,.stage,.stage-head,.stage-head>div,.stage-body,#editor,#captionH
 <div class="export-panel">
 <p id="exportStatus" class="caption" role="status"></p><ul id="exportChecklist" class="export-checklist"></ul>
 <progress id="exportProgress" max="1" value="0" aria-label="สร้างคลิป" hidden></progress>
-<div class="row"><button id="exportStart" type="button" class="primary" data-icon="cut">สร้างคลิป</button><button id="exportGoPlan" type="button" class="primary" data-go="2" hidden>ไปขั้น 3</button><button id="exportCancel" type="button" hidden data-icon="x">ยกเลิก</button><button id="exportReveal" type="button" hidden data-icon="folder">เปิดโฟลเดอร์</button><button id="capcutStart" type="button" data-icon="external">แก้ต่อใน CapCut</button></div>
+<div class="row"><button id="exportStart" type="button" class="primary" data-icon="cut">สร้างคลิป</button><button id="exportGoPlan" type="button" class="primary" data-go="2" hidden>ไปขั้น 2</button><button id="exportCancel" type="button" hidden data-icon="x">ยกเลิก</button><button id="exportReveal" type="button" hidden data-icon="folder">เปิดโฟลเดอร์</button><button id="capcutStart" type="button" data-icon="external">แก้ต่อใน CapCut</button></div>
 <p id="capcutStatus" class="caption" role="status" hidden></p>
 <p id="exportError" class="field-warning" role="alert" hidden></p>
 <p id="exportSkipped" class="caption" hidden></p>
