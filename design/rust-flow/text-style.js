@@ -22,11 +22,28 @@ export function captionWidth(style={}){
  return Math.max(24,style.align==='left'?1080-edge-x:style.align==='right'?x-edge:2*Math.min(x-edge,1080-edge-x));
 }
 export const captionJoin=(a,b)=>a+(a&&!/[\u0E00-\u0E7F]$/.test(a)&&b&&!/^[\u0E00-\u0E7F]/.test(b)?' ':'')+b;
-export function captionRows(words,style={},maxMs=2200,measure=captionMeasure){
- const rows=[];for(const w of words){const row=rows.at(-1),text=row?.reduce((t,x)=>captionJoin(t,x.text),'') || '',prev=row?.at(-1);
-  // a breath under 650 ms stays inside a card (export.rs PHRASE_PAUSE_MS; Nina 16 cards hold about 17 letters)
-  const phrase=prev&&((w.start_ms-prev.end_ms>=650)||(w.end_ms-row[0].start_ms>maxMs));
-  if(row&&!phrase&&measure(captionJoin(text,w.text),style)<=captionWidth(style)*.96)row.push(w);else rows.push([w]);}
+// maxMs: longest speech one card holds (export.rs CARD_MAX_MS; Nina 16 white cards median 1.9 s, p75 3 s)
+// a breath under 650 ms stays inside a card; a card too long or too wide ends at its widest pause (120 ms+),
+// not before the word that did not fit; a short tail (5 letters or fewer) joins the card before
+// (export.rs card_groups, from Nina 16's timeline transcribed 24 Oct)
+export function captionRows(words,style={},maxMs=3000,measure=captionMeasure){
+ const fits=g=>measure(g.map(x=>x.text).reduce(captionJoin,''),style)<=captionWidth(style)*.96;
+ const rows=[];let cur=[];
+ for(const w of words){
+  if(cur.length){
+   const last=cur.at(-1),pause=w.start_ms-last.end_ms>=650,over=w.end_ms-cur[0].start_ms>maxMs || !fits([...cur,w]);
+   if(pause){rows.push(cur);cur=[];}
+   else if(over){
+    let k=-1,gap=119;for(let i=1;i<cur.length;i++){const g=cur[i].start_ms-cur[i-1].end_ms;if(g>gap || (g===gap&&k>=0)){gap=g;k=i;}}
+    const rest=k>0?[...cur.slice(k),w]:null;
+    if(rest&&fits(rest)&&w.end_ms-rest[0].start_ms<=maxMs){rows.push(cur.slice(0,k));cur=cur.slice(k);}else{rows.push(cur);cur=[];}
+   }
+  }
+  cur.push(w);
+ }
+ if(cur.length)rows.push(cur);
+ if(rows.length>1){const tail=rows.at(-1),prev=rows.at(-2),letters=tail.reduce((n,x)=>n+[...x.text].length,0);
+  if(letters<=5&&tail[0].start_ms-prev.at(-1).end_ms<650&&fits([...prev,...tail])){rows.pop();rows[rows.length-1]=[...prev,...tail];}}
  return rows;
 }
 export function fittedCaptionSize(text,style={},aspect=16/9){

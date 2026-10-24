@@ -22,7 +22,7 @@ fn main() {
                     "source": p.source, "start_ms": p.start_ms, "end_ms": p.end_ms, "segment": p.segment, "text": p.text,
                     "words": p.words, "crop": editorkrab::export::crop_at(document, std::path::Path::new(&story.sources[p.source]), p.start_ms)})).collect::<Vec<_>>(),
                 "cards": editorkrab::export::speech_cues(story, document),
-                "emphasis": editorkrab::export::emphasis_lines(story, document),
+                "emphasis": editorkrab::export::emphasis_cues(story, document),
             })
         })
         .collect();

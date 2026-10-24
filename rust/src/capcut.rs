@@ -274,7 +274,7 @@ pub fn build(
     let mut extra = Vec::new();
     let mut missing_roles = Vec::new();
     for (role,name,index,cues) in [
-        ("emphasis","คำเน้น",14002,export::emphasis_lines(story,document)),
+        ("emphasis","คำเน้น",14002,export::emphasis_cues(story,document)),
         ("english","อังกฤษ",14003,export::subtitle_lines(story,document)),
     ] {
         if cues.is_empty() {

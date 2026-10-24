@@ -652,15 +652,18 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   // the kept letters of each timed word, then display lines that fit the frame, broken like the export
   // (lines() in export.rs): a line holds words while their letters fit `limit`
   const words=[];[...text].forEach((c,i)=>{if(!keep[i])return;const last=words.at(-1);if(last&&last.at===said[i]){last.text+=c;last.end_ms=Math.max(last.end_ms,to[i]);}else words.push({at:said[i],start_ms:said[i],end_ms:to[i],text:c});});
-  const rows=captionRows(words.map(w=>({...w,text:w.text.trim()})).filter(w=>w.text),read().text_styles?.speech || defaults().speech);
+  // grouped on the played clock (dead air inside the line cut out), so a card runs across a cut (export.rs speech_cues)
+  const rows=captionRows(words.map(w=>({...w,text:w.text.trim(),src_end:w.end_ms,start_ms:playedIn(line,w.start_ms),end_ms:playedIn(line,w.end_ms)})).filter(w=>w.text),read().text_styles?.speech || defaults().speech);
   if(!rows.length)return '';
   if(now===null)return rows.flat().map(w=>w.text).reduce(captionJoin,'');
   const row=[...rows].reverse().find(r=>r[0].at<=now);
   // Nina's stack: the white setup line stays on while the orange punch line said after it is on (export.rs hold_for_emphasis)
-  const held=row&&list.length&&pickGroups(line).some(g=>{const a=g[0].start_ms,b=Math.max(g.at(-1).end_ms+EMPHASIS_TAIL_MS,a+EMPHASIS_HOLD_MS);return a>=row[0].at&&a<=row.at(-1).end_ms+1500&&now<b;});
+  const held=row&&list.length&&pickGroups(line).some(g=>{const a=g[0].start_ms,b=Math.max(g.at(-1).end_ms+EMPHASIS_TAIL_MS,a+EMPHASIS_HOLD_MS);return a>=row[0].at&&a<=row.at(-1).src_end+1500&&now<b;});
   // a card stays on until the next one when the gap is a second or less (export.rs CARD_HOLD_MS)
-  const next=row&&rows[rows.indexOf(row)+1]?.[0]?.at,until=row&&(Number.isFinite(next)&&next-row.at(-1).end_ms<=1000?next:row.at(-1).end_ms+180);
+  const next=row&&rows[rows.indexOf(row)+1]?.[0]?.at,last=row?.at(-1).src_end,until=row&&(Number.isFinite(next)&&playedIn(line,next)-playedIn(line,last)<=1000?next:last+180);
   if(!row||(now>=until&&!held))return '';
+  // the orange said under this card stays until the card goes (export.rs emphasis_cues)
+  shownRow={id:line.segment_id,from:row[0].at,until:Math.max(until,held?Infinity:0)};
   return row.filter(w=>!reveal || w.at<=now).map(w=>w.text).reduce(captionJoin,'');
  }
  // The preview and timeline use final playback-time windows, including dead-air removal.
@@ -673,7 +676,12 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   return emphasisCueWindows(pieces);
  }
  function playbackAt(story,now){let at=0;for(const line of story.kept){if(now>=line.start_ms&&now<line.end_ms)return at+now-line.start_ms-inner(line).reduce((n,[a,b])=>n+Math.max(0,Math.min(now,b)-a),0);at+=playLength(line);}return -1;}
- function emphasisAt(story,said,now){const at=playbackAt(story,now);return emphasisTimeline(story).find(x=>x.start_ms<=at&&at<x.end_ms)?.text || '';}
+ let shownRow=null;
+ function emphasisAt(story,said,now){const at=playbackAt(story,now);const on=emphasisTimeline(story).find(x=>x.start_ms<=at&&at<x.end_ms)?.text;if(on)return on;
+  // after its own words, an orange card stays while the white card it sits under is still on (Nina 16)
+  if(!said || shownRow?.id!==said.segment_id || now>=shownRow.until)return '';
+  const g=pickGroups(said).filter(g=>g[0].start_ms>=shownRow.from-150&&g[0].start_ms<=now).at(-1);
+  return g?g.map(x=>x.text).reduce(captionJoin,''):'';}
  const SHORT=4,BACKCHANNEL=new Set(['ใช่','อืม','อือ','เออ','อ๋อ','อ้อ','เฮ้ย','ค่ะ','ครับ','จ้ะ','จ้า','โห','ว้าว','หา','ฮะ','อ่าว']);
  // chips: each timed word, split only when the dictionary cuts it cleanly ("ยกตัวอย่าง" -> "ยก|ตัวอย่าง");
  // splitting the whole line cut loan words apart ("เจน|เทิ|ลม|อนส|เต|อร์")
@@ -936,7 +944,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   // while a line plays, an empty box stays empty (a no-break space) instead of falling back to the sample text
   const shown=l=>(l.words?.length?speechText(l,now,wordByWord&&l===said):l.text) || '';
   // Each transcript cue keeps its own beat; never preview words from the next speaker/cue.
-  caption(!said?'\u00a0':shown(said) || '\u00a0');
+  shownRow=null;caption(!said?'\u00a0':shown(said) || '\u00a0');
   const held=story?emphasisAt(story,said,now):'';
   emphasis(held || '\u00a0');
   const occurrence=queued&&said===queued&&!editView?.showCut?{segment_id:queued.segment_id,occurrence:story.kept.slice(0,activeIndex+1).filter(l=>l.segment_id===queued.segment_id&&l.source_id===queued.source_id).length}:null;

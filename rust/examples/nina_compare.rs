@@ -15,7 +15,7 @@ fn main() {
     for story in editorkrab::export::plan(document, &jobs).unwrap() {
         let total = story.duration_ms();
         let speech = editorkrab::export::speech_cues(&story, document);
-        let emphasis = editorkrab::export::emphasis_lines(&story, document);
+        let emphasis = editorkrab::export::emphasis_cues(&story, document);
         let chars: Vec<f64> = speech.iter().map(|c| c.2.chars().filter(|c| !c.is_whitespace()).count() as f64).collect();
         let dur: Vec<f64> = speech.iter().map(|c| (c.1 - c.0) as f64 / 1000.0).collect();
         // shots: a new piece, or a camera change inside one

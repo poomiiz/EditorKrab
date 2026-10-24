@@ -382,6 +382,19 @@ pub fn past_fillers(words: &[(String, u64, u64)], start: u64, end: u64) -> Optio
     // the cut lands before the real word but never inside the filler said just before it
     (i > 0 && i < said.len()).then(|| said[i].1.saturating_sub(FILLER_PAD_MS).max(said[i - 1].2.min(said[i].1)) + FILLER_PAD_MS)
 }
+/// The orange cards as drawn: each stays until the white card it sits under goes, so both go together (Nina
+/// 16: 26 of 33 orange cards end with their white card; ours ended 0.13 s after their last word, 4 of 12).
+pub fn emphasis_cues(story: &Story, document: &Value) -> Vec<(u64, u64, String)> {
+    let mut emphasis = emphasis_lines(story, document);
+    let white = speech_cues(story, document);
+    for i in 0..emphasis.len() {
+        let next = emphasis.get(i + 1).map_or(u64::MAX, |e| e.0);
+        if let Some(w) = white.iter().find(|w| w.0 <= emphasis[i].0 && emphasis[i].0 < w.1) {
+            emphasis[i].1 = emphasis[i].1.max(w.1).min(next);
+        }
+    }
+    emphasis
+}
 /// How far back a line's start moves to where its sound begins, ms.
 pub const ONSET_REACH_MS: u64 = 300;
 /// A line that starts while its sound is already on (inside a stored loud stretch) starts where that sound
@@ -812,30 +825,84 @@ pub fn lines(piece: &Piece, limit: usize) -> Vec<(u64, u64, String)> {
 pub const PHRASE_PAUSE_MS: u64 = 650;
 /// A card stays on until the next one starts when the gap is no longer than this (Nina's cards follow on).
 pub const CARD_HOLD_MS: u64 = 1000;
+/// Longest stretch of speech one card holds (Nina 16 timeline transcribed 24 Oct: white cards median 1.9 s,
+/// p75 3.0 s, 16 letters; 2.2 s made 1.3 s / 14 letters). Matches captionRows' maxMs in text-style.js.
+pub const CARD_MAX_MS: u64 = 3000;
 pub fn layout_lines(piece: &Piece, style: &Value) -> Vec<(u64, u64, String)> {
     let length = piece.end_ms - piece.start_ms;
     if piece.words.is_empty() {
         return if piece.timed || piece.text.trim().is_empty() { vec![] } else { vec![(0, length, piece.text.clone())] };
     }
     let local = |v: u64| v.clamp(piece.start_ms, piece.end_ms) - piece.start_ms;
-    let mut rows = Vec::new();
-    let (mut text, mut start, mut end) = (String::new(), 0, 0);
+    // the words once each: the engine can give one word twice at the same clock
+    let mut words: Vec<(&str, u64, u64)> = Vec::new();
     for (word, from, to) in &piece.words {
-        if word.trim().is_empty() { continue; }
-        let mut candidate = text.clone(); join(&mut candidate, word.trim());
-        let phrase = !text.is_empty() && (from.saturating_sub(end) >= PHRASE_PAUSE_MS || to.saturating_sub(start) > 2200);
-        if !text.is_empty() && (phrase || !crate::text_layout::fits(&candidate, style)) {
-            let stop = local(end.saturating_add(180)).min(local(*from)).max(local(start)+1).min(length);
-            rows.push((local(start), stop, std::mem::take(&mut text)));
+        let word = word.trim();
+        if word.is_empty() { continue; }
+        match words.last_mut() {
+            Some(last) if last.0 == word && last.1 == *from => last.2 = last.2.max(*to),
+            _ => words.push((word, *from, *to)),
         }
-        if text.is_empty() { start = *from; }
-        join(&mut text, word.trim()); end = *to;
     }
-    if !text.is_empty() {
-        rows.push((local(start), local(end.saturating_add(180)).max(local(start)+1).min(length), text));
+    let joined = |g: &[(&str, u64, u64)]| { let mut t = String::new(); for w in g { join(&mut t, w.0); } t };
+    let groups = card_groups(&words, |g| crate::text_layout::fits(&joined(g), style));
+    let mut rows = Vec::new();
+    for (i, g) in groups.iter().enumerate() {
+        let (start, end) = (g[0].1, g[g.len() - 1].2);
+        let next = groups.get(i + 1).map_or(u64::MAX, |n| n[0].1);
+        rows.push((local(start), local(end.saturating_add(180).min(next)).max(local(start) + 1).min(length), joined(g)));
     }
     rows.retain(|(a,b,_)| b > a);
     rows
+}
+/// A pause this long between two words is a place a card may end inside a phrase that runs too long, ms.
+pub const PHRASE_GAP_MS: u64 = 120;
+/// Words grouped into cards the way Nina 16 reads (its timeline transcribed 24 Oct): a card ends at a pause of
+/// PHRASE_PAUSE_MS, or when it would hold more than CARD_MAX_MS of speech or not fit (`fits`); then it ends at
+/// the widest pause inside it rather than before the word that did not fit ("ตอบไม่ | ได้" became "ตอบไม่ได้"),
+/// and a last word or two of five letters or fewer joins the card before ("แก", "ได้" stood alone).
+/// Matches captionRows in text-style.js.
+pub fn card_groups<'a>(words: &[(&'a str, u64, u64)], fits: impl Fn(&[(&'a str, u64, u64)]) -> bool) -> Vec<Vec<(&'a str, u64, u64)>> {
+    let mut groups: Vec<Vec<(&str, u64, u64)>> = Vec::new();
+    let mut cur: Vec<(&str, u64, u64)> = Vec::new();
+    for &w in words {
+        if let Some(last) = cur.last() {
+            let pause = w.1.saturating_sub(last.2) >= PHRASE_PAUSE_MS;
+            let mut with = cur.clone();
+            with.push(w);
+            let over = w.2.saturating_sub(cur[0].1) > CARD_MAX_MS || !fits(&with);
+            if pause {
+                groups.push(std::mem::take(&mut cur));
+            } else if over {
+                // the widest pause inside the card, leaving at least one word on each side
+                let split = (1..cur.len()).map(|k| (cur[k].1.saturating_sub(cur[k - 1].2), k)).filter(|&(gap, _)| gap >= PHRASE_GAP_MS).max();
+                match split {
+                    Some((_, k)) if { let mut rest = cur[k..].to_vec(); rest.push(w); fits(&rest) && w.2.saturating_sub(rest[0].1) <= CARD_MAX_MS } => {
+                        let rest = cur.split_off(k);
+                        groups.push(std::mem::replace(&mut cur, rest));
+                    }
+                    _ => groups.push(std::mem::take(&mut cur)),
+                }
+            }
+        }
+        cur.push(w);
+    }
+    if !cur.is_empty() {
+        groups.push(cur);
+    }
+    // a short tail joins the card before when they fit together
+    if groups.len() > 1 {
+        let tail = &groups[groups.len() - 1];
+        let letters: usize = tail.iter().map(|w| w.0.chars().count()).sum();
+        let prev = &groups[groups.len() - 2];
+        let mut both = prev.clone();
+        both.extend(tail.iter().copied());
+        if letters <= 5 && tail[0].1.saturating_sub(prev[prev.len() - 1].2) < PHRASE_PAUSE_MS && fits(&both) {
+            groups.pop();
+            *groups.last_mut().unwrap() = both;
+        }
+    }
+    groups
 }
 
 fn speech_person(story: &Story, document: &Value, p: &Piece) -> Option<i64> {
@@ -898,7 +965,7 @@ Style: Box,Leelawadee UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0
             ass.push_str(&event((width,height),0,start,end,&style,&text));
         }
     }
-    let emphasis = emphasis_lines(story, document);
+    let emphasis = emphasis_cues(story, document);
     if !emphasis.is_empty() {
         skipped.retain(|role| role != "emphasis");
         let style = match &document["text_styles"]["emphasis"] {
@@ -1155,11 +1222,28 @@ pub fn speech_cues(story: &Story, document: &Value) -> Vec<(u64,u64,String)> {
     let spoken=speech_story(story,document);
     let style=speech_style(document);
     let mut cues=vec![]; let mut at=0;
-    for piece in speech_pieces(&spoken,document) {
+    // a line's pieces (split where dead air is cut) are laid out together on the played clock, so a card runs
+    // across a cut instead of leaving "ฉันน่ะ | คิด | ว่า..." as cards of one word (24 Oct, against Nina 16)
+    let pieces=speech_pieces(&spoken,document);
+    let mut i=0;
+    while i<pieces.len() {
+        let mut j=i+1;
+        while j<pieces.len() && pieces[j].segment==pieces[i].segment && pieces[j].source==pieces[i].source && pieces[j].start_ms>=pieces[j-1].end_ms { j+=1; }
+        let run=&pieces[i..j];
+        let mut words=Vec::new(); let mut off=0;
+        for p in run {
+            for (w,a,b) in &p.words {
+                if *b<p.start_ms || *a>p.end_ms { continue; }
+                words.push((w.clone(), off+(*a).clamp(p.start_ms,p.end_ms)-p.start_ms, off+(*b).clamp(p.start_ms,p.end_ms)-p.start_ms));
+            }
+            off+=p.end_ms-p.start_ms;
+        }
+        let mut text=String::new(); for p in run { join(&mut text,p.text.trim()); }
+        let piece=Piece{source:run[0].source,start_ms:0,end_ms:off,text:if run.len()==1 {run[0].text.clone()} else {text},words,timed:run[0].timed,segment:run[0].segment.clone()};
         let rows=layout_lines(&piece,&style);
         let rows=if style["enter"].as_str()==Some("words") {karaoke_from(&piece,rows)} else {rows};
         cues.extend(rows.into_iter().map(|(a,b,text)|(at+a,at+b,text)));
-        at+=piece.end_ms-piece.start_ms;
+        at+=off; i=j;
     }
     // A zero-length ASR token can repeat the next word at the same clock. Draw that event once.
     let mut unique: Vec<(u64,u64,String)>=Vec::new();

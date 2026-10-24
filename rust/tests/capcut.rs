@@ -272,8 +272,9 @@ fn write_never_replaces_an_existing_project() {
 #[test]
 fn caption_layers_keep_word_clocks_and_translations_in_separate_named_tracks() {
     let story = Story {id:"layers".into(),title:"".into(),sources:vec!["a.mp4".into()],pieces:vec![Piece {
-        source:0,start_ms:0,end_ms:3200,segment:"a".into(),timed:true,text:"กินคอนเทนต์กัน".into(),
-        words:vec![("กิน".into(),100,400),("คอนเทนต์".into(),900,1400),("กัน".into(),2000,2400)],
+        source:0,start_ms:0,end_ms:4200,segment:"a".into(),timed:true,text:"กินคอนเทนต์กัน".into(),
+        // "กัน" after a 2 s pause: its own card (a card holds up to CARD_MAX_MS of speech)
+        words:vec![("กิน".into(),100,400),("คอนเทนต์".into(),900,1400),("กัน".into(),3400,3800)],
     }]};
     let doc=json!({"text_roles":["speech","emphasis","english"],
         "emphasis":{"a":[{"text":"คอนเทนต์","start_ms":900,"end_ms":1400}]},

@@ -23,3 +23,8 @@ sherpa-onnx = "1.13.8"
 rustface = "0.1.7"
 fontdb = "0.24"
 rustybuzz = "0.20"
+
+# test builds without debug info: each test binary links the voice and face libraries, and with debug
+# info they filled 12 GB of C: (24 Oct)
+[profile.dev]
+debug = 0

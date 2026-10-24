@@ -517,13 +517,14 @@ fn emphasised_words_leave_the_speech_line() {
         "emphasis": {"a1": [{"text": "สาม", "start_ms": 2800, "end_ms": 3600}]}});
     let (ass, _) = subtitles(&story, &doc);
     let speech: Vec<&str> = ass.lines().filter(|l| l.contains(r"\pos(540,1325)")).collect();
-    assert!(speech.iter().any(|l| l.ends_with("}หนึ่ง")) && speech.iter().any(|l| l.ends_with("}สอง")), "{ass}");
+    // a 0.5 s breath stays inside the card (Nina 16), so "หนึ่ง" and "สอง" share one
+    assert!(speech.iter().any(|l| l.ends_with("}หนึ่งสอง")), "{ass}");
     assert!(!speech.iter().any(|l| l.contains("สาม")), "pick must leave speech");
     assert!(ass.lines().any(|l| l.ends_with("}สาม")), "the pick still shows as emphasis: {ass}");
     // with emphasis off the speech keeps every word
     doc["text_roles"] = json!(["speech"]);
     let (ass, _) = subtitles(&story, &doc);
-    assert!(ass.lines().any(|l| l.ends_with("}หนึ่ง")) && ass.lines().any(|l| l.ends_with("}สองสาม")), "{ass}");
+    assert!(ass.lines().any(|l| l.ends_with("}หนึ่งสองสาม")), "{ass}");
 }
 
 #[test]
@@ -692,4 +693,18 @@ fn a_camera_change_lands_in_the_widest_pause_between_words() {
     let mut parts = vec![(1000, 3900), (4900, 9000)];
     editorkrab::export::at_word_gaps(&mut parts, &words);
     assert_eq!(parts, vec![(1000, 3900), (4900, 9000)]);
+}
+
+#[test]
+fn a_card_too_long_ends_at_its_widest_pause_and_a_short_tail_joins_the_card_before() {
+    use editorkrab::export::card_groups;
+    let text = |g: &Vec<Vec<(&str, u64, u64)>>| g.iter().map(|c| c.iter().map(|w| w.0).collect::<String>()).collect::<Vec<_>>();
+    // "มีไหม คำถามอะไรที่ตอบไม่ได้": room for 4 words; the 300 ms pause after "มีไหม" is where the card ends,
+    // not between "ตอบไม่" and "ได้"
+    let words = [("มีไหม", 0, 400), ("คำถาม", 700, 1100), ("อะไร", 1120, 1400), ("ที่", 1420, 1500), ("ตอบไม่", 1520, 1900), ("ได้", 1910, 2100)];
+    let groups = card_groups(&words, |g| g.len() <= 4);
+    assert_eq!(text(&groups)[0], "มีไหม");
+    // a lone short last word left by the 3 s limit joins the card before
+    let words = [("ฉันถาม", 0, 1500), ("คำถาม", 1520, 3000), ("แก", 3050, 3200)];
+    assert_eq!(text(&card_groups(&words, |_| true)), ["ฉันถามคำถามแก"]);
 }
