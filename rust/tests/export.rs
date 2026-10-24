@@ -429,7 +429,9 @@ fn dead_air_inside_a_line_is_cut_and_the_line_still_reads_as_one() {
             piece(11900, 14000, "ไม่ได้", vec![("ไม่ได้".into(), 12000, 13000)]),
         ],
     };
-    let (lines, _) = editorkrab::export::speech_lines(&story, &json!({"text_roles": ["speech"]}));
+    // a small size so the line fits whatever fonts the machine has (the Mac runners measured it too wide)
+    let doc = json!({"text_roles": ["speech"], "text_styles": {"speech": {"text": "", "font": "system", "size": 24, "color": "#ffffff", "x": 50, "y": 75}}});
+    let (lines, _) = editorkrab::export::speech_lines(&story, &doc);
     assert_eq!(lines, vec![(0, 2380, "ตอบคำถามไม่ได้".to_owned())]);
 }
 
