@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {alignWordClocks,wordClockIssues,validEnglishCues} from '../design/rust-flow/text-qc.js';
+const words=[{text:'คำ',start_ms:100,end_ms:200},{text:'ถาม',start_ms:200,end_ms:400},{text:'ใหม่',start_ms:450,end_ms:700}];
+assert.deepEqual(alignWordClocks(words,words,100,700),[[100,200],[200,400],[450,700]]);
+assert.deepEqual(alignWordClocks([{text:'คำถาม'},{text:'ใหม่'}],words,100,700),[[100,400],[450,700]]);
+assert.equal(alignWordClocks(words,[{text:'คำถาม',start_ms:100,end_ms:400},words[2]],100,700),null,'never invent clocks splitting a measured token');
+assert.equal(alignWordClocks([{text:'missing'}],words,100,700),null);
+assert.equal(alignWordClocks(words,words.map((w,i)=>i? w:{...w,end_ms:100}),100,700),null);
+assert.equal(alignWordClocks(words,words,150,700),null,'no neighboring cue clock borrowing');
+assert.equal(wordClockIssues([{id:'s',words:[{text:'zero',start_ms:10,end_ms:10},{text:'long',start_ms:100,end_ms:2500}]}]).length,2);
+assert.equal(alignWordClocks([{text:'ไม่'},{text:'ได้'}],[{text:'ไม่',start_ms:100,end_ms:200},{text:'ไม่',start_ms:500,end_ms:600},{text:'ได้',start_ms:650,end_ms:800}],100,800),null,'ambiguous repeat must not be skipped');
+assert.equal(wordClockIssues([{id:'s',start_ms:1000,end_ms:2000,words:[{text:'outside',start_ms:500,end_ms:700}]}]).length,1);
+assert.equal(wordClockIssues([{id:'s',text:'แก้เอง',start_ms:1000,end_ms:2000,words:[]}]).length,1);
+assert.equal(wordClockIssues([{id:'s',start_ms:1000,end_ms:2000,words:[{text:'shifted',start_ms:1100,end_ms:2100}]}],100).length,1,'long word warning remains');
+assert.equal(wordClockIssues([{id:'s',start_ms:1000,end_ms:2000,words:[{text:'shifted',start_ms:2050,end_ms:2100}]}],100).length,0,'intentional offset is accounted for');
+console.log('Word clock mapping: 12 checks passed');
+
+assert.ok(validEnglishCues({input_revision:'1234567890abcdef',translations:{e_1234567890abcdef:'A short subtitle.'}}));
+for(const text of ['','line\nbreak','x'.repeat(61)])assert.equal(validEnglishCues({input_revision:'1234567890abcdef',translations:{e_1234567890abcdef:text}}),false);
+assert.equal(validEnglishCues({input_revision:'old',translations:{}}),false);
+assert.equal(validEnglishCues({input_revision:'1234567890abcdef',translations:{wrong:'text'}}),false);
+console.log('Saved English cue shape checks passed');

@@ -1,4 +1,6 @@
-//! Native selection returns exact paths and file stamps; no filename-based guessing.
+//! Native selection returns exact paths and file stamps. A dropped file is only matched when
+//! exactly one file on disk has its name, byte size and modified millisecond; otherwise the
+//! person picks it.
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashSet, VecDeque},
@@ -132,6 +134,82 @@ pub fn collect(paths: Vec<PathBuf>) -> Result<Selection, SourceError> {
     })
 }
 
+/// A dropped file as the browser describes it: its name, byte size and last-modified time
+/// in milliseconds. The browser never says where the file is.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Dropped {
+    pub name: String,
+    pub size: u64,
+    pub last_modified: i64,
+}
+
+fn modified_ms(metadata: &fs::Metadata) -> Option<i64> {
+    let time = metadata.modified().ok()?;
+    let d = time.duration_since(std::time::UNIX_EPOCH).ok()?;
+    i64::try_from(d.as_millis()).ok()
+}
+
+/// Finds each dropped file under `roots` by exact name, byte size and modified millisecond.
+/// A file is only taken when exactly one file on disk matches all three; anything else stays
+/// None and the page asks the person to pick it. The walk stops after `budget` folders.
+pub fn locate(dropped: &[Dropped], roots: &[PathBuf], depth: usize, budget: usize) -> Vec<Option<Source>> {
+    let mut found: Vec<Vec<PathBuf>> = vec![Vec::new(); dropped.len()];
+    let mut seen = HashSet::new();
+    let mut pending: VecDeque<(PathBuf, usize)> = roots.iter().map(|r| (r.clone(), 0)).collect();
+    let mut visited = 0;
+    while let Some((dir, level)) = pending.pop_front() {
+        if visited >= budget || !seen.insert(dir.clone()) {
+            continue;
+        }
+        visited += 1;
+        let Ok(entries) = fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else { continue };
+            if kind.is_symlink() {
+                continue;
+            }
+            if kind.is_dir() {
+                let hidden = entry.file_name().to_str().is_none_or(|n| {
+                    n.starts_with('.') || n.starts_with('$') || matches!(n, "Windows" | "Program Files" | "Program Files (x86)" | "ProgramData" | "AppData" | "node_modules")
+                });
+                if level < depth && !hidden {
+                    pending.push_back((entry.path(), level + 1));
+                }
+                continue;
+            }
+            let name = entry.file_name();
+            for (i, want) in dropped.iter().enumerate() {
+                if name.to_str() != Some(want.name.as_str()) {
+                    continue;
+                }
+                let Ok(metadata) = entry.metadata() else { continue };
+                if metadata.len() == want.size && modified_ms(&metadata) == Some(want.last_modified) {
+                    let path = entry.path().canonicalize().unwrap_or_else(|_| entry.path());
+                    if !found[i].contains(&path) {
+                        found[i].push(path);
+                    }
+                }
+            }
+        }
+    }
+    found
+        .into_iter()
+        .zip(dropped)
+        .map(|(paths, want)| {
+            let [path] = paths.as_slice() else { return None };
+            let metadata = path.metadata().ok()?;
+            Some(Source {
+                source_id: uuid::Uuid::new_v4().to_string(),
+                name: want.name.clone(),
+                path: path.to_str()?.to_owned(),
+                size: metadata.len(),
+                modified_ns: stamp(&metadata).ok()?,
+            })
+        })
+        .collect()
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PickKind {
@@ -170,6 +248,27 @@ pub fn dispatch(command: PickCommand) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_dropped_file_is_found_only_when_name_size_and_time_all_match_once() {
+        let root = std::env::temp_dir().join(format!("editorkrab-locate-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(root.join("a/b")).unwrap();
+        fs::create_dir_all(root.join("c")).unwrap();
+        fs::write(root.join("a/b/คลิป.mov"), b"video").unwrap();
+        fs::write(root.join("c/same.mp4"), b"x").unwrap();
+        fs::write(root.join("a/same.mp4"), b"x").unwrap();
+        let ms = |p: &str| modified_ms(&root.join(p).metadata().unwrap()).unwrap();
+        let wanted = [
+            Dropped { name: "คลิป.mov".into(), size: 5, last_modified: ms("a/b/คลิป.mov") },
+            Dropped { name: "คลิป.mov".into(), size: 6, last_modified: ms("a/b/คลิป.mov") },
+            Dropped { name: "same.mp4".into(), size: 1, last_modified: ms("c/same.mp4") },
+        ];
+        let found = locate(&wanted, &[root.clone()], 4, 100);
+        assert!(found[0].as_ref().unwrap().path.ends_with("คลิป.mov"));
+        assert!(found[1].is_none(), "a different size is a different file");
+        let twins = ms("c/same.mp4") == ms("a/same.mp4");
+        assert_eq!(found[2].is_none(), twins, "two matching files means asking, not guessing");
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn nested_selection_keeps_exact_paths_and_does_not_duplicate_inputs() {
         let root =

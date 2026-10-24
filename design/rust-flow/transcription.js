@@ -103,7 +103,9 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   const phases={verifying:'กำลังตรวจไฟล์',extracting:'กำลังเตรียมเสียง',transcribing:'กำลังถอดเสียง',cache:'กำลังเปิดข้อความที่ถอดไว้'};
   $('transcribeState').textContent=busy?'เตรียมงาน':running.length?'กำลังทำ':complete()?'ถอดครบแล้ว':configuration==='loading'?'กำลังตรวจ':configuration==='ready'?(retry.length?'ถอดไม่สำเร็จ':'พร้อม'):'ยังใช้ไม่ได้';
   $('transcribeHint').textContent=configuration==='missing'?'ดาวน์โหลดตัวถอดเสียงก่อนใช้ครั้งแรก':configuration==='error'?'ตรวจตัวถอดเสียงไม่ได้ กดลองอีกครั้ง':configuration==='loading'?'กำลังเตรียม':!read().files.length?'เลือกไฟล์ที่มีเสียงก่อน':!files.length?'รออ่านไฟล์ และตรวจว่ามีเสียง':!ready?'รอให้บันทึกงานสำเร็จก่อนเริ่ม':running.length?(phases[running.find(j=>j.status==='running')?.step] || 'รอคิว')+` · สำเร็จ ${completed}/${all.length} ช่วง`:all.length?`สำเร็จ ${completed}/${all.length} ช่วง`+(retry.length?` · ไม่สำเร็จ ${retry.length} ช่วง กดลองใหม่ได้`:'')+(waiting?' · มีไฟล์ที่ยังตรวจไม่สำเร็จ':'')+(silent?` · ข้าม ${silent} ไฟล์ไม่มีเสียง`:''):'เลือกไฟล์ที่มีเสียงก่อน';
-  const progress=$('transcribeProgress');progress.hidden=!all.length&&!busy;if(all.length){progress.max=all.length;progress.value=completed;}else progress.removeAttribute('value');
+  const progress=$('transcribeProgress'),share=Math.round(fractionAll()*100);progress.hidden=!all.length&&!busy;
+  if(all.length){progress.max=100;progress.value=share;}else progress.removeAttribute('value');
+  $('transcribePercent').hidden=progress.hidden;$('transcribePercent').textContent=all.length?(completed===all.length?'100%':`${share}%`+(running.length?' (ประมาณจากความเร็วเครื่อง)':'')):'';
   const selected=chosen;if(!files.some(f=>f.source_id===chosen))chosen=files[0]?.source_id || '';
   if(selected!==chosen){page=0;rowsKey='';clearAudio();}
   const optionsKey=JSON.stringify(files.map(f=>[f.source_id,f.name]));if($('transcriptFile').dataset.options!==optionsKey){$('transcriptFile').replaceChildren(...files.map(f=>{const option=document.createElement('option');option.value=f.source_id;option.textContent=f.name;return option;}));$('transcriptFile').dataset.options=optionsKey;}
@@ -191,7 +193,7 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
    const content={language:read().language,settings:{engine_sha256:settings.engine.sha256,model_sha256:settings.model.sha256,ffmpeg_sha256:settings.ffmpeg.sha256,threads:settings.threads},sources};
    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(content))),hash=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
    if(!state().saved||state().revision!==saved.revision||JSON.stringify(snapshotDraft)!==JSON.stringify(read())||!complete())throw Error('งานเปลี่ยนแล้ว ดาวน์โหลดใหม่อีกครั้ง');
-   const packet={schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,content,instructions:'แบ่งคลิปเป็นเรื่องตามหัวข้อที่คุย อ่านให้ครบถึงท่อนสุดท้ายของทุกไฟล์ ท่อนที่มีเนื้อหาต้องอยู่ในเรื่องใดเรื่องหนึ่ง ข้ามได้เฉพาะท่อนที่ไม่มีเนื้อหาจริง เช่น ตั้งกล้องหรือทักทาย แต่ละเรื่องเป็นช่วงต่อเนื่องตามเวลา รอบนี้ยังไม่ต้องตัดคำพูดย่อยหรือเรียงใหม่ (คัดละเอียดทำทีหลังทีละเรื่อง) อ้างท่อนด้วย segment_ids ที่ให้เท่านั้น ห้ามสร้างเวลาใหม่ แต่ละเรื่องใช้ท่อนจากไฟล์เดียว ทุกเรื่องต้องมีครบทุกช่องตาม response_schema: id, title (หัวข้อสั้นๆ ไม่เกิน 40 ตัวอักษร เห็นแล้วรู้ทันทีว่าเรื่องอะไร), summary (สรุปเนื้อหา 1-2 ประโยค), segment_ids ห้ามเปลี่ยนชื่อช่อง ส่ง JSON ตาม response_schema',response_schema:{schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,stories:[{id:'story-1',title:'หัวข้อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[]}]}};
+   const packet={schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,content,instructions:'แบ่งคลิปเป็นเรื่องตามหัวข้อที่คุย อ่านให้ครบถึงท่อนสุดท้ายของทุกไฟล์ ท่อนที่มีเนื้อหาต้องอยู่ในเรื่องใดเรื่องหนึ่ง ข้ามได้เฉพาะท่อนที่ไม่มีเนื้อหาจริง เช่น ตั้งกล้องหรือทักทาย แต่ละเรื่องคือหนึ่งประเด็น ยาวประมาณ 1-2 นาที เป็นช่วงต่อเนื่องตามเวลา ห้ามจบเรื่องกลางประโยค ห้ามให้สองเรื่องเล่าประเด็นซ้ำกัน คำถาม ข้อสงสัย และเสียงหัวเราะของคนถาม/คนฟังให้อยู่ในเรื่องเดียวกับคำตอบ รอบนี้ยังไม่ต้องตัดคำพูดย่อยหรือเรียงใหม่ (คัดละเอียดทำทีหลังทีละเรื่อง) อ้างท่อนด้วย segment_ids ที่ให้เท่านั้น ห้ามสร้างเวลาใหม่ แต่ละเรื่องใช้ท่อนจากไฟล์เดียว ทุกเรื่องต้องมีครบทุกช่องตาม response_schema: id, title (หัวข้อสั้นๆ ไม่เกิน 40 ตัวอักษร เห็นแล้วรู้ทันทีว่าเรื่องอะไร), summary (สรุปเนื้อหา 1-2 ประโยค), segment_ids ห้ามเปลี่ยนชื่อช่อง ส่ง JSON ตาม response_schema',response_schema:{schema_version:1,project_id:project,draft_revision:saved.revision,content_hash:hash,stories:[{id:'story-1',title:'หัวข้อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[]}]}};
    await deliver(packet);
   }catch(error){packetNotice=error.message;}finally{busy=false;refresh();}
  }
@@ -207,12 +209,31 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  // Every subtitle line as it will show (hand edit if any), timed on its own source file.
  // a segment's words with the draft's re-timed clocks (one [start,end] per word) and the whole-project
  // subtitle shift; the transcript itself never changes (export.rs spoken() does the same)
- function timedWords(segment){
+ function timedWords(segment,source){
   const words=segment.words || [],times=read().word_times?.[segment.id],offset=Math.max(-5000,Math.min(5000,Number(read().subtitle_offset_ms) || 0));
-  return words.map((w,i)=>{const t=Array.isArray(times)&&times.length===words.length&&Array.isArray(times[i])&&times[i][1]>=times[i][0]?times[i]:[w.start_ms,w.end_ms];
-   return {...w,start_ms:Math.max(0,t[0]+offset),end_ms:Math.max(0,t[1]+offset)};});
+  const clocks=fitWords(words.map((w,i)=>Array.isArray(times)&&times.length===words.length&&Array.isArray(times[i])&&times[i][1]>=times[i][0]?times[i]:[w.start_ms,w.end_ms]),read().voice?.[source]?.speech,read().voice?.[source]?.hush);
+  return words.map((w,i)=>({...w,start_ms:Math.max(0,clocks[i][0]+offset),end_ms:Math.max(0,clocks[i][1]+offset)}));
  }
- function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name,words:correction(job,segment)?[]:timedWords(segment)})));}
+ // word clocks fitted to the speech VAD heard (the same rule as voice.rs fit_words): a word starting in a pause
+ // starts with the next speech it reaches, one running over 150 ms past its speech ends there, a zero-length
+ // word gets 200 ms; a word with no speech under it is left alone
+ // a word timed wholly inside a hushed run moves to the speech starting within 1 s after it (voice.rs
+ // fit_words_hushed): nothing is said where it was put
+ function fitWords(clocks,speech,hush=[]){
+  if(!Array.isArray(speech) || !speech.length)return clocks;
+  clocks=clocks.map(([s,e0])=>{const e=Math.max(e0,s);if(speech.some(([a,b])=>a<Math.max(e,s+1)&&b>s))return [s,e0];
+   const run=(hush || []).find(([a,b])=>a<=s&&e<=b),next=run&&speech.find(([a])=>a>=run[1]&&a<=run[1]+1000);return next?[next[0],next[0]]:[s,e0];});
+  const SLACK=150,LEAST=200,spanAt=t=>speech.find(([a,b])=>a<=t+SLACK&&t<b);
+  return clocks.map(([s0,e0],i)=>{
+   let s=s0,e=Math.max(e0,s0),span=spanAt(s);
+   if(!span){span=speech.find(([a])=>a>s&&a<e);if(span)s=span[0];}
+   if(!span)return [s0,e0];
+   const b=span[1];if(e>b+SLACK)e=Math.max(b,s);
+   if(e<=s){const n=clocks[i+1]?.[0],next=n>s?n:Infinity;e=Math.min(s+LEAST,next,Math.max(b,s+1));}
+   return [s,Math.max(e,s)];
+  });
+ }
+ function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name,words:correction(job,segment)?[]:timedWords(segment,file.source_id)})));}
  // the finished transcription pieces, for re-timing their words
  function pieces(){return eligible().flatMap(file=>chunks(file).filter(j=>j?.status==='succeeded'));}
  function find(id){for(const file of eligible())for(const row of segments(file))if(row.job.id+'|'+row.segment.id===id)return {file,...row};throw Error('line_not_found');}
@@ -226,5 +247,26 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  }
  // one video's speech is all transcribed
  function fileDone(file){const list=chunks(file);return list.length>0&&list.every(j=>j?.status==='succeeded');}
- return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit,fileDone,pieces};
+ // How far a video is, 0-1. Finished pieces count whole. The engine answers a piece only when the whole piece is
+ // done, so the piece being worked on is estimated from this computer's earlier pieces: about 8 s to check the
+ // file, take out the audio and load the model, then audio seconds at the speed those pieces decoded. The estimate
+ // stops at 95% until the piece's answer arrives.
+ const SETUP=8;
+ function speed(){
+  const rates=[...jobs.values()].filter(j=>j.task.kind==='transcribe'&&j.status==='succeeded'&&!j.result?.cache_hit&&j.finished_at>j.started_at)
+   .map(j=>(j.task.context.end_ms-j.task.context.start_ms)/1000/Math.max(1,j.finished_at-j.started_at-SETUP)).sort((a,b)=>a-b);
+  return rates.length?rates[Math.floor(rates.length/2)]:4;
+ }
+ function fraction(file){
+  const list=chunks(file),length=list.length&&ranges(file).at(-1)[1];if(!length)return 0;
+  const rate=speed(),now=Date.now()/1000;let done=0;
+  ranges(file).forEach(([start,end],i)=>{const j=list[i],size=end-start;if(j?.status==='succeeded')done+=size;
+   else if(j?.status==='running'&&j.started_at)done+=Math.min(0.95,Math.max(0,now-j.started_at)/(SETUP+size/1000/rate))*size;});
+  return Math.min(1,done/length);
+ }
+ function fractionAll(){const files=eligible(),total=files.reduce((n,f)=>n+(probe(f)?.result?.duration_s||0),0);
+  return total?files.reduce((n,f)=>n+fraction(f)*(probe(f)?.result?.duration_s||0),0)/total:0;}
+ // while a piece runs the estimate moves, so the bar is redrawn every second
+ setInterval(()=>{if(active().some(j=>j.status==='running'))refresh();},1000);
+ return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit,fileDone,fraction,running:()=>active().some(j=>j.status==='running'),pieces};
 }

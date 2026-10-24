@@ -57,7 +57,7 @@ p{max-width:70ch;color:var(--txt-sub)}small,.caption{font-size:.8125rem;color:va
 .app{display:grid;grid-template-rows:auto auto minmax(0,1fr);height:100%}
 .topbar{background:var(--surface);border-bottom:1px solid var(--line)}
 .topbar-inner{display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-xs) var(--space-lg);min-height:52px}
-.brand{display:flex;align-items:center;gap:var(--space-sm);font-size:.9375rem;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
+.brand{color:inherit;text-decoration:none;display:flex;align-items:center;gap:var(--space-sm);font-size:.9375rem;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
 .brand svg{color:var(--acc)}
 .project-field{display:flex;align-items:center;flex:1;max-width:420px;min-width:0}
 .project-field{gap:var(--space-xs)}.project-field label{font-size:.8125rem;color:var(--mut);white-space:nowrap}
@@ -118,14 +118,14 @@ main{min-height:0;display:grid;grid-template-rows:minmax(0,1fr) auto;padding:var
 #fileTotal{margin-left:auto;font-size:.8125rem;color:var(--mut);font-variant-numeric:tabular-nums}
 .empty{max-width:none;padding:var(--space-md) 0;color:var(--mut);font-size:.875rem}
 #fileList{list-style:none;padding:0;margin:0}
-#fileList li{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;column-gap:var(--space-md);padding:var(--space-sm) 0;border-bottom:1px solid var(--line)}
-#fileList li:last-child{border-bottom:0}
+#fileList>li{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;column-gap:var(--space-md);padding:var(--space-sm) 0;border-bottom:1px solid var(--line)}
+#fileList>li:last-child{border-bottom:0}
 .file-icon{grid-row:1/3;display:grid;place-items:center;background:var(--raised);color:var(--txt-sub);border-radius:var(--radius-sm);height:40px;font-size:.6875rem;letter-spacing:.02em}
 .file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.875rem;font-weight:500}
 .file-info{grid-column:2;font-size:.8125rem;font-variant-numeric:tabular-nums;color:var(--mut);max-width:none}
 .source-remove{grid-column:3;grid-row:1/3;font-size:.8125rem;background:transparent;border-color:transparent;color:var(--mut)}
 .source-remove:hover:not(:disabled){color:var(--danger)}
-#fileList li[data-state=failed] .file-info{color:var(--danger)}
+#fileList>li[data-state=failed] .file-info{color:var(--danger)}
 .stage-controls{display:flex;align-items:center;gap:var(--space-xl);padding-top:var(--space-md)}
 .field{display:grid;gap:6px;min-width:0}.field>span,.field>label{font-size:.8125rem;color:var(--txt-sub)}
 .language-field{grid-template-columns:auto 200px;align-items:center;gap:var(--space-md)}
@@ -264,9 +264,9 @@ main{padding:0;gap:0}
 .stage[data-has-files] .drop{flex-direction:row;min-height:72px;padding:var(--space-md) var(--space-lg);gap:var(--space-lg)}
 .stage[data-has-files] .drop .row{margin-left:auto}
 .library-head{padding:var(--space-2xl) 0 var(--space-sm)}
-#fileList li{padding:var(--space-md) var(--space-sm);border-radius:var(--radius-sm);border-bottom:0}
-#fileList li+li{border-top:1px solid var(--line)}
-#fileList li:hover{background:var(--raised)}
+#fileList>li{padding:var(--space-md) var(--space-sm);border-radius:var(--radius-sm);border-bottom:0}
+#fileList>li+li{border-top:1px solid var(--line)}
+#fileList>li:hover{background:var(--raised)}
 /* stage 2: numbered route, the active row carries the action */
 .ai-steps{list-style:none;margin:var(--space-lg) 0 0;padding:0;counter-reset:a;max-width:760px;display:grid}
 .ai-steps li{counter-increment:a;display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:var(--space-lg);padding:var(--space-xl) 0;border-top:1px solid var(--line)}
@@ -290,7 +290,7 @@ main{padding:0;gap:0}
 
 
 /* density: editing-tool scale; desktop only, a narrow window scrolls sideways instead of reflowing */
-.app{min-width:960px}
+.app{min-width:0;min-inline-size:0}
 
 body{font-size:.8125rem;line-height:1.5}
 button,input,select{min-height:32px}
@@ -310,7 +310,7 @@ h1{font-size:1.0625rem}h2{font-size:.8125rem}small,.caption{font-size:.75rem}
 .drop{min-height:150px;gap:var(--space-sm)}.drop svg{width:26px;height:26px}.drop strong{font-size:.9375rem}
 .stage[data-has-files] .drop{min-height:52px;padding:var(--space-sm) var(--space-md)}
 .library-head{padding:var(--space-lg) 0 var(--space-xs)}
-#fileList li{grid-template-columns:32px minmax(0,1fr) auto;padding:6px var(--space-sm)}.file-icon{height:32px}.file-name{font-size:.8125rem}
+#fileList>li{grid-template-columns:32px minmax(0,1fr) auto;padding:6px var(--space-sm)}.file-icon{height:32px}.file-name{font-size:.8125rem}
 .ai-steps li{padding:var(--space-md) 0;grid-template-columns:32px minmax(0,1fr) auto}.ai-steps li::before{width:26px;height:26px;font-size:.75rem}
 .qc{flex-basis:300px;padding:var(--space-lg)}
 .text-stage{padding:var(--space-md) var(--space-lg)}.text-inspector{padding:var(--space-lg);gap:var(--space-lg)}
@@ -432,9 +432,9 @@ textarea{font-size:.75rem}
 #editTitle{display:flex;align-items:center;gap:var(--space-sm)}#editTitle span::after{content:' ·'}
 .edit-story{font:inherit;font-weight:650;max-width:min(60vw,720px);min-height:36px;padding:2px 8px;background:var(--surface)}
 .select-all{display:flex;align-items:center;gap:6px;font-size:.8125rem;color:var(--txt-sub);margin-left:auto}
-#fileList li{grid-template-columns:24px 40px minmax(0,1fr) auto}#fileList li .file-pick{grid-row:1/3;width:18px;height:18px;margin:0;accent-color:var(--acc)}
-#fileList li .file-info{grid-column:3}#fileList li .source-remove{grid-column:4}
-#fileList li{grid-template-columns:24px 32px minmax(0,1fr) auto}
+#fileList>li{grid-template-columns:24px 40px minmax(0,1fr) auto}#fileList>li .file-pick{grid-row:1/3;width:18px;height:18px;margin:0;accent-color:var(--acc)}
+#fileList>li .file-info{grid-column:3}#fileList>li .source-remove{grid-column:4}
+#fileList>li{grid-template-columns:24px 32px minmax(0,1fr) auto}
 .plan-dialog{width:min(720px,92vw);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);color:var(--txt);padding:var(--space-xl)}
 .plan-dialog::backdrop{background:rgb(0 0 0 / .55)}.plan-dialog form{display:grid;gap:var(--space-md)}.plan-dialog textarea{min-height:45vh;width:100%}
 .plan-dialog-actions{justify-content:flex-end;gap:var(--space-sm)}
@@ -478,17 +478,21 @@ textarea{font-size:.75rem}
 .fx-grid label{font-size:.8125rem;color:var(--txt-sub)}.fx-pair{display:flex;gap:var(--space-xs);align-items:center}.fx-pair input[type=number]{width:5em}
 .fx-grid input[type=color]{min-height:28px;width:44px;padding:2px}.fx-grid input[type=checkbox]{width:18px;height:18px;min-height:18px;accent-color:var(--acc)}
 .preview-text>span{border-radius:6px}
-@keyframes fx-fade{from{opacity:0}}@keyframes fx-pop{from{transform:scale(.7)}}@keyframes fx-wipe{from{clip-path:inset(0 100% 0 0)}}
-.preview-text>span.entering[data-enter=fade]{animation:fx-fade .25s ease-out}.preview-text>span.entering[data-enter=pop]{animation:fx-pop .18s cubic-bezier(.22,1,.36,1)}
-.preview-text>span.entering[data-enter=wipe]{animation:fx-wipe .4s linear}
+@keyframes fx-fade{from{opacity:0}}@keyframes fx-pop{from{opacity:0;transform:scale(.85)}}@keyframes fx-wipe{from{clip-path:inset(0 100% 0 0)}}
+.preview-text>span.entering[data-enter=fade]{animation:fx-fade .25s ease-out}.preview-text>span.entering[data-enter=pop]{animation:fx-pop .3s cubic-bezier(.22,1,.36,1)}
+.preview-text>span.entering[data-enter=wipe]{animation:fx-wipe .3s linear}
 @media(prefers-reduced-motion:reduce){.preview-text>span.entering{animation:none}}
 .editor-style .text-inspector{gap:var(--space-sm)}
 
 
 /* step 2 after an answer is read: one line, send again or paste again, stories below */
-.ai-bar[data-done=true]{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-sm)}
-.ai-bar[data-done=true]>li{grid-template-columns:minmax(0,1fr) auto;padding:var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md);gap:var(--space-sm)}
-.ai-bar[data-done=true] .ai-num,.ai-bar[data-done=true] .ai-text>.caption{display:none}
+/* answer read: one bar, its label on the left and every button on the right; the "paste back" label and the
+   read count go, a warning about unused speech stays */
+.ai-bar[data-done=true]{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.ai-bar[data-done=true]>li{display:flex;align-items:center;gap:var(--space-sm);padding:0;border:0;background:none}
+.ai-bar[data-done=true]>li:first-child{flex:1;min-width:0}.ai-bar[data-done=true]>li:first-child .packet-actions{margin-left:auto}
+.ai-bar[data-done=true] .ai-num,.ai-bar[data-done=true] .ai-text>.caption,.ai-bar[data-done=true]>li:last-child .ai-text h2{display:none}
+.ai-bar[data-done=true]>li:last-child .ai-text:not(:has(.plan-status[data-state=warn])){display:none}
 .ai-bar[data-done=true] .ai-text{grid-auto-flow:column;justify-content:start;align-items:center;gap:var(--space-sm)}
 .ai-bar[data-done=true] .ai-text h2{font-size:.8125rem;font-weight:500;color:var(--txt-sub)}
 .ai-bar[data-done=true] .ai-text .plan-status{margin-top:0}
@@ -518,26 +522,41 @@ textarea{font-size:.75rem}
 .caption-ai{gap:var(--space-sm);flex-wrap:wrap}.caption-ai .caption{flex:1;min-width:16em}
 #captionTransport{display:grid;gap:var(--space-xs);min-width:0}
 #editor .edit-lane{height:96px}#editor .edit-mark::before{height:86px}
-#captionTransport .edit-grip,#captionTransport .edit-toggle,#captionTransport .edit-show-cut,#captionTransport .edit-aspect{display:none}
+#captionTransport .edit-grip,#captionTransport .edit-toggle,#captionTransport .edit-aspect{display:none}
 
-/* step 1: a card per video with what came of it; narrower tool panels */
-#fileList{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--space-md);align-items:start}
-#fileList li.file-card{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-xs) var(--space-sm);padding:0 0 var(--space-md);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);overflow:hidden}
-#fileList li.file-card+li{border-top:1px solid var(--line)}
-#fileList li.file-card:hover{background:var(--raised)}
-.file-cover{grid-column:1/-1;position:relative;aspect-ratio:16/9;background:var(--sunken);display:grid;place-items:center;overflow:hidden}
+/* step 1: one row per video, like a media list: cover, name and facts, a five-step track, how far along.
+   Rows scale to any number of videos; nothing wraps a word onto two lines. */
+#fileList{display:grid;gap:0}
+#fileList>li.file-card{position:relative;display:grid;grid-template-columns:20px 160px minmax(0,1fr) auto 32px;
+ grid-template-areas:"pick cover name percent remove" "pick cover info percent remove" "pick cover stages percent remove";
+ grid-template-rows:auto auto 1fr;align-items:center;gap:2px var(--space-lg);padding:var(--space-md) var(--space-sm);border:0;border-radius:var(--radius-sm);background:none}
+#fileList>li.file-card+li{border-top:1px solid var(--line)}
+#fileList>li.file-card:hover{background:var(--raised)}
+#fileList>li.file-card .file-pick{grid-row:auto;grid-column:auto;grid-area:pick;width:18px;height:18px;min-height:18px;margin:0;accent-color:var(--acc)}
+.file-cover{grid-area:cover;position:relative;aspect-ratio:16/9;border-radius:var(--radius-sm);background:var(--sunken);display:grid;place-items:center;overflow:hidden}
 .file-cover video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.file-cover .file-icon{grid-row:auto;height:auto;padding:4px 8px;background:transparent}
-.file-card .file-pick{position:absolute;top:8px;left:8px;z-index:1;width:20px;height:20px;min-height:20px;accent-color:var(--acc)}
-.file-card .source-remove{position:absolute;top:4px;right:4px;z-index:1;background:oklch(0% 0 0 / .45);color:#fff;border-radius:999px;min-width:32px;min-height:32px}
-.file-card .file-name,.file-card .file-info,.file-card .file-stages,.file-card .file-progress,.file-card .file-percent{grid-column:1/-1;margin:0 var(--space-md)}
-.file-card .file-name{margin-top:var(--space-sm)}
-.file-stages{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:4px}
-.file-stages li{font-size:.6875rem;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--mut)}
-.file-stages li[data-part=true]{border-color:var(--warn);color:var(--warn)}
-.file-stages li[data-done=true]{border-color:var(--ok);color:var(--ok)}
-.file-progress{height:6px;border-radius:999px;background:var(--sunken);overflow:hidden}.file-progress span{display:block;height:100%;background:var(--ok)}
-.file-percent{font-size:.75rem;color:var(--txt-sub);font-variant-numeric:tabular-nums}
+.file-cover .file-icon{grid-row:auto;height:auto;padding:2px 6px;background:transparent;font-size:.6875rem}
+.file-card .file-name{grid-area:name;align-self:end;font-size:.9375rem;font-weight:600;margin:0}
+#fileList>li.file-card .file-info{grid-column:auto;grid-area:info;margin:0;font-size:.8125rem}
+.file-stages{grid-area:stages;align-self:start;list-style:none;margin:var(--space-sm) 0 0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-xs);max-width:520px}
+.file-stages li{display:grid;gap:4px;font-size:.75rem;line-height:1.3;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-stages li::before{content:"";height:4px;border-radius:2px;background:var(--line)}
+.file-stages li[data-part=true]{color:var(--txt-sub)}.file-stages li[data-part=true]::before{background:linear-gradient(90deg,var(--warn) var(--fill,50%),var(--line) var(--fill,50%))}
+.file-stages li[data-done=true]{color:var(--txt-sub)}.file-stages li[data-done=true]::before{background:var(--ok)}
+.file-card .file-progress{display:none}
+.file-percent{grid-area:percent;margin:0;display:grid;justify-items:end;gap:2px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.file-percent b{font-size:1.125rem;font-weight:600;color:var(--txt)}.file-percent span{font-size:.8125rem;color:var(--mut)}
+#fileList>li.file-card .source-remove{grid-column:auto;grid-area:remove;min-width:32px;min-height:32px;padding:0;border-color:transparent;background:none;color:var(--mut)}
+#fileList>li.file-card .source-remove:hover:not(:disabled){color:var(--danger);background:var(--sunken)}
+.transcribe-percent{margin:-6px 0 0;font-variant-numeric:tabular-nums}
+/* no video yet: the drop area already says what to do */
+.stage:not([data-has-files]) .library-head,.stage:not([data-has-files]) #empty{display:none}
+@media (max-width:760px){
+ #fileList>li.file-card{grid-template-columns:20px 96px minmax(0,1fr) 32px;
+  grid-template-areas:"pick cover name remove" "pick cover info remove" "pick cover percent remove" "stages stages stages stages"}
+ .file-percent{justify-items:start;grid-auto-flow:column;gap:var(--space-sm);align-items:baseline}.file-percent b{font-size:.875rem}
+ .file-stages{max-width:none}
+}
 :root{--side:250px}
 .stage[data-panel="4"] .stage-body{grid-template-columns:min(24%,300px) minmax(0,1fr) !important}
 
@@ -565,14 +584,44 @@ textarea{font-size:.75rem}
 .layer-head{position:absolute;left:0;right:0;display:flex;align-items:center;gap:6px;padding:0 8px;font-size:.75rem;color:var(--txt-sub);border-top:1px solid var(--line)}
 .layer-head input{width:16px;height:16px;min-height:16px;margin:0;accent-color:var(--acc)}
 .layer-head button{all:unset;cursor:pointer}.layer-head button:hover{color:var(--txt)}
-#captionTransport .edit-lane{height:166px}
-#captionTransport .edit-mark::before{height:156px}
+#captionTransport .edit-lane{height:220px}
+#captionTransport .edit-mark::before{height:210px}
 #captionTransport .edit-seg{top:52px;height:34px;border-color:var(--line-strong);background:var(--raised)}
 #captionTransport .edit-seg[data-line-selected=true]{border-color:var(--acc);background:var(--acc-soft)}
 #captionTransport .edit-text{-webkit-line-clamp:1;line-height:30px;padding:0 6px}
 .edit-vid{position:absolute;top:26px;height:20px;border-radius:4px;background:color-mix(in oklch,var(--acc) 35%,var(--raised));pointer-events:none}
-.edit-emph{position:absolute;top:92px;height:30px;padding:0 6px;border:1px solid var(--warn);border-radius:6px;background:color-mix(in oklch,var(--warn) 28%,var(--surface));color:var(--txt);font-size:.75rem;font-weight:600;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:0;z-index:1}
-.edit-layer-off .edit-emph,.edit-layer-off-speech .edit-seg{opacity:.35}
+.edit-emph{position:absolute;top:104px;height:32px;padding:0 6px;border:1px solid var(--warn);border-radius:6px;background:color-mix(in oklch,var(--warn) 28%,var(--surface));color:var(--txt);font-size:.75rem;font-weight:600;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:0;z-index:1}
+.edit-sub{position:absolute;top:166px;height:32px;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;background:var(--raised);color:var(--txt);font-size:.75rem;line-height:30px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.edit-layer-off .edit-emph,.edit-layer-off-speech .edit-seg,.edit-layer-off-sub .edit-sub{opacity:.35}
+/* dead air inside a kept line: hatched where cut, dashed outline where clicked back in */
+.edit-air[data-thin=true]{background:linear-gradient(to right,transparent 4px,var(--acc) 4px 8px,transparent 8px);opacity:1}
+.air-menu{position:absolute;z-index:5;display:flex;gap:var(--space-xs,4px);padding:var(--space-xs,4px);background:var(--surface,#1b2333);border:1px solid var(--line);border-radius:var(--radius-sm);white-space:nowrap}
+.air-menu button{min-height:44px}
+.edit-air{position:absolute;top:0;bottom:0;min-height:0;padding:0;border:0;border-radius:0;z-index:2;cursor:pointer;
+ background:repeating-linear-gradient(135deg,oklch(12% .02 var(--h) / .85) 0 4px,oklch(40% .05 var(--h) / .85) 4px 8px)}
+.edit-air[data-kept=true]{background:none;outline:1px dashed var(--line-strong);outline-offset:-2px}
+.edit-air:hover{outline:1px solid var(--acc);outline-offset:-1px}
+.edit-air-min input{width:64px;min-height:32px;padding:2px 6px;font-size:.8125rem;font-variant-numeric:tabular-nums}.air-status{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#airDownload{min-height:32px;padding:0 10px;font-size:.8125rem}
+/* the people heard: a pick list under "คนพูด" in the play row; each has a colour shared with the video bar */
+.speaker-box{position:relative}.speaker-box>summary{list-style:none;cursor:pointer;min-height:32px;display:flex;align-items:center;padding:0 10px;border:1px solid var(--line);border-radius:var(--radius-sm);font-size:.8125rem}
+.speaker-box>summary::-webkit-details-marker{display:none}
+.speaker-pop{position:absolute;bottom:calc(100% + 6px);left:0;z-index:6;width:300px;display:grid;gap:var(--space-sm);padding:var(--space-md);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);box-shadow:0 8px 24px oklch(10% .02 var(--h) / .4)}
+#textFrame,#editFrame{overflow:hidden}
+.speaker-row select{min-height:28px;padding:0 4px;font-size:.75rem}
+.speaker-row{display:grid;grid-template-columns:18px 10px minmax(0,1fr) auto;align-items:center;gap:var(--space-sm);font-size:.8125rem}
+.speaker-row input,.speaker-follow input{width:16px;height:16px;min-height:16px;margin:0;accent-color:var(--acc)}
+.speaker-dot{width:10px;height:10px;border-radius:50%;background:var(--sp)}
+.speaker-follow{display:flex;align-items:center;gap:var(--space-sm);font-size:.8125rem;font-weight:600}
+[data-speaker="0"]{--sp:oklch(72% .14 250)}[data-speaker="1"]{--sp:oklch(75% .14 150)}[data-speaker="2"]{--sp:oklch(78% .14 80)}[data-speaker="3"]{--sp:oklch(70% .15 330)}
+.edit-vid[data-speaker]{background:color-mix(in oklch,var(--sp) 55%,var(--raised))}
+/* an empty AI layer: a dark band over its row with the create button, then the send-and-paste box, in the middle */
+#captionTransport>#layerActions{grid-column:2;grid-row:2;position:relative;pointer-events:none;z-index:3}
+.layer-action{position:absolute;left:1px;right:1px;display:flex;align-items:center;justify-content:center;gap:var(--space-sm);background:oklch(12% .02 var(--h) / .86);border-top:1px solid var(--line);pointer-events:auto}
+.layer-action[data-role=emphasis]{top:64px;height:54px}.layer-action[data-role=english]{top:118px;height:54px}
+.layer-action[hidden]{display:none}
+.layer-action>span{font-size:.8125rem;color:var(--txt-sub);margin-right:var(--space-xs)}
+.layer-action button{min-height:36px;padding:0 14px;font-size:.8125rem}
 
 /* the story picker stays in the title on steps 3 and 4; step 4's preview drops its caption row like step 3 */
 #captionsTitle{display:flex;align-items:center;gap:var(--space-sm)}#captionsTitle>span::after{content:' ·'}
@@ -588,12 +637,14 @@ textarea{font-size:.75rem}
 #captionTransport .editor-zoom{margin-left:var(--space-sm)}
 #editor .caption-ai{display:none}
 #captionTransport .editor-controls{gap:var(--space-sm)}
-#captionTransport .edit-lane{height:112px}
-#captionTransport .edit-mark::before{height:104px}
+#captionTransport .edit-lane{height:176px}
+#captionTransport .edit-mark::before{height:168px}
 .edit-vid{top:24px;height:12px}
 #captionTransport .edit-seg{top:39px;height:24px}
 #captionTransport .edit-text{line-height:22px;font-size:.75rem}
-.edit-emph{top:65px;height:22px;line-height:20px}
+.edit-emph{top:76px;height:28px;line-height:26px;min-width:max-content}
+.edit-emph:hover{z-index:2}
+.edit-sub{top:132px;height:28px;line-height:26px}
 
 /* one top row (name, steps, save, menu) and a thin stage row; everything else goes to the work area */
 .app{grid-template-rows:auto minmax(0,1fr)}
@@ -606,7 +657,10 @@ textarea{font-size:.75rem}
 .topbar .steps button+button::before{width:16px;margin-right:var(--space-sm)}
 .topbar-actions.doc-tools{margin-left:0}
 /* the work is named on step 1 only */
-.topbar:has([data-step="1"]:not([aria-current])) .project-field{display:none}
+/* the project name sits beside the logo on every step and reads as a title until hovered or edited */
+.topbar .project-field input{background:transparent;border-color:transparent;font-weight:600;font-size:.9375rem;text-overflow:ellipsis}
+.topbar .project-field input:hover{border-color:var(--line);background:var(--sunken)}
+.topbar .project-field input:focus{border-color:var(--line-strong);background:var(--sunken)}
 .stage>.stage-head{padding:var(--space-xs) var(--space-lg);min-height:0;border-bottom:1px solid var(--line)}
 .stage>.stage-head h1{font-size:1rem;line-height:1.3}
 .stage>.stage-head select.edit-story{min-height:30px;padding-block:2px}
@@ -830,6 +884,122 @@ label[for="fx-blend"]::before{content:"🌗 "}
 .sub-timing .icon-only{min-width:30px;font-weight:700}
 .sub-timing output{min-width:4.5em;text-align:center;font-variant-numeric:tabular-nums;font-size:.8125rem}
 .sub-timing .caption{margin-left:var(--space-md)}
+
+/* Keep playback visible. Secondary settings expand in normal document and keyboard order. */
+.editor-controls{display:flex;flex-wrap:wrap;gap:var(--space-sm);min-inline-size:0}
+.transport-primary{display:flex;align-items:center;flex:1 1 240px;gap:var(--space-sm);min-inline-size:0}
+.transport-primary #editClock{min-inline-size:0;max-inline-size:18em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.transport-options{min-inline-size:0}
+.transport-options>summary{display:flex;align-items:center;min-height:44px;padding:var(--space-sm) var(--space-md);border:1px solid var(--line);border-radius:var(--radius-sm);cursor:pointer;list-style:none}
+.transport-options>summary::-webkit-details-marker{display:none}
+.transport-options[open]{flex:1 1 100%}
+.transport-options[open]>summary{width:fit-content;border-color:var(--acc)}
+.editor-option-panel{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-md);padding-block:var(--space-md);min-inline-size:0}
+.editor-option-panel .air-status{white-space:normal;max-inline-size:28em;overflow-wrap:anywhere}
+.editor-option-panel .speaker-pop{position:static;box-shadow:none;min-width:0;max-width:100%}
+.editor-option-panel .speaker-box[open]{flex-basis:100%}
+.editor-option-panel .speaker-pop p{max-inline-size:48ch}
+.editor-option-panel .sub-timing{flex-wrap:wrap;gap:var(--space-sm)}
+.editor-option-panel .caption-ai{margin:0!important;flex-wrap:wrap}
+.editor-controls .editor-zoom{flex:0 1 180px;min-inline-size:0;margin-inline-start:auto}
+.editor-controls .editor-zoom input{min-width:60px;width:100%}
+#captionTransport .editor-controls{min-inline-size:0}
+.line-words{max-block-size:10rem;overflow:auto}
+.editor-option-panel input,.editor-option-panel button,.editor-option-panel select,#captionTransport .caption-ai button,#captionTransport .sub-timing button{min-height:44px}
+#captionTransport .sub-timing button{min-width:44px}
+@media(max-width:600px){
+ .transport-primary{flex-basis:100%;flex-wrap:wrap}
+ .transport-primary #editClock{max-inline-size:10em}
+ .editor-controls .editor-zoom{flex:1 1 120px}
+ .transport-options{max-inline-size:100%}
+ .editor-option-panel>*{max-inline-size:100%}
+ .sub-timing .caption{margin:0}
+}
+/* Stable preview and a scrolling side inspector. Settings never consume the canvas/timeline row. */
+.edit-stage{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-md);overflow:hidden;min-block-size:200px}
+.edit-stage>.frame-surround{min-inline-size:0;min-block-size:0}
+.edit-stage>.transport-options{inline-size:160px;max-block-size:100%;overflow:auto;align-self:start}
+.edit-stage>.transport-options[open]{inline-size:320px;align-self:stretch}
+.edit-stage .editor-option-panel{display:grid;align-content:start;align-items:start}
+.editor-controls .editor-zoom{display:flex;align-items:center;gap:var(--space-sm);white-space:nowrap}
+.stage[data-panel="4"] .text-workspace{grid-template-columns:minmax(200px,1fr) minmax(280px,360px)}
+.stage[data-panel="4"] .text-inspector{min-inline-size:0;overflow:auto}
+.stage[data-panel="4"] #captionOptions>summary{cursor:pointer;min-height:44px;padding:var(--space-sm);border:1px solid var(--line)}
+.stage:not([data-panel="4"]) #captionOptions{display:none}
+#captionOptions .editor-option-panel{display:grid;gap:var(--space-sm)}
+#captionOptions .caption-ai,#captionOptions .sub-timing{flex-wrap:wrap;min-inline-size:0}
+#captionOptions #captionRedo{display:grid;grid-template-columns:1fr;inline-size:100%}
+#captionOptions button{min-height:44px;white-space:normal}
+#captionOptions .sub-timing{display:flex}
+.caption-dock{max-block-size:38dvh;overflow:auto}
+.reply-preview{max-block-size:180px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);padding:var(--space-sm) var(--space-md)}
+.reply-preview p{margin:var(--space-xs) 0}
+@media(max-width:760px){
+ .edit-stage{grid-template-columns:minmax(0,1fr);overflow:auto}
+ .edit-stage>.frame-surround{min-block-size:240px}
+ .edit-stage>.transport-options,.edit-stage>.transport-options[open]{inline-size:100%;max-block-size:220px}
+ .stage[data-panel="4"] .text-workspace{grid-template-columns:minmax(0,1fr);overflow:auto}
+ .stage[data-panel="4"] .text-stage{min-block-size:280px}
+ .stage[data-panel="4"] .text-inspector{max-block-size:300px}
+}
+
+/* Working area owns its scroll; the document never widens to fit the toolbar. */
+main,.workspace,.stage,.stage-head,.stage-head>div,.stage-body,#editor,#captionHost{min-inline-size:0}
+.stage-head h1{min-inline-size:0;display:flex;align-items:center;gap:var(--space-sm)}
+.stage-head select.edit-story{min-inline-size:0;text-overflow:ellipsis;flex:1}
+.text-controls .tc-cols{grid-template-columns:minmax(0,1fr)}
+.advanced-text{min-inline-size:0;border-top:1px solid var(--line)}
+.text-inspector .advanced-text>summary,.text-inspector .timing-details>summary{min-height:44px;display:flex;align-items:center;cursor:pointer;color:var(--txt-sub)}
+.advanced-text[open]{display:grid;gap:var(--space-sm)}
+.timing-warning{color:var(--warn);align-self:start}
+.timing-details{border-bottom:1px solid var(--line);min-inline-size:0}
+.timing-details ul{display:grid;gap:var(--space-xs);max-block-size:180px;overflow:auto;list-style:none;padding:0;margin:0}
+.timing-details button{min-height:44px;inline-size:100%;text-align:start;font-size:.8125rem;white-space:normal}
+.text-inspector .tc button,.text-inspector .tc .tog{min-height:44px}
+.text-inspector .tc input[type=color]{min-height:44px}
+@media(max-width:1100px){
+ .topbar-inner{flex-wrap:wrap;gap:var(--space-sm);padding-inline:var(--space-md)}
+ .topbar .steps{order:1;flex:1 0 100%;justify-content:flex-start;overflow-x:auto}
+ .topbar .project-field{max-inline-size:none;flex:1 1 140px}
+ .stage>.stage-head{padding-inline:var(--space-md)}
+ .stage>.stage-foot{padding-inline:var(--space-sm)}
+ .stage>.stage-head select.edit-story{max-inline-size:100%}
+ .stage>.stage-head h1>span{white-space:nowrap}
+}
+@media(max-width:760px){
+ .topbar .brand{font-size:.8125rem;gap:var(--space-xs)}
+ .topbar .project-field{flex:1 1 80px;max-inline-size:130px}
+ .topbar .doc-tools{margin-inline-start:auto}
+ .topbar .doc-tools .history,.topbar #theme{display:none}
+ .topbar .steps button{flex-shrink:0;min-height:44px}
+ .app{height:auto;min-height:100dvh}
+ main{min-block-size:calc(100dvh - 96px)}
+ .stage{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr)}
+ .stage>.stage-head{grid-column:1;grid-row:1;flex-wrap:wrap;gap:var(--space-xs);padding-block:var(--space-sm)}
+ .stage>.stage-foot{grid-column:1;grid-row:2;justify-content:flex-end;min-block-size:44px}
+ .stage>.stage-body{grid-column:1;grid-row:3;overflow:auto;padding-inline:var(--space-sm)}
+ .stage-head h1{font-size:.9375rem;inline-size:100%}
+ .stage-head>div{flex:1 1 100%}
+ .stage-head select.edit-story{max-inline-size:calc(100vw - 84px)}
+ .stage>.stage-foot button{min-height:44px}
+ .topbar .project-field input,.topbar .more>summary,.stage-head select.edit-story,.frame-aspect select,.edit-aspect select{min-height:44px}
+ .topbar .more>summary{min-inline-size:44px}
+ #textResize{min-width:44px;width:44px;min-height:44px;height:44px}
+ .stage>.stage-foot .foot-hint{display:none}
+ .stage[data-panel="3"] .stage-body{min-block-size:520px;overflow:visible}
+ #editor:not([hidden]){grid-template-rows:minmax(280px,1fr) auto auto}
+ .edit-stage{overflow:visible}
+ .edit-stage>.frame-surround{block-size:300px;min-block-size:0}
+ .edit-stage>.transport-options[open]{max-block-size:none}
+ .stage[data-panel="4"] .stage-body,.stage[data-panel="5"] .stage-body{display:flex!important;flex-direction:column;overflow:visible}
+ #captionHost{order:0;min-block-size:0}
+ .stage[data-panel="4"] .text-workspace,.stage[data-panel="5"] .text-workspace{grid-template-columns:minmax(0,1fr);overflow:visible}
+ .stage[data-panel="4"] .text-stage,.stage[data-panel="5"] .text-stage{block-size:330px;min-block-size:0}
+ .stage[data-panel="4"] .text-inspector,.stage[data-panel="5"] .text-inspector{max-block-size:none;overflow:visible;border-inline-start:0}
+ .caption-dock{order:1;max-block-size:none}
+ .caption-dock #captionTransport{min-inline-size:0;max-inline-size:100%}
+ .stage[data-panel="4"] .text-controls .tc-row{grid-template-columns:6em minmax(0,1fr)}
+}
 </style>
 </head>
 <body data-loading="true">
@@ -837,8 +1007,8 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <p id="toast" class="badge toast" role="status" hidden></p>
 <div class="app">
 <header class="topbar"><div class="topbar-inner">
-<strong class="brand"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9 5 3-5 3Z"/></svg>EditorKrab</strong>
-<div class="project-field"><label for="title" class="sr-only">ชื่องาน</label><input id="title" maxlength="120" placeholder="ตั้งชื่องานนี้" autocomplete="off"></div>
+<a class="brand" href="/" title="กลับหน้าโปรเจกต์"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9 5 3-5 3Z"/></svg>EditorKrab</a>
+<div class="project-field"><label for="title" class="sr-only">ชื่อโปรเจกต์</label><input id="title" maxlength="120" placeholder="ตั้งชื่อโปรเจกต์" title="กดเพื่อแก้ชื่อโปรเจกต์" autocomplete="off"></div>
 <nav class="steps" aria-label="ขั้นตอนทำคลิป">
 <button data-step="1"><span class="step-number">01</span><small>ใส่วิดีโอ</small></button><button data-step="2"><span class="step-number">02</span><small>สรุปเนื้อหา</small></button><button data-step="3"><span class="step-number">03</span><small>ตัดต่อ</small></button><button data-step="4"><span class="step-number">04</span><small>ตรวจซับ</small></button><button data-step="5"><span class="step-number">05</span><small>หัวคลิป</small></button><button data-step="6"><span class="step-number">06</span><small>รับคลิป</small></button>
 </nav><div class="topbar-actions doc-tools"><span id="saved" class="badge" role="status" aria-live="polite">กำลังอ่านร่าง</span><div class="row history"><button id="undo" class="icon" aria-label="เลิกทำ" title="เลิกทำ" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button><button id="redo" class="icon" aria-label="ทำซ้ำ" title="ทำซ้ำ" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button></div></div>
@@ -848,7 +1018,7 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <div class="boot-state" role="status"><span>กำลังเปิดร่าง</span><div class="skeleton-line"></div><div class="skeleton-line"></div></div>
 <div class="workspace" id="workspace" tabindex="-1">
 <section class="stage" data-panel="1" aria-labelledby="prepareTitle">
-<div class="stage-head"><div><h1 id="prepareTitle">ใส่วิดีโอ</h1><p>ใส่วิดีโอ แล้วกดถอดเสียง</p></div></div>
+<div class="stage-head"><div><h1 id="prepareTitle">ใส่วิดีโอ</h1><p>ใส่วิดีโอกี่ตัวก็ได้ แล้วกดถอดเสียง</p></div></div>
 <div class="stage-body split">
 <div class="split-main">
 <div class="drop" id="drop">
@@ -873,7 +1043,7 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <section class="transcript-panel" aria-labelledby="transcriptTitle">
 <div class="row"><h2 id="transcriptTitle">ถอดเสียงเป็นข้อความ</h2><span id="transcribeState" class="badge" role="status">กำลังตรวจ</span></div>
 <p id="transcribeHint" class="caption" role="status">กำลังอ่านการตั้งค่า</p>
-<progress id="transcribeProgress" aria-label="ช่วงเสียงที่ถอดสำเร็จ" hidden></progress>
+<progress id="transcribeProgress" aria-label="ถอดเสียงไปแล้ว" max="100" hidden></progress><p id="transcribePercent" class="caption transcribe-percent" aria-live="off" hidden></p>
 <p id="transcribeError" class="field-warning" role="alert" hidden></p>
 <div id="asrDownload" class="asr-download" hidden><p id="asrDownloadNote" class="caption">ใช้ครั้งแรกต้องดาวน์โหลดตัวถอดเสียงก่อน</p><div class="row"><button id="asrDownloadStart" type="button" data-icon="download">ดาวน์โหลดตัวถอดเสียง</button><button id="asrDownloadCancel" type="button" hidden data-icon="x">ยกเลิก</button></div><progress id="asrDownloadProgress" max="1" value="0" aria-label="ดาวน์โหลดตัวถอดเสียง" hidden></progress><p id="asrDownloadRate" class="caption" role="status" hidden></p><p id="asrDownloadError" class="field-warning" role="alert" hidden></p></div>
 <div id="asrGpu" class="asr-download" hidden><p id="asrGpuNote" class="caption"></p><div id="asrGpuButtons" class="row"><button id="asrGpuStart" type="button" data-icon="gpu">ดาวน์โหลดตัวเร่งการ์ดจอ</button><button id="asrGpuCancel" type="button" hidden data-icon="x">ยกเลิก</button></div><progress id="asrGpuProgress" max="1" value="0" aria-label="ดาวน์โหลดตัวเร่งการ์ดจอ" hidden></progress><p id="asrGpuError" class="field-warning" role="alert" hidden></p><label id="asrGpuForceLabel" class="asr-gpu-force" hidden><input id="asrGpuForce" type="checkbox">ใช้ CPU อย่างเดียว</label></div>
@@ -891,7 +1061,7 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <dialog id="planDialog" class="plan-dialog" aria-labelledby="planTitle"><form method="dialog"><h2 id="planTitle">วางคำตอบจาก AI</h2><p class="caption">คัดลอกคำตอบทั้งหมดจากแชท AI แล้ววางในช่องนี้</p>
 <label class="field plan-field"><span class="sr-only">คำตอบจาก AI</span><textarea id="plan" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label>
 <div class="row plan-dialog-actions"><button value="close">ปิด</button><button value="close" class="primary">ใช้คำตอบนี้</button></div></form></dialog>
-<dialog id="emphasisDialog" class="plan-dialog" aria-labelledby="emphasisTitle"><form method="dialog"><h2 id="emphasisTitle">วางคำตอบคำเน้นจาก AI</h2><p class="caption">คัดลอกคำตอบทั้งหมดจากแชท AI แล้ววางในช่องนี้</p><label class="field plan-field"><span class="sr-only">คำตอบคำเน้นจาก AI</span><textarea id="emphasisAnswer" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><p id="emphasisCheck" class="badge plan-status" role="status" hidden></p><div class="row plan-dialog-actions"><button value="close">ปิด</button><button id="emphasisApply" value="close" class="primary" data-icon="check" disabled>ใช้คำตอบนี้</button></div></form></dialog>
+<dialog id="emphasisDialog" class="plan-dialog" aria-labelledby="emphasisTitle"><form method="dialog"><h2 id="emphasisTitle">วางคำตอบคำเน้นจาก AI</h2><p class="caption">คัดลอกคำตอบทั้งหมดจากแชท AI แล้ววางในช่องนี้</p><label class="field plan-field"><span class="sr-only">คำตอบคำเน้นจาก AI</span><textarea id="emphasisAnswer" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><div id="emphasisPreview" class="reply-preview" hidden></div><p id="emphasisCheck" class="badge plan-status" role="status" hidden></p><div class="row plan-dialog-actions"><button value="close">ปิด</button><button id="emphasisApply" value="close" class="primary" data-icon="check" disabled>ใช้คำตอบนี้</button></div></form></dialog>
 <dialog id="refineDialog" class="plan-dialog" aria-labelledby="refineTitle"><form method="dialog"><h2 id="refineTitle">ตัดต่อเรียบเรียง</h2><ol class="refine-steps caption"><li><span id="refineCopyNote">กำลังคัดลอก</span> <button type="button" id="refineCopy" data-icon="copy">คัดลอกอีกครั้ง</button></li><li>คัดลอกคำตอบทั้งหมดจากแชท แล้ววางในช่องนี้</li></ol><label class="field plan-field"><span class="sr-only">คำตอบจาก AI สำหรับเรื่องนี้</span><textarea id="refineAnswer" spellcheck="false" placeholder="วางคำตอบทั้งหมดตรงนี้"></textarea></label><p id="refineStatus" class="badge plan-status" role="status" hidden></p><div class="row plan-dialog-actions"><button value="close">ปิด</button><button id="refineApply" value="close" class="primary" data-icon="check" disabled>ใช้คำตอบนี้</button></div></form></dialog>
 </div>
 <div class="stage-foot"><button class="back" data-go="1" data-icon="back">ย้อนกลับ</button><div class="actions"><button data-go="3">ถัดไป</button></div></div>
@@ -902,7 +1072,11 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <p id="editEmpty" class="caption">วางคำตอบจาก AI ในขั้น 2 แล้วเลือกเรื่องที่จะตัดต่อ</p>
 <div id="editor" class="editor" hidden>
 <div class="edit-stage"><div class="frame-surround"><div id="editFrame" class="text-frame edit-frame"></div></div></div><video id="editVideo" class="frame-video" playsinline preload="metadata" title="ลากภาพเพื่อเลื่อนตำแหน่งครอป"></video><p id="editVideoNote" class="caption" role="status"></p>
-<div class="row editor-controls"><button id="editPlay" type="button" data-icon="play" title="เว้นวรรค เล่น/หยุด · ← → ทีละเฟรม (Shift ทีละวินาที) · Q ตัดต้นท่อนถึงหัวเล่น · W ตัดท้ายท่อนถึงหัวเล่น · Delete ตัดท่อนนี้ทิ้ง">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><label class="edit-aspect"><span class="sr-only">ขนาดคลิป</span><select id="editAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">แสดงท่อนที่ตัดทิ้ง</label><label class="editor-zoom caption">ซูม <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
+<div class="row editor-controls">
+<div class="transport-primary"><button id="editPlay" type="button" data-icon="play" title="เว้นวรรค เล่น/หยุด · ← → ทีละเฟรม (Shift ทีละวินาที) · Q ตัดต้นท่อนถึงหัวเล่น · W ตัดท้ายท่อนถึงหัวเล่น · Delete ตัดท่อนนี้ทิ้ง">เล่นทั้งเรื่อง</button><span id="editClock" class="caption"></span><label class="edit-aspect"><span class="sr-only">ขนาดคลิป</span><select id="editAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label></div>
+<details id="editOptions" class="transport-options"><summary>ตั้งค่าการตัด</summary><div class="editor-option-panel"><label class="tick caption edit-show-cut"><input type="checkbox" id="editShowCut">ดูส่วนที่ตัด</label><label class="edit-air-min caption">ตัดช่วงเงียบ <input id="airMin" type="number" min="0" max="10" step="0.1" inputmode="decimal" title="ช่วงที่ไม่มีเสียงที่ติ๊กเก็บไว้ (เงียบ หัวเราะ เสียงร้าน) นานเท่านี้ขึ้นไปจะถูกตัด · 0 = ไม่ตัด · คลิป Nina ตัดเกิน 1 วิ" aria-label="ตัดช่วงเงียบที่นานกว่า (วินาที) 0 คือไม่ตัด"> วิ</label><span id="airStatus" class="caption air-status" role="status"></span><details id="speakerBox" class="speaker-box" hidden><summary>คนพูด</summary><div class="speaker-pop"><p class="caption">ติ๊กเสียงที่จะเก็บไว้ ช่วงที่มีแต่เสียงอื่นจะถูกตัดเหมือนช่วงเงียบ</p><div id="speakerList"></div><label class="speaker-follow"><input type="checkbox" id="followSpeaker">กล้องตามคนพูด</label><div id="faceList" class="face-list" hidden></div><p class="caption">ช่วงสั้นกว่า 2.5 วินาทีจะไม่สลับภาพ หากจับคนผิด ปิดกล้องตามคนพูดแล้วใช้ภาพกว้าง</p></div></details><button id="airDownload" type="button" hidden data-icon="download">ดาวน์โหลดตัวแยกเสียง</button></div></details>
+<p id="timingStatus" class="badge timing-warning" role="status" hidden></p><details id="timingDetails" class="timing-details"><summary>จุดที่ต้องฟังตรวจ</summary><ul id="timingIssues"></ul></details><details id="captionOptions" class="transport-options" hidden><summary>เตรียมซับและภาษา</summary><div id="captionOptionsPanel" class="editor-option-panel"></div></details>
+<label class="editor-zoom caption">ไทม์ไลน์ <input id="editZoom" type="range" min="2" max="80" value="40"></label></div>
 <div id="editTrack" class="edit-track"></div>
 </div>
 </div>
@@ -912,7 +1086,7 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <div class="stage-head"><div><h1 id="captionsTitle"><span>ซับ</span></h1><p>เลือกสิ่งที่จะขึ้นจอ แล้วลากวางตำแหน่ง</p></div></div>
 <div class="stage-body">
 
-<div id="captionDock" class="caption-dock"><div class="row caption-ai"><button id="emphasisCopy" type="button" data-icon="copy" title="คัดลอกท่อนที่ใช้ทุกเรื่องไปให้ AI เลือกคำเน้น">AI เลือกคำเน้น</button><button id="emphasisOpen" type="button" data-icon="paste" title="วางคำตอบจาก AI">วางคำตอบ</button><p id="emphasisStatus" class="badge plan-status toast" role="status" hidden></p></div><div id="captionTransport"><div class="row sub-timing"><button id="retime" type="button" data-icon="retry" title="ถอดเสียงใหม่แบบจับเวลาละเอียด แล้วใส่เวลาคำให้ท่อนเดิม (เรื่อง คำเน้น การตัดต่อ อยู่ครบ)">จัดเวลาคำใหม่</button><span class="caption">เลื่อนซับ</span><button id="subOffsetLess" type="button" class="icon-only" title="ซับขึ้นเร็วขึ้น 0.1 วิ" aria-label="ซับขึ้นเร็วขึ้น 0.1 วิ">−</button><output id="subOffsetValue">0.0 วิ</output><button id="subOffsetMore" type="button" class="icon-only" title="ซับขึ้นช้าลง 0.1 วิ" aria-label="ซับขึ้นช้าลง 0.1 วิ">+</button></div><div id="layerHeads" class="layer-heads"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
+<div id="captionDock" class="caption-dock"><div class="row caption-ai"><span id="captionRedo" class="row"></span><p id="emphasisStatus" class="badge plan-status toast" role="status" hidden></p></div><div id="captionTransport"><div class="row sub-timing"><button id="retime" type="button" data-icon="retry" title="ถอดเสียงใหม่แบบจับเวลาละเอียด แล้วใส่เวลาคำให้ท่อนเดิม (เรื่อง คำเน้น การตัดต่อ อยู่ครบ)">จัดเวลาคำใหม่</button><span class="caption">เลื่อนซับ</span><button id="subOffsetLess" type="button" class="icon-only" title="ซับขึ้นเร็วขึ้น 0.1 วิ" aria-label="ซับขึ้นเร็วขึ้น 0.1 วิ">−</button><output id="subOffsetValue">0.0 วิ</output><button id="subOffsetMore" type="button" class="icon-only" title="ซับขึ้นช้าลง 0.1 วิ" aria-label="ซับขึ้นช้าลง 0.1 วิ">+</button></div><div id="layerHeads" class="layer-heads"></div><div id="layerActions" class="layer-actions"></div></div></div><div id="captionHost"><div class="text-workspace" id="textStyleWorkspace">
 <div class="text-stage"><div class="preview-caption"><span>ตัวอย่าง</span><label class="frame-aspect"><span class="sr-only">ขนาดคลิป</span><select id="frameAspect" title="ขนาดคลิปที่จะได้"><option value="9:16">9:16 แนวตั้ง</option><option value="1:1">1:1 จัตุรัส</option><option value="16:9">16:9 แนวนอน</option></select></label></div><div class="frame-surround"><div id="textFrame" class="text-frame"><button id="textResize" class="text-resize" aria-label="ขยายข้อความ ใช้ลูกศรปรับขนาด" hidden></button><i class="align-guide align-x" id="alignX" aria-hidden="true" hidden></i><i class="align-guide align-y" id="alignY" aria-hidden="true" hidden></i></div></div><p id="textDragHint" class="preview-hint">ลากเพื่อย้าย ลากมุมเพื่อย่อขยาย</p><p id="textBounds" class="field-warning" role="status" hidden></p></div>
 <aside class="text-inspector" aria-label="ปรับข้อความ"><div class="inspector-tabs" role="tablist"><button type="button" role="tab" data-tab="style" aria-selected="true">ปรับข้อความ</button><button type="button" role="tab" data-tab="qc" aria-selected="false">ตรวจซับ</button></div><div id="lineWords" class="line-words" hidden></div><div id="lineBox" class="line-box" hidden><div class="line-box-head"><label for="lineText">✏️ ข้อความท่อนนี้</label><span id="lineTime" class="caption"></span></div><textarea id="lineText" rows="2" maxlength="2000"></textarea><p id="lineEmph" class="caption line-emph" hidden></p><div class="line-box-actions"><button id="lineListen" type="button" data-icon="play">ฟัง</button><button id="lineSave" type="button" class="primary" data-icon="check" disabled>บันทึก</button></div><ul id="lineProblems" class="line-problems"></ul></div>
 <fieldset id="textComponents" class="text-components"><legend>ขึ้นจอ</legend><div class="role-row" data-role-row="speech"><input type="checkbox" data-role-option="speech" aria-label="แสดงคำพูด"><button type="button" class="role-pick" data-role-pick="speech">คำพูด</button></div><div class="role-row" data-role-row="emphasis"><input type="checkbox" data-role-option="emphasis" aria-label="แสดงคำสำคัญ"><button type="button" class="role-pick" data-role-pick="emphasis">คำเน้น</button></div><div class="role-row" data-role-row="english"><input type="checkbox" data-role-option="english" aria-label="แสดงคำแปลอังกฤษ"><button type="button" class="role-pick" data-role-pick="english">อังกฤษ</button></div></fieldset>
@@ -920,7 +1094,7 @@ label[for="fx-blend"]::before{content:"🌗 "}
 <p id="textSelectionHint" class="selection-hint">ติ๊กอย่างน้อย 1 อย่าง</p>
 <div id="textControls" class="text-controls tc" hidden><h2 id="textRoleTitle">ข้อความพูด</h2>
 <label class="field" for="text-text"><span id="sampleLabel">ข้อความตัวอย่าง</span><input id="text-text" maxlength="80" autocomplete="off"></label>
-<div class="tc-cols"><div class="tc-col"><div class="tc-row"><label for="text-font">🔤 ฟอนต์</label><div class="tc-font"><input id="text-font" list="textFonts" maxlength="128" autocomplete="off" aria-describedby="fontStatus" aria-controls="fontList"><datalist id="textFonts"><option value="ฟอนต์ระบบ"></option><option value="Tahoma"></option><option value="Leelawadee UI"></option></datalist><button id="localFonts" type="button" data-icon="font" title="อ่านรายชื่อฟอนต์ที่ติดตั้งในเครื่องนี้" aria-label="ฟอนต์ในเครื่อง">ฟอนต์ในเครื่อง</button></div></div><div id="fontList" class="font-list" role="listbox" aria-label="ฟอนต์ในเครื่อง" hidden></div><p id="fontStatus" class="preview-hint" role="status"></p><div class="tc-row"><label for="text-size">📏 ขนาด</label><div class="slide"><input type="range" data-for="text-size" min="24" max="160" step="1" aria-hidden="true" tabindex="-1"><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"></div></div><div class="tc-row"><span class="tc-label">รูปแบบ</span><div class="seg"><label class="tog" title="ตัวหนา"><input id="fx-bold" type="checkbox"><b>B</b></label><label class="tog" title="ขีดเส้นใต้"><input id="fx-underline" type="checkbox"><u>U</u></label><label class="tog" title="ตัวเอียง"><input id="fx-italic" type="checkbox"><i>I</i></label></div></div><div class="tc-row"><span class="tc-label">ตัวพิมพ์</span><div class="seg" role="group" aria-label="ตัวพิมพ์"><button type="button" data-for="fx-case" data-pick="none" aria-pressed="false" title="ตามเดิม">Aa</button><button type="button" data-for="fx-case" data-pick="upper" aria-pressed="false" title="ตัวใหญ่ทั้งหมด">TT</button><button type="button" data-for="fx-case" data-pick="lower" aria-pressed="false" title="ตัวเล็กทั้งหมด">tt</button><button type="button" data-for="fx-case" data-pick="title" aria-pressed="false" title="ขึ้นต้นตัวใหญ่">Tt</button></div><select id="fx-case" hidden><option value="none">ตามเดิม</option><option value="upper">ตัวใหญ่ทั้งหมด</option><option value="lower">ตัวเล็กทั้งหมด</option><option value="title">ขึ้นต้นตัวใหญ่</option></select></div><div class="tc-row"><label for="fx-spacing">ระยะห่างตัวอักษร</label><div class="slide"><input type="range" data-for="fx-spacing" min="-20" max="100" step="1" aria-hidden="true" tabindex="-1"><input id="fx-spacing" type="number" min="-20" max="100" step="1" inputmode="numeric"></div></div><div class="tc-row"><span class="tc-label">วางแนว</span><div class="seg" role="group" aria-label="วางแนว"><button type="button" data-for="fx-align" data-pick="left" aria-pressed="false" title="ชิดซ้าย">⫷</button><button type="button" data-for="fx-align" data-pick="center" aria-pressed="false" title="กึ่งกลาง">≡</button><button type="button" data-for="fx-align" data-pick="right" aria-pressed="false" title="ชิดขวา">⫸</button></div><select id="fx-align" hidden><option value="left">ชิดซ้าย</option><option value="center">กึ่งกลาง</option><option value="right">ชิดขวา</option></select></div><div class="tc-row"><label id="colorLabel" for="text-color">🎨 สี</label><div class="tc-pair"><input id="text-color" type="color" aria-labelledby="colorLabel"><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false" aria-label="รหัสสี เช่น #FFFFFF" placeholder="#FFFFFF"></div></div><div class="tc-row"><label for="fx-blend">🌗 โหมดผสม</label><select id="fx-blend"><option value="normal">ปกติ</option><option value="add">Add (สว่างขึ้น)</option><option value="screen">Screen (สว่างนุ่ม)</option><option value="multiply">Multiply (เข้มขึ้น)</option></select></div><div class="tc-row tc-stack"><span class="tc-label">🎬 ตอนขึ้น</span><div class="enter-tiles" role="group" aria-label="ตอนขึ้น"><button type="button" class="enter-tile" data-enter-pick="none" aria-pressed="false"><span class="enter-sample" data-sample="none">Aa</span><small>ไม่มี</small></button><button type="button" class="enter-tile" data-enter-pick="fade" aria-pressed="false"><span class="enter-sample" data-sample="fade">Aa</span><small>จางเข้า</small></button><button type="button" class="enter-tile" data-enter-pick="pop" aria-pressed="false"><span class="enter-sample" data-sample="pop">Aa</span><small>เด้ง</small></button><button type="button" class="enter-tile" data-enter-pick="wipe" aria-pressed="false"><span class="enter-sample" data-sample="wipe">Aa</span><small>กวาดเปิด</small></button><button type="button" class="enter-tile" data-enter-pick="words" aria-pressed="false"><span class="enter-sample" data-sample="words">ก ข ค</span><small>คำต่อคำ</small></button></div><select id="fx-enter" hidden><option value="none">ไม่มี</option><option value="fade">จางเข้า</option><option value="pop">เด้ง</option><option value="wipe">กวาดเปิด</option><option value="words">คำต่อคำ</option></select></div></div><div class="tc-col"><section class="fx-sec"><label class="fx-head"><input id="fx-stroke-on" type="checkbox"><span>สโตรก (ขอบ)</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-outline-color" type="color" aria-label="สีขอบ"></div><div class="tc-row"><label for="fx-outline">ความหนา</label><div class="slide"><input type="range" data-for="fx-outline" min="0" max="20" step="1" aria-hidden="true" tabindex="-1"><input id="fx-outline" type="number" min="0" max="20" step="1" inputmode="numeric"></div></div></section><section class="fx-sec"><label class="fx-head"><input id="fx-box" type="checkbox"><span>พื้นหลัง</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-box-color" type="color" aria-label="สีพื้นหลัง"></div><div class="tc-row"><label for="fx-box-opacity">ความทึบ</label><div class="slide"><input type="range" data-for="fx-box-opacity" min="0" max="100" step="5" aria-hidden="true" tabindex="-1"><input id="fx-box-opacity" type="number" min="0" max="100" step="5" inputmode="numeric"><small>%</small></div></div><div class="tc-row"><label for="fx-box-x">ความกว้าง</label><div class="slide"><input type="range" data-for="fx-box-x" min="0" max="120" step="1" aria-hidden="true" tabindex="-1"><input id="fx-box-x" type="number" min="0" max="120" step="1" inputmode="numeric"></div></div><div class="tc-row"><label for="fx-box-y">ความสูง</label><div class="slide"><input type="range" data-for="fx-box-y" min="0" max="120" step="1" aria-hidden="true" tabindex="-1"><input id="fx-box-y" type="number" min="0" max="120" step="1" inputmode="numeric"></div></div></section><section class="fx-sec"><label class="fx-head"><input id="fx-glow" type="checkbox"><span>เรืองแสง</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-glow-color" type="color" aria-label="สีเรืองแสง"></div><div class="tc-row"><label for="fx-glow-strength">ความเข้ม</label><div class="slide"><input type="range" data-for="fx-glow-strength" min="0" max="100" step="5" aria-hidden="true" tabindex="-1"><input id="fx-glow-strength" type="number" min="0" max="100" step="5" inputmode="numeric"><small>%</small></div></div><div class="tc-row"><label for="fx-glow-range">ช่วง</label><div class="slide"><input type="range" data-for="fx-glow-range" min="0" max="60" step="1" aria-hidden="true" tabindex="-1"><input id="fx-glow-range" type="number" min="0" max="60" step="1" inputmode="numeric"></div></div></section><section class="fx-sec"><label class="fx-head"><input id="fx-shadow-on" type="checkbox"><span>เงา</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-shadow-color" type="color" aria-label="สีเงา"></div><div class="tc-row"><label for="fx-shadow-opacity">ความทึบ</label><div class="slide"><input type="range" data-for="fx-shadow-opacity" min="0" max="100" step="5" aria-hidden="true" tabindex="-1"><input id="fx-shadow-opacity" type="number" min="0" max="100" step="5" inputmode="numeric"><small>%</small></div></div><div class="tc-row"><label for="fx-shadow-blur">ความเบลอ</label><div class="slide"><input type="range" data-for="fx-shadow-blur" min="0" max="20" step="1" aria-hidden="true" tabindex="-1"><input id="fx-shadow-blur" type="number" min="0" max="20" step="1" inputmode="numeric"></div></div><div class="tc-row"><label for="fx-shadow">ระยะทาง</label><div class="slide"><input type="range" data-for="fx-shadow" min="0" max="20" step="1" aria-hidden="true" tabindex="-1"><input id="fx-shadow" type="number" min="0" max="20" step="1" inputmode="numeric"></div></div><div class="tc-row"><label for="fx-shadow-angle">มุม</label><div class="slide"><input type="range" data-for="fx-shadow-angle" min="-180" max="180" step="5" aria-hidden="true" tabindex="-1"><input id="fx-shadow-angle" type="number" min="-180" max="180" step="5" inputmode="numeric"><small>°</small></div></div></section></div></div>
+<div class="tc-cols"><div class="tc-col"><div class="tc-row"><label for="text-font">🔤 ฟอนต์</label><div class="tc-font"><input id="text-font" list="textFonts" maxlength="128" autocomplete="off" aria-describedby="fontStatus" aria-controls="fontList"><datalist id="textFonts"><option value="ฟอนต์ระบบ"></option><option value="Tahoma"></option><option value="Leelawadee UI"></option></datalist><button id="localFonts" type="button" data-icon="font" title="อ่านรายชื่อฟอนต์ที่ติดตั้งในเครื่องนี้" aria-label="ฟอนต์ในเครื่อง">ฟอนต์ในเครื่อง</button></div></div><div id="fontList" class="font-list" role="listbox" aria-label="ฟอนต์ในเครื่อง" hidden></div><p id="fontStatus" class="preview-hint" role="status"></p><div class="tc-row"><label for="text-size">📏 ขนาด</label><div class="slide"><input type="range" data-for="text-size" min="24" max="160" step="1" aria-hidden="true" tabindex="-1"><input id="text-size" type="number" min="24" max="160" step="1" inputmode="numeric"></div></div><div class="tc-row"><label id="colorLabel" for="text-color">🎨 สี</label><div class="tc-pair"><input id="text-color" type="color" aria-labelledby="colorLabel"><input id="text-color-hex" maxlength="7" autocomplete="off" spellcheck="false" aria-label="รหัสสีหกหลัก" placeholder="รหัสสี"></div></div><details class="advanced-text"><summary>รูปแบบและเอฟเฟกต์</summary><div class="tc-row"><span class="tc-label">รูปแบบ</span><div class="seg"><label class="tog" title="ตัวหนา"><input id="fx-bold" type="checkbox"><b>B</b></label><label class="tog" title="ขีดเส้นใต้"><input id="fx-underline" type="checkbox"><u>U</u></label><label class="tog" title="ตัวเอียง"><input id="fx-italic" type="checkbox"><i>I</i></label></div></div><div class="tc-row"><span class="tc-label">ตัวพิมพ์</span><div class="seg" role="group" aria-label="ตัวพิมพ์"><button type="button" data-for="fx-case" data-pick="none" aria-pressed="false" title="ตามเดิม">Aa</button><button type="button" data-for="fx-case" data-pick="upper" aria-pressed="false" title="ตัวใหญ่ทั้งหมด">TT</button><button type="button" data-for="fx-case" data-pick="lower" aria-pressed="false" title="ตัวเล็กทั้งหมด">tt</button><button type="button" data-for="fx-case" data-pick="title" aria-pressed="false" title="ขึ้นต้นตัวใหญ่">Tt</button></div><select id="fx-case" hidden><option value="none">ตามเดิม</option><option value="upper">ตัวใหญ่ทั้งหมด</option><option value="lower">ตัวเล็กทั้งหมด</option><option value="title">ขึ้นต้นตัวใหญ่</option></select></div><div class="tc-row"><label for="fx-spacing">ระยะห่างตัวอักษร</label><div class="slide"><input type="range" data-for="fx-spacing" min="-20" max="100" step="1" aria-hidden="true" tabindex="-1"><input id="fx-spacing" type="number" min="-20" max="100" step="1" inputmode="numeric"></div></div><div class="tc-row"><span class="tc-label">วางแนว</span><div class="seg" role="group" aria-label="วางแนว"><button type="button" data-for="fx-align" data-pick="left" aria-pressed="false" title="ชิดซ้าย">⫷</button><button type="button" data-for="fx-align" data-pick="center" aria-pressed="false" title="กึ่งกลาง">≡</button><button type="button" data-for="fx-align" data-pick="right" aria-pressed="false" title="ชิดขวา">⫸</button></div><select id="fx-align" hidden><option value="left">ชิดซ้าย</option><option value="center">กึ่งกลาง</option><option value="right">ชิดขวา</option></select></div><div class="tc-row"><label for="fx-blend">🌗 โหมดผสม</label><select id="fx-blend"><option value="normal">ปกติ</option><option value="add">Add (สว่างขึ้น)</option><option value="screen">Screen (สว่างนุ่ม)</option><option value="multiply">Multiply (เข้มขึ้น)</option></select></div><div class="tc-row tc-stack"><span class="tc-label">🎬 ตอนขึ้น</span><div class="enter-tiles" role="group" aria-label="ตอนขึ้น"><button type="button" class="enter-tile" data-enter-pick="none" aria-pressed="false"><span class="enter-sample" data-sample="none">Aa</span><small>ไม่มี</small></button><button type="button" class="enter-tile" data-enter-pick="fade" aria-pressed="false"><span class="enter-sample" data-sample="fade">Aa</span><small>จางเข้า</small></button><button type="button" class="enter-tile" data-enter-pick="pop" aria-pressed="false"><span class="enter-sample" data-sample="pop">Aa</span><small>เด้ง</small></button><button type="button" class="enter-tile" data-enter-pick="wipe" aria-pressed="false"><span class="enter-sample" data-sample="wipe">Aa</span><small>กวาดเปิด</small></button><button type="button" class="enter-tile" data-enter-pick="words" aria-pressed="false"><span class="enter-sample" data-sample="words">ก ข ค</span><small>คำต่อคำ</small></button></div><select id="fx-enter" hidden><option value="none">ไม่มี</option><option value="fade">จางเข้า</option><option value="pop">เด้ง</option><option value="wipe">กวาดเปิด</option><option value="words">คำต่อคำ</option></select></div><section class="fx-sec"><label class="fx-head"><input id="fx-stroke-on" type="checkbox"><span>สโตรก (ขอบ)</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-outline-color" type="color" aria-label="สีขอบ"></div><div class="tc-row"><label for="fx-outline">ความหนา</label><div class="slide"><input type="range" data-for="fx-outline" min="0" max="20" step="1" aria-hidden="true" tabindex="-1"><input id="fx-outline" type="number" min="0" max="20" step="1" inputmode="numeric"></div></div></section><section class="fx-sec"><label class="fx-head"><input id="fx-box" type="checkbox"><span>พื้นหลัง</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-box-color" type="color" aria-label="สีพื้นหลัง"></div><div class="tc-row"><label for="fx-box-opacity">ความทึบ</label><div class="slide"><input type="range" data-for="fx-box-opacity" min="0" max="100" step="5" aria-hidden="true" tabindex="-1"><input id="fx-box-opacity" type="number" min="0" max="100" step="5" inputmode="numeric"><small>%</small></div></div><div class="tc-row"><label for="fx-box-x">ความกว้าง</label><div class="slide"><input type="range" data-for="fx-box-x" min="0" max="120" step="1" aria-hidden="true" tabindex="-1"><input id="fx-box-x" type="number" min="0" max="120" step="1" inputmode="numeric"></div></div><div class="tc-row"><label for="fx-box-y">ความสูง</label><div class="slide"><input type="range" data-for="fx-box-y" min="0" max="120" step="1" aria-hidden="true" tabindex="-1"><input id="fx-box-y" type="number" min="0" max="120" step="1" inputmode="numeric"></div></div></section><section class="fx-sec"><label class="fx-head"><input id="fx-glow" type="checkbox"><span>เรืองแสง</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-glow-color" type="color" aria-label="สีเรืองแสง"></div><div class="tc-row"><label for="fx-glow-strength">ความเข้ม</label><div class="slide"><input type="range" data-for="fx-glow-strength" min="0" max="100" step="5" aria-hidden="true" tabindex="-1"><input id="fx-glow-strength" type="number" min="0" max="100" step="5" inputmode="numeric"><small>%</small></div></div><div class="tc-row"><label for="fx-glow-range">ช่วง</label><div class="slide"><input type="range" data-for="fx-glow-range" min="0" max="60" step="1" aria-hidden="true" tabindex="-1"><input id="fx-glow-range" type="number" min="0" max="60" step="1" inputmode="numeric"></div></div></section><section class="fx-sec"><label class="fx-head"><input id="fx-shadow-on" type="checkbox"><span>เงา</span></label><div class="tc-row"><span class="tc-label">สี</span><input id="fx-shadow-color" type="color" aria-label="สีเงา"></div><div class="tc-row"><label for="fx-shadow-opacity">ความทึบ</label><div class="slide"><input type="range" data-for="fx-shadow-opacity" min="0" max="100" step="5" aria-hidden="true" tabindex="-1"><input id="fx-shadow-opacity" type="number" min="0" max="100" step="5" inputmode="numeric"><small>%</small></div></div><div class="tc-row"><label for="fx-shadow-blur">ความเบลอ</label><div class="slide"><input type="range" data-for="fx-shadow-blur" min="0" max="20" step="1" aria-hidden="true" tabindex="-1"><input id="fx-shadow-blur" type="number" min="0" max="20" step="1" inputmode="numeric"></div></div><div class="tc-row"><label for="fx-shadow">ระยะทาง</label><div class="slide"><input type="range" data-for="fx-shadow" min="0" max="20" step="1" aria-hidden="true" tabindex="-1"><input id="fx-shadow" type="number" min="0" max="20" step="1" inputmode="numeric"></div></div><div class="tc-row"><label for="fx-shadow-angle">มุม</label><div class="slide"><input type="range" data-for="fx-shadow-angle" min="-180" max="180" step="5" aria-hidden="true" tabindex="-1"><input id="fx-shadow-angle" type="number" min="-180" max="180" step="5" inputmode="numeric"><small>°</small></div></div></section></details></div></div>
 <p id="textFieldError" class="field-warning" role="status" hidden></p></div>
 <section class="qc" aria-labelledby="textQcTitle"><h2 id="textQcTitle">ตรวจซับ</h2><p id="textQcSummary" class="caption" role="status"></p><button id="textQcGo" data-go="1" hidden>ไปขั้น 1</button><ol id="textQcList" class="qc-list"></ol></section></aside></div></div>
 </div>

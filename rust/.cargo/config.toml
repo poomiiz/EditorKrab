@@ -1,0 +1,7 @@
+# sherpa-onnx (speech detection and speaker separation, voice.rs) ships Windows static libraries built with the
+# static C runtime (/MT); the app links the same runtime so they can be linked in.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

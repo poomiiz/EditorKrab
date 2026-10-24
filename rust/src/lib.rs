@@ -11,9 +11,12 @@ pub mod media;
 pub mod native_asr;
 pub mod sources;
 pub mod styles;
+pub mod text_layout;
 pub mod transcription;
 pub mod transcription_jobs;
 pub mod uploads;
+pub mod voice;
+pub mod faces;
 
 pub mod pauses;
 pub mod spelling;
