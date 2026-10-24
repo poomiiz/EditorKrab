@@ -308,6 +308,9 @@ fn quiet_of(document: &Value, path: &std::path::Path) -> Vec<(u64, u64)> {
 }
 /// Dead air: a quiet stretch a line starts or ends in is cut, leaving PAD_MS of it; an edge the person dragged
 /// in step 3 stays where they put it. Matches `unquiet` in stories.js.
+/// Dead air kept before speech starts again, ms: VAD hears a word late (24 Oct review: a cut at 46.66 s
+/// took the first 50 ms of a word whose sound starts at 46.61 s), so more is kept on that side than after speech.
+pub const LEAD_PAD_MS: u64 = 250;
 pub fn unquiet(quiet: &[(u64, u64)], trim: &Value, start: u64, end: u64) -> (u64, u64) {
     const PAD_MS: u64 = crate::pauses::WORD_PAD_MS;
     const SHORTEST: u64 = 200;
@@ -315,7 +318,7 @@ pub fn unquiet(quiet: &[(u64, u64)], trim: &Value, start: u64, end: u64) -> (u64
     if !trim["start_ms"].is_number() {
         for &(s, e) in quiet {
             if s <= a + PAD_MS && e > a {
-                a = a.max(e.saturating_sub(PAD_MS));
+                a = a.max(e.saturating_sub(LEAD_PAD_MS));
             }
         }
     }
@@ -350,6 +353,30 @@ pub fn speaker_cuts(document: &Value, id: &str, start: u64, end: u64) -> Vec<(u6
     parts
 }
 
+/// How far a camera change moves to land between two words, ms.
+pub const GAP_REACH_MS: u64 = 1000;
+/// A camera change inside a line moves to the widest pause between two words near it, so the picture never
+/// changes in the middle of a word or phrase (24 Oct review: "สมัย สัก | ปี ที่แล้ว" switched mid-phrase,
+/// loud on both sides). Each part keeps at least MIN_SHOT_MS; with no pause near, the change stays.
+pub fn at_word_gaps(parts: &mut [(u64, u64)], words: &[(String, u64, u64)]) {
+    for i in 1..parts.len() {
+        // only a camera change (the parts touch); a dead-air cut between two parts stays cut
+        if parts[i - 1].1 != parts[i].0 {
+            continue;
+        }
+        let (lo, hi, t) = (parts[i - 1].0 + MIN_SHOT_MS, parts[i].1.saturating_sub(MIN_SHOT_MS), parts[i].0);
+        let best = words
+            .windows(2)
+            .filter(|w| w[1].1 > w[0].2)
+            .map(|w| (w[1].1 - w[0].2, (w[0].2 + w[1].1) / 2))
+            .filter(|&(_, mid)| mid.abs_diff(t) <= GAP_REACH_MS && mid >= lo && mid <= hi)
+            .max_by_key(|&(size, mid)| (size, std::cmp::Reverse(mid.abs_diff(t))));
+        if let Some((_, mid)) = best {
+            parts[i - 1].1 = mid;
+            parts[i].0 = mid;
+        }
+    }
+}
 /// The parts of a line left once the dead air inside it is cut: each quiet stretch well inside the line goes,
 /// leaving PAD_MS of it on both sides, when at least 0.2 s goes. Matches `inner` in stories.js.
 pub fn inner_cuts(quiet: &[(u64, u64)], start: u64, end: u64) -> Vec<(u64, u64)> {
@@ -357,7 +384,7 @@ pub fn inner_cuts(quiet: &[(u64, u64)], start: u64, end: u64) -> Vec<(u64, u64)>
     let mut parts = Vec::new();
     let mut at = start;
     for &(s, e) in quiet {
-        let (a, b) = (s + PAD_MS, e.saturating_sub(PAD_MS));
+        let (a, b) = (s + PAD_MS, e.saturating_sub(LEAD_PAD_MS));
         if a > at && b < end && b >= a + 200 {
             parts.push((at, a));
             at = b;
@@ -378,7 +405,7 @@ fn quiet_key(document: &Value, source: &str, spoken: &HashMap<String,Spoken>) ->
     let mut segments:Vec<_>=spoken.iter().filter(|(_,v)|path.is_some_and(|path|v.path==Path::new(path))).collect();
     segments.sort_by(|a,b|(a.1.start_ms,a.0).cmp(&(b.1.start_ms,b.0)));
     let words:Vec<_>=segments.iter().flat_map(|(_,v)|v.words.iter().map(|(_,a,b)|[*a,*b])).collect();
-    serde_json::json!([min,4,keep,words]).to_string()
+    serde_json::json!([min,5,keep,words]).to_string()
 }
 
 /// The stories to render, in plan order. Any unknown segment is an error, never a silent skip.
@@ -440,6 +467,7 @@ pub fn plan(document: &Value, jobs: &[Job]) -> Result<Vec<Story>, String> {
             if document["follow_speaker"] == true {
                 if let Some(sid) = source_id(document, &s.path) {
                     parts = parts.into_iter().flat_map(|(a, b)| speaker_cuts(document, sid, a, b)).collect();
+                    at_word_gaps(&mut parts, &s.words);
                 }
             }
             let split = parts.len() > 1 && !s.words.is_empty();

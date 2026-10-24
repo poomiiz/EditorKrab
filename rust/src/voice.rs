@@ -175,11 +175,18 @@ pub const MIN_PAUSE_MS: u64 = 300;
 /// every transcribed word (`words`, [start, end] ms) is never cut either. Only the talk of people the person
 /// dropped is taken out of the speech; speech diarization gave to nobody stays.
 pub fn dead_air(speech: &[(u64, u64)], turns: &[Turn], keep: &[i32], words: &[(u64, u64)], total_ms: u64, min_ms: u64) -> Vec<(u64, u64)> {
+    dead_air_heard(speech, turns, keep, words, &[], total_ms, min_ms)
+}
+/// `dead_air` that also keeps every `loud` stretch (see `loud`) not said by a dropped person: a sound VAD does
+/// not call speech is not silence (24 Oct review: 1.1 s of sound at 33.5-35.4 s, no VAD speech, was cut).
+pub fn dead_air_heard(speech: &[(u64, u64)], turns: &[Turn], keep: &[i32], words: &[(u64, u64)], loud: &[(u64, u64)], total_ms: u64, min_ms: u64) -> Vec<(u64, u64)> {
     let min_ms = min_ms.max(MIN_PAUSE_MS);
     let dropped: Vec<&Turn> = match keep.is_empty() {
         true => Vec::new(),
         false => turns.iter().filter(|t| !keep.contains(&t.speaker)).collect(),
     };
+    let speech: Vec<(u64, u64)> = speech.iter().copied().chain(loud.iter().copied()).collect();
+    let speech = &speech[..];
     let mut talk: Vec<(u64, u64)> = Vec::new();
     for &(a, b) in speech {
         // the speech left after the dropped people's turns are taken out of it
@@ -264,6 +271,27 @@ pub fn fit_words(words: &mut [(u64, u64)], speech: &[(u64, u64)]) {
         }
         *w = (s, e.max(s));
     }
+}
+
+/// Level above which 20 ms of audio is sound, dBFS; speech in these clips sits around -25..-10.
+pub const LOUD_DB: f32 = -38.0;
+/// Stretches of at least 200 ms where the audio is above LOUD_DB (gaps up to 100 ms bridged), ms.
+pub fn loud(samples: &[f32]) -> Vec<(u64, u64)> {
+    let n = RATE as usize / 50;
+    let mut out: Vec<(u64, u64)> = Vec::new();
+    for (k, chunk) in samples.chunks(n).enumerate() {
+        let rms = (chunk.iter().map(|x| x * x).sum::<f32>() / chunk.len().max(1) as f32).sqrt();
+        if 20.0 * rms.max(1e-5).log10() <= LOUD_DB {
+            continue;
+        }
+        let (a, b) = (k as u64 * 20, k as u64 * 20 + 20);
+        match out.last_mut() {
+            Some(last) if a <= last.1 + 100 => last.1 = b,
+            _ => out.push((a, b)),
+        }
+    }
+    out.retain(|(a, b)| b - a >= 200);
+    out
 }
 
 pub const VAD_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx";
@@ -361,6 +389,18 @@ mod tests {
         let mut same = [(0, 0)];
         fit_words(&mut same, &[]);
         assert_eq!(same, [(0, 0)]);
+    }
+    #[test]
+    fn a_sound_vad_does_not_call_speech_is_not_dead_air() {
+        // 1.1 s of sound in a 2.6 s gap with no VAD speech stays; the quiet either side of it still goes
+        let speech = [(0, 33_000), (35_700, 40_000)];
+        assert_eq!(dead_air_heard(&speech, &[], &[], &[], &[(33_500, 34_600)], 40_000, 300), vec![(33_000, 33_500), (34_600, 35_700)]);
+        // 20 ms windows: 300 ms of tone, a 60 ms dip bridged, then quiet
+        let mut samples = vec![0.5f32; 16_000 * 3 / 10];
+        samples.extend(vec![0.0; 960]);
+        samples.extend(vec![0.5; 16_000 / 10]);
+        samples.extend(vec![0.0; 16_000]);
+        assert_eq!(loud(&samples), vec![(0, 460)]);
     }
     #[test]
     fn a_shortest_pause_under_a_breath_is_raised() {

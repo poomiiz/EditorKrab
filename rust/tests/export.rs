@@ -365,8 +365,9 @@ fn dead_air_at_a_lines_ends_is_cut_unless_that_edge_was_dragged() {
     // "การ" runs 32.84-37.04 s but she stops talking at 33.2 s; another quiet stretch ends just before the line
     let quiet = [(30000, 32800), (33200, 37000)];
     assert_eq!(unquiet(&quiet, &json!(null), 32840, 37040), (32840, 33300));
-    // a line that starts inside quiet starts PAD before that quiet ends, and ends PAD into the next one
-    assert_eq!(unquiet(&quiet, &json!(null), 31000, 34000), (32700, 33300));
+    // a line that starts inside quiet starts LEAD_PAD_MS before that quiet ends (VAD hears a word late),
+    // and ends PAD into the next one
+    assert_eq!(unquiet(&quiet, &json!(null), 31000, 34000), (32550, 33300));
     // edges the person moved stay where they put them
     assert_eq!(unquiet(&quiet, &json!({"end_ms": 37040}), 32840, 37040), (32840, 37040));
     // a line that is all quiet is left whole, never cut to nothing
@@ -413,8 +414,9 @@ fn the_camera_follows_whoever_is_talking() {
 #[test]
 fn dead_air_inside_a_line_is_cut_and_the_line_still_reads_as_one() {
     use editorkrab::export::inner_cuts;
-    // a 1 s pause inside a 4 s line goes, 0.1 s of it kept on each side; a short dip stays
-    assert_eq!(inner_cuts(&[(11000, 12000), (13000, 13250)], 10000, 14000), vec![(10000, 11100), (11900, 14000)]);
+    // a 1 s pause inside a 4 s line goes, 0.1 s of it kept after speech and 0.25 s before it starts again;
+    // a short dip stays
+    assert_eq!(inner_cuts(&[(11000, 12000), (13000, 13250)], 10000, 14000), vec![(10000, 11100), (11750, 14000)]);
     // quiet at the line's edges is unquiet's job, not a cut inside
     assert_eq!(inner_cuts(&[(9000, 10500)], 10000, 14000), vec![(10000, 14000)]);
     let piece = |start_ms, end_ms, text: &str, words: Vec<(String, u64, u64)>| Piece {
@@ -629,11 +631,11 @@ fn retimed_words_cannot_export_using_a_previous_quiet_analysis() {
     let mut doc=json!({"plan":json!({"stories":[{"segment_ids":["a"]}]}).to_string(),
         "files":[{"path":"C:/clips/a.mp4","source_id":"src"}],"dead_min_ms":100,
         "voice":{"src":{"turns":[{"speaker":0,"start_ms":0,"end_ms":2000}]}},
-        "quiet_key":{"src":json!([300,4,[0],[[100,600]]]).to_string()}});
+        "quiet_key":{"src":json!([300,5,[0],[[100,600]]]).to_string()}});
     assert!(plan(&doc,&jobs).is_ok(),"effective minimum matches the UI's300ms");
     doc["word_times"]=json!({"a":[[150,650]]});
     assert_eq!(plan(&doc,&jobs).unwrap_err(),"pause_analysis_stale");
-    doc["quiet_key"]["src"]=json!(json!([300,4,[0],[[150,650]]]).to_string());
+    doc["quiet_key"]["src"]=json!(json!([300,5,[0],[[150,650]]]).to_string());
     assert!(plan(&doc,&jobs).is_ok());
     doc["speakers_keep"]=json!({"src":[1]});
     assert_eq!(plan(&doc,&jobs).unwrap_err(),"pause_analysis_stale");
@@ -658,4 +660,21 @@ fn the_white_setup_line_stays_on_until_the_orange_punch_line_ends() {
     let mut cues = vec![(0, 1_000, "ก".to_owned()), (1_200, 2_000, "ข".to_owned())];
     editorkrab::export::hold_for_emphasis(&mut cues, &[(500, 1_800, "ค".to_owned()), (9_000, 9_500, "ง".to_owned())]);
     assert_eq!((cues[0].1, cues[1].1), (1_200, 2_000));
+}
+
+#[test]
+fn a_camera_change_lands_in_the_widest_pause_between_words() {
+    // the turn changes at 4.0 s, in the middle of "ปี"; the pause before "ที่แล้ว" (4.6-4.9 s) is the widest near
+    let words: Vec<(String, u64, u64)> = vec![("สมัย".into(), 3000, 3500), ("สัก".into(), 3520, 3900), ("ปี".into(), 3920, 4600), ("ที่แล้ว".into(), 4900, 5600)];
+    let mut parts = vec![(1000, 4000), (4000, 9000)];
+    editorkrab::export::at_word_gaps(&mut parts, &words);
+    assert_eq!(parts, vec![(1000, 4750), (4750, 9000)]);
+    // no pause near: the change stays where it was
+    let mut parts = vec![(1000, 4000), (4000, 9000)];
+    editorkrab::export::at_word_gaps(&mut parts, &[("ก".into(), 0, 9000)]);
+    assert_eq!(parts, vec![(1000, 4000), (4000, 9000)]);
+    // a dead-air cut between parts is not filled in
+    let mut parts = vec![(1000, 3900), (4900, 9000)];
+    editorkrab::export::at_word_gaps(&mut parts, &words);
+    assert_eq!(parts, vec![(1000, 3900), (4900, 9000)]);
 }

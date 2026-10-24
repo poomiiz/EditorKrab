@@ -1050,12 +1050,12 @@ async fn source_voice(
     // faces and who is seen talking: a video with no picture (sound only) has none
     let frames = editorkrab::faces::frames(&ffmpeg, &path).await.ok();
     let face_model = models.face.clone();
-    let (speech, turns) = tokio::task::spawn_blocking(move || -> Result<_, String> {
-        Ok((editorkrab::voice::speech(&models.vad, &samples)?, editorkrab::voice::speakers(&models, &samples)?, samples.len()))
+    let (speech, turns, loud) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        Ok((editorkrab::voice::speech(&models.vad, &samples)?, editorkrab::voice::speakers(&models, &samples)?, samples.len(), editorkrab::voice::loud(&samples)))
     })
     .await
     .map_err(|_| failure(Error::Unavailable))?
-    .map(|(speech, turns, n)| ((speech, n), turns))
+    .map(|(speech, turns, n, loud)| ((speech, n), turns, loud))
     .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
     let (speech, n) = speech;
     let total_ms = n as u64 * 1000 / editorkrab::voice::RATE as u64;
@@ -1063,7 +1063,7 @@ async fn source_voice(
     let main = editorkrab::voice::main_speaker(&turns, &starts);
     // everyone's talk is kept until the person drops someone (Nina clips keep the listener)
     let keep = body.keep.unwrap_or_default();
-    let dead = editorkrab::voice::dead_air(&speech, &turns, &keep, &body.words, total_ms, body.min_ms);
+    let dead = editorkrab::voice::dead_air_heard(&speech, &turns, &keep, &body.words, &loud, total_ms, body.min_ms);
     let talk = speech.clone();
     let (faces, seen) = tokio::task::spawn_blocking(move || -> Result<_, String> {
         let Some((frames, w, h)) = frames else { return Ok((Vec::new(), Vec::new())) };
@@ -1075,7 +1075,7 @@ async fn source_voice(
     .map_err(|_| failure(Error::Unavailable))?
     .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
     let seen: Vec<Value> = seen.iter().map(|(a, b, n)| json!({"start_ms": a, "end_ms": b, "person": n})).collect();
-    Ok(Json(json!({"speech": speech, "turns": turns, "main": main, "dead": dead, "total_ms": total_ms, "faces": faces, "seen": seen})))
+    Ok(Json(json!({"speech": speech, "turns": turns, "main": main, "dead": dead, "total_ms": total_ms, "faces": faces, "seen": seen, "loud": loud})))
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1087,13 +1087,16 @@ struct DeadAirBody {
     min_ms: u64,
     #[serde(default)]
     keep: Option<Vec<i32>>,
+    /// stretches with sound (voice::loud), stored from the first listen
+    #[serde(default)]
+    loud: Vec<(u64, u64)>,
 }
 /// Dead air again from a video's stored speech and speakers, for a new shortest pause; no audio is read.
 async fn dead_air(Json(body): Json<DeadAirBody>) -> Json<Value> {
     let starts: Vec<u64> = body.words.iter().map(|w| w.0).collect();
     let main = editorkrab::voice::main_speaker(&body.turns, &starts);
     let keep = body.keep.unwrap_or_default();
-    let dead = editorkrab::voice::dead_air(&body.speech, &body.turns, &keep, &body.words, body.total_ms, body.min_ms);
+    let dead = editorkrab::voice::dead_air_heard(&body.speech, &body.turns, &keep, &body.words, &body.loud, body.total_ms, body.min_ms);
     Json(json!({"main": main, "dead": dead}))
 }
 #[derive(Deserialize)]
