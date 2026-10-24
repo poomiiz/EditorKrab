@@ -1918,7 +1918,7 @@ async fn serve(
             get(|| async {
                 (
                     [("content-type", "image/x-icon")],
-                    include_bytes!("../../app/static/editorkrab-crab.ico").as_slice(),
+                    include_bytes!("../data/editorkrab-crab.ico").as_slice(),
                 )
             }),
         )

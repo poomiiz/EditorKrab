@@ -1,6 +1,6 @@
 name: release
 
-# Editors' machines update to the newest vX.Y.Z tag (scripts/update.py), so pushing a tag is shipping:
+# Editors download the app from the newest vX.Y.Z release, so pushing a tag is shipping:
 #   git tag v0.29.0 && git push origin v0.29.0
 # Run it by hand (workflow_dispatch) to build the Windows download as a workflow artifact without releasing.
 on:
