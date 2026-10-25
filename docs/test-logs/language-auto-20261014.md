@@ -1,3 +1,5 @@
+> **History.** Written for the Python-era build, kept as a record. The Python app was removed on 25 Oct 2026; EditorKrab is now the Rust app only, so commands here that use Python no longer exist. / เอกสารเก่าของรุ่น Python เก็บไว้เป็นบันทึก แอป Python ถูกลบเมื่อ 25 ต.ค. 2026
+
 # UI English และตรวจภาษาเสียงอัตโนมัติ
 
 ค่าเริ่มต้น UI เป็น English อยู่แล้วใน `ui.js` และยังจำตัวเลือกไทยของผู้ใช้ไว้ รอบนี้ตรวจหน้าเข้าสู่ระบบที่ 1280×720 และ 375×844 ไม่มีการล้นแนวนอน เพิ่มการแปลข้อความแทนรูป และปรับปุ่มสลับภาษาให้สูง 44px

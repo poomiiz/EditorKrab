@@ -1,14 +1,12 @@
+> History from the Python-era build, kept as a record. The Python app was removed on 25 Oct 2026. The Rust app does not write `delivery_manifest` files.
+
 # Local delivery evidence
 
 MP4 exports return `delivery_manifest` alongside `file`. Native builds keep their existing `(path, warnings)` return and store evidence in the same ledger: `<output-parent>/.clipkit-deliveries/<id>.private.json`. These records contain local provenance and must stay private. The repository ignores `*.private.json`; do not attach them directly to public bug reports.
 
 Each immutable record binds the checked source revision, actual dependency fingerprints, backend options and resulting MP4 hash or native file tree. It records the source HEAD as well as actual code hashes, so a dirty development checkout is distinguishable from the committed source. No record is a signature, a human verdict or a replacement for team approval.
 
-Read back one exact delivery:
-
-```powershell
-python scripts/quality_gate.py "<source-project>" --delivery "<manifest.private.json>" --output "<exact-output.mp4-or-native-folder>"
-```
+The command that read a delivery back (`scripts/quality_gate.py`) was removed with the Python app, so the exit codes and fields below can no longer be checked from this repository.
 
 - Exit0: structural check passes and input/artifact bytes match this record. Human/native checks still remain pending.
 - Exit2: inputs or output changed; the record is stale.

@@ -1,3 +1,5 @@
+> **History.** Written for the Python-era build, kept as a record. The Python app was removed on 25 Oct 2026; EditorKrab is now the Rust app only, so commands here that use Python no longer exist. / เอกสารเก่าของรุ่น Python เก็บไว้เป็นบันทึก แอป Python ถูกลบเมื่อ 25 ต.ค. 2026
+
 # Benchmark instrumentation verification — 13 October 2026
 
 Scope: measurement reliability for the short-clip pilot in PR #98. No human editing trial or real time-saving percentage is claimed here.

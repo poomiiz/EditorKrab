@@ -1,3 +1,5 @@
+> **History.** Written for the Python-era build, kept as a record. The Python app was removed on 25 Oct 2026; EditorKrab is now the Rust app only, so commands here that use Python no longer exist. / เอกสารเก่าของรุ่น Python เก็บไว้เป็นบันทึก แอป Python ถูกลบเมื่อ 25 ต.ค. 2026
+
 # Approximate duration and fresh semantic pilot — 2026-10-14
 
 Choose the desired length before selecting content: natural length, 30 seconds, 1, 2, 3 or 5 minutes. The saved per-source target goes into the Browser AI attachment and optional local-agent packet. It is an approximate aim; a complete thought can finish slightly earlier or later. Changing it archives earlier selections and pending answers. Resuming retains the choice. Imported AI selections are not subsequently split by a rigid duration rule.

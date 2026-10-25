@@ -1,3 +1,5 @@
+> **History.** Written for the Python-era build, kept as a record. The Python app was removed on 25 Oct 2026; EditorKrab is now the Rust app only, so commands here that use Python no longer exist. / เอกสารเก่าของรุ่น Python เก็บไว้เป็นบันทึก แอป Python ถูกลบเมื่อ 25 ต.ค. 2026
+
 # EK-01 build and export preservation
 
 Task: `4c5c5998-c354-46ae-9ea9-84cf62d99610`
