@@ -23,7 +23,7 @@ Announce **Windows 10/11 only**; Mac is untested on real hardware. Every clip ne
 
 The promo illustrates draft preparation, review and export. It still labels Mac setup experimental, which does not match the Windows-only launch, so update that caption before using it. It makes no measured speed claim. Use the separate [demo plan](promotion.md#30-second-demo-plan) to record the real workflow with consented footage.
 
-Editable SVG sources are included. The existing palette uses navy, coral and off-white. The Windows icon is [editorkrab.ico](../app/static/editorkrab.ico).
+Editable SVG sources are included. The existing palette uses navy, coral and off-white. The Windows icon is [editorkrab-crab.ico](../rust/data/editorkrab-crab.ico).
 
 The plugin ID `clip-kit` and existing `clipkit` file-format names remain unchanged for compatibility.
 

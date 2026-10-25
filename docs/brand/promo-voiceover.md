@@ -14,5 +14,4 @@ The captions on screen show the same words, so the video also works muted. This 
 | 0:25.0 | 0:28.8 | Export after review, or continue editing in CapCut. |
 | 0:29.0 | 0:33.0 | EditorKrab. Draft, review, finish. Code on GitHub. |
 
-To change the picture, edit `scripts/make_promo.py` (the `LINES` list holds these times) and run
-`python scripts/make_promo.py docs/brand/promo.mp4`.
+The script that built `promo.mp4` was removed with the Python app on 25 Oct 2026, so the video cannot be regenerated from this repository.

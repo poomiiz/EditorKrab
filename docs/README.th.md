@@ -42,8 +42,8 @@ EditorKrab เป็นแอปบนเครื่องที่เปลี
 
 แอปเปิดหน้าเฉพาะที่ `127.0.0.1:8871` เครื่องอื่นเข้าไม่ได้ ข้อมูลที่ออกจากเครื่องมีแค่การดาวน์โหลดโมเดลครั้งแรก กับไฟล์ที่คุณแนบให้แชท AI เองในขั้นที่ 2
 
-## เครื่องมือ Python รุ่นเก่า
+## สร้างจากซอร์ส
 
-โฟลเดอร์ `app/`, `scripts/run_clip.py`, CapCut draft และ skill ใน `skills/` เป็นเครื่องมือรุ่นเก่า ไม่ใช่แอปที่อธิบายในหน้านี้ ดู[เอกสารทั้งหมด](index.md)
+ต้องมี [Rust](https://rustup.rs) (stable) บน Windows แล้วรัน `cargo build --release --manifest-path rust/Cargo.toml` และ `cargo test --manifest-path rust/Cargo.toml --locked` ดูรายละเอียดใน[README ภาษาอังกฤษ](../README.md#build-from-source) แอป Python รุ่นเก่าถูกลบออกเมื่อ 25 ต.ค. 2026 ดู[เอกสารทั้งหมด](index.md)
 
 [MIT license](../LICENSE) · [ประกาศซอฟต์แวร์ของบุคคลที่สาม](../THIRD_PARTY_NOTICES.md)

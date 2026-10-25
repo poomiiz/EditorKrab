@@ -2,17 +2,16 @@
 
 Start with the [README](../README.md) for the Windows desktop app, or the [Thai guide](README.th.md) for the same steps in Thai.
 
-Most pages below describe the **older Python workflow** (`app/`, `scripts/`, `skills/`), not the desktop app. They are kept for existing users.
+The desktop app is a Rust program (`rust/`). The old Python app was removed on 25 Oct 2026. Pages marked as history below describe that old build and are kept as a record.
 
 ## Set up and update
 
 | Guide | What it covers |
 |---|---|
-| [Mac setup](macos.md) | Older Python workflow only; the desktop app is Windows only |
-| [Mac and Update checks](test-logs/macos-support.md) | Results and the CapCut checks still needed |
-| [Team setup](team-setup.md) (Thai) | Account configuration, ownership, MP4 review and external synchronization |
-| [Setup settings](../config.example.json) | The settings copied into your private config.json |
-| [Machine check](../scripts/doctor.py) | Python packages, ffmpeg, Node.js and optional speech-model checks |
+| [Mac](macos.md) | The desktop app is Windows only; what CI checks on a Mac |
+| [Mac and Update checks](test-logs/macos-support.md) | History: Python-era results |
+| [Team setup](team-setup.md) (Thai) | History: the team system of the Python-era build |
+| [Build from source](../README.md#build-from-source) | Build and test the Rust app |
 
 Check [Releases](https://github.com/poomiiz/EditorKrab/releases) for the current desktop app download.
 

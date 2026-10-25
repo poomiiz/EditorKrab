@@ -3,7 +3,8 @@
 Thanks for helping. Issues and pull requests may be written in Thai or English.
 
 ## Set up
-1. Fork and clone the repo, then follow "Machine setup" in [README.md](README.md).
+1. Fork and clone the repo. You need [Rust](https://rustup.rs) (stable) on Windows.
+2. Build: `cargo build --release --manifest-path rust/Cargo.toml`. See "Build from source" in [README.md](README.md).
 
 ## Good first contributions
 - A new subtitle preset in `presets/` (copy `default.json`).
@@ -24,7 +25,7 @@ Video, audio, footage frames, client names or client files, `config.json`, `*.sq
 Apps Script / webhook URLs, or fonts you are not allowed to redistribute.
 
 ## Before you open a pull request
-- `cargo test --manifest-path rust/Cargo.toml` passes.
+- `cargo test --manifest-path rust/Cargo.toml --locked` passes.
 - Run what you changed on a real clip or draft and say in the PR what you ran and what happened.
 - One topic per pull request.
 
