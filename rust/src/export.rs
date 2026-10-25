@@ -1482,6 +1482,12 @@ pub fn headlines(document: &Value) -> Vec<Value> {
 
 /// ffmpeg arguments, run with the work folder as the current directory (holds `subs.ass`).
 pub fn ffmpeg_args(story: &Story, document: &Value, output: &Path) -> Vec<String> {
+    ffmpeg_args_on(story, document, output, &[])
+}
+/// The same, where `gpu[n]` says source `n` is decoded and shrunk on the graphics card. That is for 4K phone footage,
+/// where the CPU spends most of the export decoding and scaling. The picture is cut to the frame after it has
+/// been shrunk (the same window, found from the shrunk size), then goes on exactly as on the CPU path.
+pub fn ffmpeg_args_on(story: &Story, document: &Value, output: &Path, gpu: &[bool]) -> Vec<String> {
     let (width, height) = frame(document);
     let shape = width as f64 / height as f64;
     let mut args: Vec<String> = [
@@ -1494,7 +1500,10 @@ pub fn ffmpeg_args(story: &Story, document: &Value, output: &Path) -> Vec<String
     ]
     .map(String::from)
     .into();
-    for source in &story.sources {
+    for (n, source) in story.sources.iter().enumerate() {
+        if gpu.get(n).copied().unwrap_or(false) {
+            args.extend(["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"].map(String::from));
+        }
         args.push("-i".into());
         args.push(source.display().to_string());
     }
@@ -1511,10 +1520,18 @@ pub fn ffmpeg_args(story: &Story, document: &Value, output: &Path) -> Vec<String
         } else {
             (format!("(iw-ow)*{cx:.4}"), format!("(ih-oh)*{cy:.4}"))
         };
+        let crop_w = format!("min(iw,ih*{shape:.6}){zoom}");
+        let crop_h = format!("min(ih,iw/{shape:.6}){zoom}");
+        let video = if gpu.get(p.source).copied().unwrap_or(false) {
+            format!(
+                "fps=30,scale_cuda=w='trunc(iw*{width}/({crop_w})/2)*2':h='trunc(ih*{height}/({crop_h})/2)*2':format=nv12,\
+hwdownload,format=nv12,crop=w={width}:h={height}:x='{x}':y='{y}',setsar=1,format=yuv420p"
+            )
+        } else {
+            format!("crop=w='{crop_w}':h='{crop_h}':x='{x}':y='{y}',scale={width}:{height},setsar=1,fps=30,format=yuv420p")
+        };
         graph.push_str(&format!(
-            "[{s}:v]trim=start={a:.3}:end={b:.3},setpts=PTS-STARTPTS,\
-crop=w='min(iw,ih*{shape:.6}){zoom}':h='min(ih,iw/{shape:.6}){zoom}':x='{x}':y='{y}',\
-scale={width}:{height},setsar=1,fps=30,format=yuv420p[v{n}];\
+            "[{s}:v]trim=start={a:.3}:end={b:.3},setpts=PTS-STARTPTS,{video}[v{n}];\
 [{s}:a]atrim=start={a:.3}:end={b:.3},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,afade=t=in:d=0.008,\
 afade=t=out:st={fade:.3}:d=0.008[a{n}];",
             s = p.source,
