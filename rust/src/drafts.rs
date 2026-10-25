@@ -74,6 +74,9 @@ impl Store {
                  project_id TEXT NOT NULL REFERENCES drafts(project_id), operation_id TEXT NOT NULL,
                  request TEXT NOT NULL, revision INTEGER NOT NULL, document TEXT NOT NULL,
                  PRIMARY KEY(project_id,operation_id)
+             );
+             CREATE TABLE IF NOT EXISTS hidden_projects (
+                 project_id TEXT PRIMARY KEY REFERENCES drafts(project_id)
              );",
         )?;
         let store = Self(connection);
@@ -99,6 +102,74 @@ impl Store {
             })
         })
         .transpose()
+    }
+
+    /// Every saved project, most recently saved first, with what the project screen shows.
+    pub fn list(&self) -> Result<Vec<Value>, Error> {
+        let mut statement = self.0.prepare(
+            "SELECT d.project_id, d.document FROM drafts d
+             WHERE d.project_id NOT IN (SELECT project_id FROM hidden_projects)
+             ORDER BY (SELECT MAX(o.rowid) FROM draft_operations o WHERE o.project_id=d.project_id) DESC",
+        )?;
+        let rows = statement.query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        let mut projects = Vec::new();
+        for row in rows {
+            let (project, text) = row?;
+            // one unreadable saved project must not hide every other project: it is named on stderr and left out
+            let document: Value = match serde_json::from_str(&text) {
+                Ok(document) => document,
+                Err(error) => {
+                    eprintln!("project {project} is not listed, its saved document cannot be read: {error}");
+                    continue;
+                }
+            };
+            let files = document["files"].as_array().map(Vec::as_slice).unwrap_or(&[]);
+            projects.push(serde_json::json!({
+                "project_id": project,
+                "title": document["title"].as_str().unwrap_or(""),
+                "step": document["step"].as_i64().unwrap_or(1),
+                "videos": files.len(),
+                "cover": files.iter().find_map(|f| f["source_id"].as_str()),
+            }));
+        }
+        Ok(projects)
+    }
+
+    /// Folders holding the videos every project already uses, where a dropped video most likely sits.
+    pub fn source_folders(&self) -> Result<Vec<String>, Error> {
+        let mut statement = self.0.prepare("SELECT document FROM drafts")?;
+        let rows = statement.query_map([], |r| r.get::<_, String>(0))?;
+        let mut folders = std::collections::BTreeSet::new();
+        for row in rows {
+            let document: Value = serde_json::from_str(&row?)?;
+            for file in document["files"].as_array().into_iter().flatten() {
+                if let Some(parent) = file["path"].as_str().and_then(|p| Path::new(p).parent()) {
+                    folders.insert(parent.to_string_lossy().into_owned());
+                }
+            }
+        }
+        Ok(folders.into_iter().collect())
+    }
+
+    /// Deleting a project on the project screen only hides it: its draft, videos and
+    /// transcripts stay, so "undo" brings it back whole.
+    pub fn hide(&mut self, project: &str, hidden: bool) -> Result<(), Error> {
+        if self.read(project)?.is_none() {
+            return Err(Error::NotFound);
+        }
+        let sql = if hidden {
+            "INSERT OR IGNORE INTO hidden_projects(project_id) VALUES (?1)"
+        } else {
+            "DELETE FROM hidden_projects WHERE project_id=?1"
+        };
+        self.0.execute(sql, [project])?;
+        // a deleted project's transcription stops (P'Ohm 23 Oct); undo brings the project back, not the jobs
+        if hidden {
+            self.cancel_project_jobs(project)?;
+        }
+        Ok(())
     }
 
     pub fn save(
@@ -299,5 +370,47 @@ mod tests {
             assert_eq!(restored.document["json_input"], "{unfinished");
         }
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn projects_list_newest_saved_first_with_video_count_and_cover() {
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        let video = |id: &str| json!({"name":"a.mov","size":1,"source_id":id,"path":"C:/a.mov","modified_ns":"1"});
+        store
+            .save("old", "1", 0, &json!({"title":"เก่า","step":3,"files":[]}))
+            .unwrap();
+        store
+            .save("new", "2", 0, &json!({"title":"ใหม่","step":1,"files":[{"name":"wait.mov","size":1}]}))
+            .unwrap();
+        store
+            .save("old", "3", 1, &json!({"title":"เก่า","step":4,"files":[video("s1"),video("s2")]}))
+            .unwrap();
+        let projects = store.list().unwrap();
+        assert_eq!(projects[0]["project_id"], "old");
+        assert_eq!(projects[0]["videos"], 2);
+        assert_eq!(projects[0]["cover"], "s1");
+        assert_eq!(projects[0]["step"], 4);
+        assert_eq!(projects[1]["title"], "ใหม่");
+        assert_eq!(projects[1]["cover"], Value::Null);
+        let waiting = |store: &Store| store.list_jobs("old").unwrap().iter().filter(|j| j.status == "queued").count();
+        assert!(waiting(&store) > 0, "saving videos queues their probe jobs");
+        store.hide("old", true).unwrap();
+        assert_eq!(waiting(&store), 0, "a deleted project's jobs stop");
+        assert_eq!(store.list().unwrap().len(), 1);
+        assert!(store.read("old").unwrap().is_some(), "a deleted project keeps its draft");
+        store.hide("old", false).unwrap();
+        assert_eq!(store.list().unwrap().len(), 2);
+        assert!(matches!(store.hide("missing", true), Err(Error::NotFound)));
+    }
+
+    #[test]
+    fn one_unreadable_project_does_not_hide_the_others() {
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        store.save("good", "1", 0, &json!({"title":"ดี","step":1,"files":[]})).unwrap();
+        store.save("bad", "2", 0, &json!({"title":"เสีย","step":1,"files":[]})).unwrap();
+        store.0.execute("UPDATE drafts SET document='{broken' WHERE project_id='bad'", []).unwrap();
+        let projects = store.list().unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0]["project_id"], "good");
     }
 }

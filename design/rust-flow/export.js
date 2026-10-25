@@ -2,22 +2,23 @@
 const messages={plan_missing:'ยังไม่มีคำตอบจาก AI กลับไปวางคำตอบที่ขั้น 3',plan_invalid:'คำตอบจาก AI อ่านไม่ได้ กลับไปวางใหม่ที่ขั้น 3',plan_has_no_stories:'คำตอบจาก AI ไม่มีเรื่องให้ตัด กลับไปวางใหม่ที่ขั้น 3',
  segment_unknown:'คำตอบจาก AI อ้างช่วงพูดที่ไม่มีแล้ว ส่งไฟล์ให้ AI ใหม่ที่ขั้น 2',story_empty:'มีเรื่องที่ไม่มีช่วงพูด ส่งไฟล์ให้ AI ใหม่ที่ขั้น 2',source_missing:'หาไฟล์วิดีโอต้นฉบับไม่เจอ ใส่วิดีโอใหม่ที่ขั้น 1',
  transcription_not_configured:'ยังไม่มีตัวถอดเสียง',output_folder:'สร้างโฟลเดอร์เก็บคลิปไม่ได้',ffmpeg_failed:'สร้างวิดีโอไม่สำเร็จ',export_check_failed:'ตรวจวิดีโอที่ได้แล้วไม่ผ่าน จึงไม่ได้บันทึก',not_found:'ยังไม่ได้บันทึกงาน รอสักครู่แล้วลองใหม่',
- capcut_not_found:'ไม่เจอ CapCut ในเครื่องนี้ ติดตั้งและเปิด CapCut หนึ่งครั้งก่อน',capcut_write:'เขียนโปรเจกต์ลงโฟลเดอร์ของ CapCut ไม่ได้',source_unreadable:'อ่านไฟล์วิดีโอต้นฉบับไม่ได้'};
+ capcut_not_found:'ไม่เจอ CapCut ในเครื่องนี้ ติดตั้งและเปิด CapCut หนึ่งครั้งก่อน',capcut_write:'เขียนโปรเจกต์ลงโฟลเดอร์ของ CapCut ไม่ได้',source_unreadable:'อ่านไฟล์วิดีโอต้นฉบับไม่ได้',pause_analysis_stale:'จังหวะตัดยังคำนวณไม่ครบ กลับขั้นตัดต่อแล้วรอให้เสร็จ'};
 const roleNames={emphasis:'คำสำคัญ',english:'คำแปลอังกฤษ'};
 export function exportMessage(error){const code=String(error||'').split(':')[0];return messages[code]||'สร้างคลิปไม่สำเร็จ กดลองอีกครั้ง';}
-export function createExport({project,saved,planReady}){
+export function createExport({project,saved,planReady,analysisReady=()=>true}){
  const $=id=>document.getElementById(id),base=`/api/v1/projects/${encodeURIComponent(project)}/export`;
  let status={state:'idle'},error='',timer=0,busy=false;
  function paint(){
   const running=status.state==='running',done=status.state==='done',ready=planReady();
-  $('exportStart').hidden=running||(!ready&&!done);$('exportGoPlan').hidden=running||done||ready;$('exportStart').disabled=busy||!ready||!saved();
+  $('exportStart').hidden=running||(!ready&&!done);$('exportGoPlan').hidden=running||done||ready;$('exportStart').disabled=busy||!ready||!saved()||!analysisReady();
   $('exportStart').textContent=done?'สร้างใหม่อีกครั้ง':'สร้างคลิป';
   $('exportStart').classList.toggle('primary',!done);$('exportReveal').classList.toggle('primary',done);
   $('exportCancel').hidden=!running;
   $('exportProgress').hidden=!running;$('exportProgress').value=status.progress||0;
   $('exportStatus').textContent=running?`กำลังสร้างคลิป ${status.story||1}/${status.stories} · ${Math.floor(100*(status.progress||0))}%`:done?`สร้างเสร็จ ${status.files.length} คลิป`:status.state==='cancelled'?'ยกเลิกแล้ว':!ready?'วางคำตอบจาก AI ที่ขั้น 3 ก่อน':'คลิปละเรื่องตามคำตอบจาก AI ขนาด 9:16 พร้อมซับและหัวคลิป';
   const message=error||(status.state==='failed'?exportMessage(status.error):'');$('exportError').textContent=message;$('exportError').hidden=!message;
-  const skipped=(status.skipped||[]).map(r=>roleNames[r]||r);$('exportSkipped').hidden=!skipped.length;$('exportSkipped').textContent=skipped.length?`ยังใส่ ${skipped.join(' และ ')} ในวิดีโอไม่ได้ คลิปนี้มีแค่คำพูดและหัวคลิป`:'';
+  if(!running&&!done&&ready&&!analysisReady())$('exportStatus').textContent='กำลังคำนวณจังหวะตัดและซูม';
+  const skipped=(status.skipped||[]).map(r=>roleNames[r]||r);$('exportSkipped').hidden=!skipped.length;$('exportSkipped').textContent=skipped.length?`ยังขาด ${skipped.join(' และ ')} ในวิดีโอ`:'';
   const list=$('exportFiles');list.replaceChildren(...(status.files||[]).map(path=>{const li=document.createElement('li');li.textContent=path.split(/[\\/]/).pop();li.title=path;return li;}));
   list.hidden=!status.files?.length;$('exportReveal').hidden=!status.files?.length;
   paintCapcut();
@@ -39,12 +40,12 @@ export function createExport({project,saved,planReady}){
  $('exportReveal').onclick=()=>call(base+'/reveal');
  // CapCut projects are written in one request; no progress to poll
  let capcut='';
- function paintCapcut(){$('capcutStart').disabled=busy||!planReady()||!saved();$('capcutStatus').textContent=capcut;$('capcutStatus').hidden=!capcut;}
+ function paintCapcut(){$('capcutStart').disabled=busy||!planReady()||!saved()||!analysisReady();$('capcutStatus').textContent=capcut;$('capcutStatus').hidden=!capcut;}
  $('capcutStart').onclick=async()=>{
   busy=true;error='';capcut='กำลังสร้างโปรเจกต์ CapCut...';paint();
   try{const response=await fetch(`/api/v1/projects/${encodeURIComponent(project)}/capcut`,{method:'POST',signal:AbortSignal.timeout(120000)});const body=await response.json();
    if(!response.ok){capcut='';error=exportMessage(body?.error);}
-   else{const fonts=body.missing_fonts||[];capcut=`เพิ่ม ${body.folders.length} โปรเจกต์ใน CapCut แล้ว เปิด CapCut เพื่อแก้ต่อ`+(fonts.length?` (เครื่องนี้ไม่มีฟอนต์ ${fonts.join(', ')} จึงใช้ฟอนต์อื่นแทน)`:'');}}
+   else{const fonts=body.missing_fonts||[];capcut=`เพิ่ม ${body.folders.length} โปรเจกต์ใน CapCut แล้ว เปิด CapCut เพื่อแก้ต่อ`+(fonts.length?` (เครื่องนี้ไม่มีฟอนต์ ${fonts.join(', ')} จึงใช้ฟอนต์อื่นแทน)`:'')+((body.skipped || []).length?` · ยังขาด ${body.skipped.map(r=>roleNames[r] || r).join(' และ ')}`:'');}}
   catch(_){capcut='';error='ติดต่อแอปไม่ได้ กดลองอีกครั้ง';}
   finally{busy=false;paint();}
  };

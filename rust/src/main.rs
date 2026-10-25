@@ -20,7 +20,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc,
 };
-use std::{convert::Infallible, path::PathBuf, time::Duration};
+use std::{collections::HashMap, convert::Infallible, path::PathBuf, time::Duration};
 use tokio::sync::watch;
 
 mod agent;
@@ -28,6 +28,14 @@ mod agent;
 type Shared = Arc<Mutex<Store>>;
 type Asr = Arc<(AsrConfig, AsrSettings)>;
 type ApiError = (StatusCode, Json<Value>);
+
+#[derive(Deserialize)]
+struct PreviewFont { family: String, #[serde(default)] bold: bool, #[serde(default)] italic: bool }
+async fn preview_font(Query(q): Query<PreviewFont>) -> Result<impl IntoResponse, ApiError> {
+    let data = editorkrab::text_layout::preview_font(&q.family, q.bold, q.italic)
+        .ok_or((StatusCode::NOT_FOUND, Json(json!({"error":"font_not_found"}))))?;
+    Ok(([("content-type", "font/ttf"), ("cache-control", "private, max-age=3600")], data))
+}
 
 #[derive(Clone)]
 struct Runtime {
@@ -429,7 +437,7 @@ async fn capcut_export(
                     missing.push(font);
                 }
             }
-            skipped = editorkrab::export::speech_lines(story, &document).1;
+            for role in made.missing_roles {if !skipped.contains(&role) {skipped.push(role);}}
             folders.push(folder.display().to_string());
         }
         Ok(json!({"folders": folders, "missing_fonts": missing, "skipped": skipped}))
@@ -616,6 +624,50 @@ async fn pick_sources(
         .map_err(source_failure)
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LocateBody {
+    files: Vec<editorkrab::sources::Dropped>,
+}
+
+/// A dropped video carries no location, so look for it where videos usually are: the folders
+/// of videos already used, the person's own folders, and the top of each drive.
+async fn locate_sources(
+    State(runtime): State<Runtime>,
+    Json(body): Json<LocateBody>,
+) -> Result<Json<Value>, ApiError> {
+    if body.files.is_empty() || body.files.len() > 1000 {
+        return Err(failure(Error::InvalidInput));
+    }
+    let used = database(runtime, |store| store.source_folders()).await?;
+    let found = tokio::task::spawn_blocking(move || {
+        let mut roots: Vec<PathBuf> = used.into_iter().map(PathBuf::from).collect();
+        let near = editorkrab::sources::locate(&body.files, &roots, 1, 2_000);
+        if near.iter().all(Option::is_some) {
+            return near;
+        }
+        if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
+            let home = PathBuf::from(home);
+            for folder in ["Desktop", "Downloads", "Videos", "Movies", "Documents", "Pictures"] {
+                roots.push(home.join(folder));
+            }
+        }
+        for drive in b'C'..=b'Z' {
+            let root = PathBuf::from(format!("{}:\\", drive as char));
+            if root.exists() {
+                roots.push(root);
+            }
+        }
+        if cfg!(not(windows)) {
+            roots.push(PathBuf::from("/Volumes"));
+        }
+        editorkrab::sources::locate(&body.files, &roots, 5, 40_000)
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))?;
+    Ok(Json(json!({ "files": found })))
+}
+
 async fn database<T: Send + 'static>(
     runtime: Runtime,
     operation: impl FnOnce(&mut Store) -> Result<T, Error> + Send + 'static,
@@ -679,6 +731,50 @@ async fn read(
     })
     .await?;
     Ok(Json(json!(draft)))
+}
+
+#[derive(Deserialize)]
+struct CaptionCueRevision { draft_revision: i64 }
+async fn caption_cues(
+    State(runtime): State<Runtime>, Path(project): Path<String>, Query(query): Query<CaptionCueRevision>,
+) -> Result<Json<Value>, ApiError> {
+    let id = project.clone();
+    let (draft, jobs) = database(runtime, move |store| {
+        let draft = store.read(&id)?.ok_or(Error::NotFound)?;
+        let jobs = store.list_jobs(&id)?;
+        Ok((draft, jobs))
+    }).await?;
+    if draft.revision != query.draft_revision {
+        return Err((StatusCode::CONFLICT, Json(json!({"error":"draft_revision_conflict","draft_revision":draft.revision}))));
+    }
+    let revision = draft.revision;
+    let manifest = tokio::task::spawn_blocking(move || editorkrab::export::translation_manifest(&draft.document, &jobs))
+        .await.map_err(|e| export_error(format!("caption_cues_failed:{e}")))?.map_err(export_error)?;
+    let mut value = serde_json::to_value(manifest).map_err(|e| export_error(format!("caption_cues_failed:{e}")))?;
+    value["project_id"] = json!(project);
+    value["draft_revision"] = json!(revision);
+    Ok(Json(value))
+}
+
+async fn list_drafts(State(runtime): State<Runtime>) -> Result<Json<Value>, ApiError> {
+    let projects = database(runtime, |store| store.list()).await?;
+    Ok(Json(json!(projects)))
+}
+
+async fn hide_draft(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    database(runtime, move |store| store.hide(&project, true)).await?;
+    Ok(Json(json!({"hidden":true})))
+}
+
+async fn restore_draft(
+    State(runtime): State<Runtime>,
+    Path(project): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    database(runtime, move |store| store.hide(&project, false)).await?;
+    Ok(Json(json!({"hidden":false})))
 }
 
 async fn save(
@@ -846,29 +942,10 @@ async fn text_qc(Json(body): Json<TextQcBody>) -> Result<Json<Value>, ApiError> 
         .map_err(spelling_failure)?;
     Ok(Json(json!({"findings":findings})))
 }
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct PauseQuery {
-    start_ms: u64,
-    end_ms: u64,
-}
-/// Quiet spans of one source range (the old `quiet_spans`), plus the pad kept around words.
-async fn source_pauses(
-    State(runtime): State<Runtime>,
-    Path((project, source_id)): Path<(String, String)>,
-    Query(query): Query<PauseQuery>,
-) -> Result<Json<Value>, ApiError> {
-    if query.end_ms <= query.start_ms || query.end_ms - query.start_ms > 3_600_000 {
-        return Err(failure(Error::InvalidInput));
-    }
-    let ffmpeg = runtime.asr().map(|v| v.0.ffmpeg.clone()).ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"error":"transcription_not_configured"})),
-        )
-    })?;
+/// A project's video on disk, checked to be the one the draft names (same size and time stamp).
+async fn source_path(runtime: &Runtime, project: String, source_id: String) -> Result<PathBuf, ApiError> {
     let store = runtime.store.clone();
-    let path = tokio::task::spawn_blocking(move || -> Result<PathBuf, ApiError> {
+    tokio::task::spawn_blocking(move || -> Result<PathBuf, ApiError> {
         let store = store.lock().map_err(|_| failure(Error::Unavailable))?;
         let draft = store.read(&project).map_err(failure)?.ok_or((
             StatusCode::NOT_FOUND,
@@ -907,7 +984,146 @@ async fn source_pauses(
         Ok(path)
     })
     .await
-    .map_err(|_| failure(Error::Unavailable))??;
+    .map_err(|_| failure(Error::Unavailable))?
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VoiceBody {
+    /// the transcribed words in this video, [start, end] ms: they name the main speaker and are never cut
+    words: Vec<(u64, u64)>,
+    min_ms: u64,
+    /// speakers whose talk is kept; the main speaker when not given
+    #[serde(default)]
+    keep: Option<Vec<i32>>,
+}
+fn voice_models(setup: &AsrSetup) -> editorkrab::voice::Models {
+    tool_roots(&setup.data)
+        .iter()
+        .map(|root| editorkrab::voice::Models::at(root))
+        .find(|m| m.ready())
+        .unwrap_or_else(|| editorkrab::voice::Models::at(&setup.data))
+}
+/// Whether the speech and speaker models are here, and how much is left to download.
+async fn voice_status(State(runtime): State<Runtime>) -> Json<Value> {
+    let ready = voice_models(&runtime.setup).ready();
+    let left: u64 = if ready { 0 } else { editorkrab::voice::plan(&runtime.setup.data).iter().map(|i| i.size).sum() };
+    Json(json!({"ready": ready, "download_bytes": left}))
+}
+/// Downloads the three small voice models (about 33 MB), each checked against its pinned SHA256.
+async fn voice_download(State(runtime): State<Runtime>) -> Result<Json<Value>, ApiError> {
+    if !voice_models(&runtime.setup).ready() {
+        let curl = if cfg!(windows) {
+            PathBuf::from(std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into())).join("System32").join("curl.exe")
+        } else {
+            PathBuf::from("curl")
+        };
+        let (_keep, signal) = watch::channel(false);
+        for item in editorkrab::voice::plan(&runtime.setup.data) {
+            editorkrab::asr_download::fetch(&item, &curl, signal.clone())
+                .await
+                .map_err(|e| (StatusCode::BAD_GATEWAY, Json(json!({"error": format!("voice_download_failed: {e}")}))))?;
+        }
+    }
+    Ok(voice_status(State(runtime)).await)
+}
+/// Who speaks when in one video, and its dead air: speech by Silero VAD, speakers by diarization, the main
+/// speaker by the transcribed words. Diarization takes about a fifth of the video's length on CPU.
+async fn source_voice(
+    State(runtime): State<Runtime>,
+    Path((project, source_id)): Path<(String, String)>,
+    Json(body): Json<VoiceBody>,
+) -> Result<Json<Value>, ApiError> {
+    let models = voice_models(&runtime.setup);
+    if !models.ready() {
+        return Err((StatusCode::CONFLICT, Json(json!({"error":"voice_models_missing"}))));
+    }
+    let ffmpeg = runtime
+        .asr()
+        .map(|v| v.0.ffmpeg.clone())
+        .or_else(|| find_asr_tools(&runtime.setup.data).ffmpeg)
+        .ok_or((StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"ffmpeg_missing"}))))?;
+    let path = source_path(&runtime, project, source_id).await?;
+    let samples = editorkrab::voice::samples(&ffmpeg, &path)
+        .await
+        .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
+    // faces and who is seen talking: a video with no picture (sound only) has none
+    let frames = editorkrab::faces::frames(&ffmpeg, &path).await.ok();
+    let face_model = models.face.clone();
+    let (speech, turns, loud, hush) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        Ok((editorkrab::voice::speech(&models.vad, &samples)?, editorkrab::voice::speakers(&models, &samples)?, samples.len(), editorkrab::voice::loud(&samples), editorkrab::voice::hush(&samples)))
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))?
+    .map(|(speech, turns, n, loud, hush)| ((editorkrab::voice::heard(&speech, &hush), n), turns, loud, hush))
+    .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
+    let (speech, n) = speech;
+    let total_ms = n as u64 * 1000 / editorkrab::voice::RATE as u64;
+    let starts: Vec<u64> = body.words.iter().map(|w| w.0).collect();
+    let main = editorkrab::voice::main_speaker(&turns, &starts);
+    // everyone's talk is kept until the person drops someone (Nina clips keep the listener)
+    let keep = body.keep.unwrap_or_default();
+    let dead = editorkrab::voice::dead_air_hushed(&speech, &turns, &keep, &body.words, &loud, &hush, total_ms, body.min_ms);
+    let talk = speech.clone();
+    let (faces, seen) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        let Some((frames, w, h)) = frames else { return Ok((Vec::new(), Vec::new())) };
+        let people = editorkrab::faces::people(&face_model, &frames, w, h)?;
+        let motion = editorkrab::faces::mouth_motion(&people, &frames, w, h);
+        Ok((people, editorkrab::faces::visual_turns(&motion, &talk)))
+    })
+    .await
+    .map_err(|_| failure(Error::Unavailable))?
+    .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
+    let seen: Vec<Value> = seen.iter().map(|(a, b, n)| json!({"start_ms": a, "end_ms": b, "person": n})).collect();
+    Ok(Json(json!({"speech": speech, "turns": turns, "main": main, "dead": dead, "total_ms": total_ms, "faces": faces, "seen": seen, "loud": loud, "hush": hush})))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeadAirBody {
+    speech: Vec<(u64, u64)>,
+    turns: Vec<editorkrab::voice::Turn>,
+    words: Vec<(u64, u64)>,
+    total_ms: u64,
+    min_ms: u64,
+    #[serde(default)]
+    keep: Option<Vec<i32>>,
+    /// stretches with sound (voice::loud), stored from the first listen
+    #[serde(default)]
+    loud: Vec<(u64, u64)>,
+    /// hushed runs (voice::hush), stored from the first listen
+    #[serde(default)]
+    hush: Vec<(u64, u64)>,
+}
+/// Dead air again from a video's stored speech and speakers, for a new shortest pause; no audio is read.
+async fn dead_air(Json(body): Json<DeadAirBody>) -> Json<Value> {
+    let starts: Vec<u64> = body.words.iter().map(|w| w.0).collect();
+    let main = editorkrab::voice::main_speaker(&body.turns, &starts);
+    let keep = body.keep.unwrap_or_default();
+    let dead = editorkrab::voice::dead_air_hushed(&body.speech, &body.turns, &keep, &body.words, &body.loud, &body.hush, body.total_ms, body.min_ms);
+    Json(json!({"main": main, "dead": dead}))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PauseQuery {
+    start_ms: u64,
+    end_ms: u64,
+}
+/// Quiet spans of one source range (the old `quiet_spans`), plus the pad kept around words.
+async fn source_pauses(
+    State(runtime): State<Runtime>,
+    Path((project, source_id)): Path<(String, String)>,
+    Query(query): Query<PauseQuery>,
+) -> Result<Json<Value>, ApiError> {
+    if query.end_ms <= query.start_ms || query.end_ms - query.start_ms > 3_600_000 {
+        return Err(failure(Error::InvalidInput));
+    }
+    let ffmpeg = runtime.asr().map(|v| v.0.ffmpeg.clone()).ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error":"transcription_not_configured"})),
+        )
+    })?;
+    let path = source_path(&runtime, project, source_id).await?;
     let spans = editorkrab::pauses::find(&ffmpeg, &path, query.start_ms, query.end_ms)
         .await
         .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error":e}))))?;
@@ -1768,7 +1984,26 @@ async fn serve(
     let app = Router::new()
         .route(
             "/",
-            get(|| async { Html(include_str!("../../design/rust-flow/index.html")) }),
+            // no project in the address: the project screen comes first
+            get(|Query(query): Query<HashMap<String, String>>| async move {
+                Html(if query.contains_key("project") {
+                    include_str!("../../design/rust-flow/index.html")
+                } else {
+                    include_str!("../../design/rust-flow/home.html")
+                })
+            }),
+        )
+        .route("/api/v1/drafts", get(list_drafts))
+        .route("/api/v1/drafts/{project}/hide", post(hide_draft))
+        .route("/api/v1/drafts/{project}/restore", post(restore_draft))
+        .route(
+            "/home.js",
+            get(|| async {
+                (
+                    [("content-type", "application/javascript; charset=utf-8")],
+                    include_str!("../../design/rust-flow/home.js"),
+                )
+            }),
         )
         .route(
             "/flow.js",
@@ -1815,7 +2050,9 @@ async fn serve(
                 )
             }),
         )
+        .route("/api/v1/fonts/preview", get(preview_font))
         .route("/api/v1/drafts/{project}", get(read).put(save))
+        .route("/api/v1/projects/{project}/caption-cues", get(caption_cues))
         .route("/api/v1/drafts/{project}/copy", post(copy_draft))
         .route(
             "/text-qc.js",
@@ -1909,6 +2146,11 @@ async fn serve(
         .route("/api/v1/spelling/fix", post(spelling_fix))
         .route("/api/v1/text-qc", post(text_qc))
         .route("/api/v1/sources/pick", post(pick_sources))
+        .route("/api/v1/sources/locate", post(locate_sources))
+        .route("/api/v1/voice", get(voice_status))
+        .route("/api/v1/voice/download", post(voice_download))
+        .route("/api/v1/voice/dead-air", post(dead_air))
+        .route("/api/v1/projects/{project}/sources/{source_id}/voice", post(source_voice))
         .route("/api/v1/sources/uploads", post(begin_upload))
         .route("/api/v1/sources/uploads/{id}", post(upload_chunk))
         .route("/api/v1/sources/uploads/{id}/finish", post(finish_upload))

@@ -561,6 +561,20 @@ impl Store {
         self.job(id)
     }
 
+    /// Stops every queued or running job of a project (deleting it from the project screen): queued ones end now,
+    /// running ones are asked to stop, as one cancel each would.
+    pub fn cancel_project_jobs(&mut self, project: &str) -> Result<usize, Error> {
+        let ids: Vec<String> = self
+            .0
+            .prepare("SELECT id FROM jobs WHERE project_id=?1 AND status IN ('queued','running') AND cancel_requested=0")?
+            .query_map([project], |r| r.get(0))?
+            .collect::<Result<_, _>>()?;
+        for id in &ids {
+            self.cancel_job(id)?;
+        }
+        Ok(ids.len())
+    }
+
     pub fn retry_job(&mut self, id: &str) -> Result<Job, Error> {
         let tx = self
             .0

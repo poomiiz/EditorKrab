@@ -268,3 +268,119 @@ fn write_never_replaces_an_existing_project() {
     assert_eq!(left.len(), 1);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn caption_layers_keep_word_clocks_and_translations_in_separate_named_tracks() {
+    let story = Story {id:"layers".into(),title:"".into(),sources:vec!["a.mp4".into()],pieces:vec![Piece {
+        source:0,start_ms:0,end_ms:4200,segment:"a".into(),timed:true,text:"กินคอนเทนต์กัน".into(),
+        // "กัน" after a 2 s pause: its own card (a card holds up to CARD_MAX_MS of speech)
+        words:vec![("กิน".into(),100,400),("คอนเทนต์".into(),900,1400),("กัน".into(),3400,3800)],
+    }]};
+    let doc=json!({"text_roles":["speech","emphasis","english"],
+        "emphasis":{"a":[{"text":"คอนเทนต์","start_ms":900,"end_ms":1400}]},
+        "subtitles":{"a":"Sometimes I make something and post it right away with a phone."},
+        "text_styles":{"english":{"font":"system","size":125,"x":50,"y":90,"color":"#ffffff"}}});
+    let draft=capcut::build(&story,&doc,&media(),&fonts,Path::new("root"),Path::new("root/layers"),1).unwrap();
+    let texts=draft.content["materials"]["texts"].as_array().unwrap();
+    let contents=|seg:&Value| -> String {
+        let mat=texts.iter().find(|m|m["id"]==seg["material_id"]).unwrap();
+        let body:Value=serde_json::from_str(mat["content"].as_str().unwrap()).unwrap();body["text"].as_str().unwrap().into()
+    };
+    let track=|name:&str|draft.content["tracks"].as_array().unwrap().iter().find(|t|t["name"]==name).unwrap();
+    let speech=track("คำพูด")["segments"].as_array().unwrap();
+    assert_eq!(speech.iter().map(contents).collect::<Vec<_>>(),["กิน","กัน"]);
+    // the white line stays on until the orange "คอนเทนต์" said after it ends (1.4 s + 180 ms tail), as in Nina
+    assert_eq!(speech[0]["target_timerange"],json!({"start":100000,"duration":1480000}));
+    let emphasis=track("คำเน้น")["segments"].as_array().unwrap();
+    assert_eq!(emphasis.len(),1);assert_eq!(contents(&emphasis[0]),"คอนเทนต์");
+    assert_eq!(emphasis[0]["target_timerange"]["start"],900000);
+    let english=track("อังกฤษ")["segments"].as_array().unwrap();
+    let expected=editorkrab::export::subtitle_lines(&story,&doc);
+    assert_eq!(english.len(),1,"legacy translation keeps its known whole-segment span instead of invented page clocks");
+    for (seg,(start,end,text)) in english.iter().zip(expected.iter()) {
+        assert_eq!(contents(seg),*text);assert_eq!(seg["target_timerange"],json!({"start":start*1000,"duration":(end-start)*1000}));
+    }
+    assert_eq!(english.len(),expected.len());
+
+    let cues=editorkrab::export::translation_cues(&story,&doc);
+    let mut next=doc.clone();
+    let translations:serde_json::Map<String,Value>=cues.iter().enumerate().map(|(i,c)|(c.id.clone(),json!(format!("English {}",i+1)))).collect();
+    next["english_cues"]=json!({"input_revision":"0123456789abcdef","translations":translations});
+    let made=capcut::build(&story,&next,&media(),&fonts,Path::new("root"),Path::new("root/final-cues"),1).unwrap();
+    let english=made.content["tracks"].as_array().unwrap().iter().find(|t|t["name"]=="อังกฤษ").unwrap()["segments"].as_array().unwrap();
+    assert_eq!(english.len(),cues.len());assert!(english.len()>1,"new translations use final speech-cue anchors");
+    for (seg,cue) in english.iter().zip(cues.iter()) {
+        assert_eq!(seg["target_timerange"],json!({"start":cue.output_start_ms*1000,"duration":(cue.output_end_ms-cue.output_start_ms)*1000}));
+    }
+}
+
+#[test]
+fn unticked_layers_stay_absent_and_missing_english_is_reported() {
+    let mut doc=document();doc["text_roles"]=json!(["speech","english"]);
+    let made=capcut::build(&story(),&doc,&media(),&fonts,Path::new("root"),Path::new("root/missing"),1).unwrap();
+    assert_eq!(made.missing_roles,["english"]);
+    assert!(made.content["tracks"].as_array().unwrap().iter().all(|t|t["name"]!="อังกฤษ"&&t["name"]!="คำเน้น"));
+    doc["text_roles"]=json!([]);doc["headline_items"]=json!([]);
+    let made=capcut::build(&story(),&doc,&media(),&fonts,Path::new("root"),Path::new("root/none"),1).unwrap();
+    assert!(made.missing_roles.is_empty());
+    assert_eq!(made.content["tracks"].as_array().unwrap().len(),1);
+    assert!(made.content["materials"]["texts"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn native_camera_follows_shared_face_crops_and_preserves_continuous_audio_ranges() {
+    let story = Story { id:"camera".into(), title:"".into(), sources:vec!["a.mp4".into()],
+        pieces:vec![piece(0,1000,11000,"")] };
+    let doc=json!({"files":[{"path":"a.mp4","source_id":"src"}],"text_roles":[],"follow_speaker":true,
+        "crops":{"src":{"speakers":{"0":{"zoom":1.5}}}},
+        "voice":{"src":{"faces":[{"cx":0.62,"cy":0.48},{"cx":0.4,"cy":0.5}],
+            "seen":[{"start_ms":0,"end_ms":4000,"person":0},{"start_ms":4000,"end_ms":8000,"person":1}]}}});
+    let media=vec![Media{duration_ms:12000,width:2160,height:3840,has_audio:true}];
+    let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/camera"),1).unwrap();
+    let video=tracks(&draft,"video");let segments=video[0]["segments"].as_array().unwrap();
+    assert_eq!(segments.len(),3,"speaker changes and unknown-gap expiry must also reach native video");
+    // the wide shot after the unknown gap is at least MIN_SHOT_MS long here, so it stays
+    let expected=[(1000,4000,1.5,-0.36,-0.06),(4000,9201,1.2,0.2,0.0),(9201,11000,1.0,0.0,0.0)];
+    let mut target=0;
+    for (seg,(a,b,scale,x,y)) in segments.iter().zip(expected) {
+        assert_eq!(seg["source_timerange"],json!({"start":a*1000,"duration":(b-a)*1000}));
+        assert_eq!(seg["target_timerange"],json!({"start":target*1000,"duration":(b-a)*1000}));
+        for (actual,want) in [(seg["clip"]["scale"]["x"].as_f64().unwrap(),scale),
+            (seg["clip"]["scale"]["y"].as_f64().unwrap(),scale),
+            (seg["clip"]["transform"]["x"].as_f64().unwrap(),x),
+            (seg["clip"]["transform"]["y"].as_f64().unwrap(),y)] {assert!((actual-want).abs()<1e-8,"{actual} != {want}");}
+        assert_eq!(seg["volume"],1.0);target+=b-a;
+    }
+    assert_eq!(draft.content["duration"],target*1000);
+}
+
+#[test]
+fn native_crop_fills_the_selected_canvas_and_honours_manual_slack_position() {
+    let story=Story{id:"crop".into(),title:"".into(),sources:vec!["a.mp4".into()],pieces:vec![piece(0,0,1000,"")]};
+    let doc=json!({"files":[{"path":"a.mp4","source_id":"src"}],"text_roles":[],"crops":{"src":{"x":1,"y":0.5}}});
+    let media=vec![Media{duration_ms:1000,width:1920,height:1080,has_audio:true}];
+    let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/crop"),1).unwrap();
+    let video=tracks(&draft,"video");let clip=&video[0]["segments"][0]["clip"];
+    let fill=(1920.0/1080.0)/(1080.0/1920.0);
+    assert!((clip["scale"]["x"].as_f64().unwrap()-fill).abs()<1e-8);
+    assert!((clip["transform"]["x"].as_f64().unwrap()-(1.0-fill)).abs()<1e-8);
+    let mut landscape=doc;landscape["output"]=json!({"aspect":"16:9"});
+    let draft=capcut::build(&story,&landscape,&media,&fonts,Path::new("root"),Path::new("root/landscape"),1).unwrap();
+    assert_eq!(draft.content["canvas_config"]["width"],1920);
+    assert_eq!(draft.content["canvas_config"]["height"],1080);
+    assert_eq!(tracks(&draft,"video")[0]["segments"][0]["clip"]["scale"],json!({"x":1.0,"y":1.0}));
+}
+
+#[test]
+fn the_camera_never_cuts_to_a_shot_under_a_second() {
+    // the unknown-gap wide shot would be 0.8 s at the end of the piece: the close-up holds instead
+    let story = Story { id:"short".into(), title:"".into(), sources:vec!["a.mp4".into()], pieces:vec![piece(0,1000,10000,"")] };
+    let doc=json!({"files":[{"path":"a.mp4","source_id":"src"}],"text_roles":[],"follow_speaker":true,
+        "voice":{"src":{"faces":[{"cx":0.62,"cy":0.48},{"cx":0.4,"cy":0.5}],
+            "seen":[{"start_ms":0,"end_ms":4000,"person":0},{"start_ms":4000,"end_ms":8000,"person":1}]}}});
+    let media=vec![Media{duration_ms:12000,width:2160,height:3840,has_audio:true}];
+    let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/short"),1).unwrap();
+    let segments=tracks(&draft,"video")[0]["segments"].as_array().unwrap().clone();
+    let ranges:Vec<_>=segments.iter().map(|s|s["source_timerange"]["duration"].as_u64().unwrap()/1000).collect();
+    assert_eq!(ranges,[3000,6000]);
+}
