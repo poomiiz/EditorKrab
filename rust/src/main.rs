@@ -262,6 +262,7 @@ async fn run_export(
         tokio::fs::create_dir_all(&folder)
             .await
             .map_err(|e| format!("output_folder:{e}"))?;
+        let mut gpu_seen: HashMap<PathBuf, bool> = HashMap::new();
         for (n, story) in stories.iter().enumerate() {
             update(&|s| {
                 s.story = n + 1;
@@ -293,7 +294,7 @@ async fn run_export(
             run_ffmpeg(
                 &ffmpeg,
                 &dir,
-                &editorkrab::export::ffmpeg_args_on(story, &document, &partial, &gpu_sources(&ffmpeg, &ffprobe, &story.sources, &runtime.setup.data).await),
+                &editorkrab::export::ffmpeg_args_on(story, &document, &partial, &gpu_sources(&ffmpeg, &ffprobe, &story.sources, &runtime.setup.data, &mut gpu_seen).await),
                 signal.clone(),
                 progress,
             )
@@ -333,61 +334,83 @@ async fn run_export(
     });
 }
 /// Which of a story's source files are decoded and shrunk on the graphics card (4K phone footage). A source qualifies when
-/// it is large, has no phone-rotation tag, this PC has an NVIDIA card, "CPU only" is not chosen, and a real test decode
-/// on the card works. Each answer that is no is printed with its reason; nothing is switched during the export itself.
+/// it is large, has no phone-rotation tag, this PC has an NVIDIA card, "CPU only" is not chosen, and a test decode on the
+/// card, with the same shrink the export uses, works. Every "no" is printed with its reason; nothing is switched during
+/// the export itself. `seen` keeps one answer per file for the whole export.
 async fn gpu_sources(
     ffmpeg: &std::path::Path,
     ffprobe: &std::path::Path,
     sources: &[PathBuf],
     data: &std::path::Path,
+    seen: &mut HashMap<PathBuf, bool>,
 ) -> Vec<bool> {
     let mut out = Vec::new();
     for source in sources {
-        out.push(gpu_decode_ok(ffmpeg, ffprobe, source, data).await);
+        let ok = match seen.get(source) {
+            Some(known) => *known,
+            None => {
+                let ok = match gpu_decode_check(ffmpeg, ffprobe, source, data).await {
+                    Ok(()) => true,
+                    Err(why) => {
+                        eprintln!("export on the CPU for {}: {why}", source.display());
+                        false
+                    }
+                };
+                seen.insert(source.clone(), ok);
+                ok
+            }
+        };
+        out.push(ok);
     }
     out
 }
-async fn gpu_decode_ok(
+async fn gpu_decode_check(
     ffmpeg: &std::path::Path,
     ffprobe: &std::path::Path,
     source: &std::path::Path,
     data: &std::path::Path,
-) -> bool {
-    if !nvidia() || force_cpu(data) {
-        return false;
+) -> Result<(), String> {
+    if !nvidia() {
+        return Err("no NVIDIA card".into());
+    }
+    if force_cpu(data) {
+        return Err("CPU only is chosen".into());
     }
     let mut probe = tokio::process::Command::new(ffprobe);
     probe
-        .args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:stream_side_data=rotation", "-of", "json"])
+        .args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:stream_tags=rotate:stream_side_data=rotation", "-of", "json"])
         .arg(source);
     #[cfg(windows)]
     probe.creation_flags(0x0800_0000);
-    let Ok(out) = probe.output().await else { return false };
-    let Ok(info) = serde_json::from_slice::<Value>(&out.stdout) else { return false };
+    let out = probe.output().await.map_err(|e| format!("ffprobe could not run: {e}"))?;
+    let info: Value = serde_json::from_slice(&out.stdout).map_err(|_| "ffprobe gave no readable answer".to_string())?;
     let stream = &info["streams"][0];
-    let big = stream["width"].as_u64().unwrap_or(0).max(stream["height"].as_u64().unwrap_or(0)) >= 3000;
-    let rotated = stream["side_data_list"]
+    let (Some(width), Some(height)) = (stream["width"].as_u64(), stream["height"].as_u64()) else {
+        return Err("ffprobe gave no picture size".into());
+    };
+    if width.max(height) < 3000 {
+        return Err(format!("{width}x{height} is not large enough to gain"));
+    }
+    let tag = stream["tags"]["rotate"].as_str().and_then(|r| r.parse::<f64>().ok()).is_some_and(|r| r != 0.0);
+    let side = stream["side_data_list"]
         .as_array()
         .is_some_and(|l| l.iter().any(|d| d["rotation"].as_f64().is_some_and(|r| r != 0.0)));
-    if !big || rotated {
-        return false;
+    if tag || side {
+        return Err("the file carries a rotation tag".into());
     }
+    // the same shrink the export uses, for a 9:16 frame with no zoom
+    let shrink = "fps=30,scale_cuda=w='trunc(iw*1080/(min(iw,ih*0.562500))/2)*2':h='trunc(ih*1920/(min(ih,iw/0.562500))/2)*2':format=nv12,hwdownload,format=nv12";
     let mut test = tokio::process::Command::new(ffmpeg);
     test.args(["-nostdin", "-v", "error", "-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-i"])
         .arg(source)
-        .args(["-frames:v", "2", "-vf", "scale_cuda=64:64:format=nv12,hwdownload,format=nv12", "-f", "null", "-"]);
+        .args(["-frames:v", "2", "-vf", shrink, "-f", "null", "-"]);
     #[cfg(windows)]
     test.creation_flags(0x0800_0000);
-    match test.output().await {
-        Ok(o) if o.status.success() => true,
-        Ok(o) => {
-            eprintln!("GPU decode test failed for {}, using the CPU: {}", source.display(), String::from_utf8_lossy(&o.stderr).trim());
-            false
-        }
-        Err(e) => {
-            eprintln!("GPU decode test could not run for {}, using the CPU: {e}", source.display());
-            false
-        }
+    let o = test.output().await.map_err(|e| format!("GPU decode test could not run: {e}"))?;
+    if o.status.success() {
+        Ok(())
+    } else {
+        Err(format!("GPU decode test failed: {}", String::from_utf8_lossy(&o.stderr).trim()))
     }
 }
 async fn run_ffmpeg(
