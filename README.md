@@ -19,7 +19,7 @@ The app has one window and five steps, with one main button per step.
 2. **Summarise:** download one file and attach it in any AI chat (ChatGPT, Gemini or Claude), or press **คัดลอกให้ AI** and paste the same content straight into the chat. Then paste the AI's whole reply back into the app. The AI picks the stories to keep.
 3. **Edit:** adjust the cuts and the words of each story. Pauses are cut for you and you can put any cut back.
 4. **Check subtitles:** pick a subtitle look, then drag a subtitle to move it and drag a corner to resize it. One more trip to the AI chat adds keyword highlights and English subtitles.
-5. **Get the clip:** check the list, then press **Create clip**. The app makes one vertical 9:16 MP4 per story, with the subtitles burned in, and saves them in `Videos\EditorKrab`. It never overwrites an existing file. Each file is checked for size, sound and length before it is saved. You can also export each story as a CapCut project.
+5. **Get the clip:** check the list, then press **Create clip**. The app makes one vertical 9:16 MP4 per story, with the subtitles burned in, and saves them in `Videos\EditorKrab`. It never overwrites an existing file. Each file is checked for size, sound and length before it is saved. You can also export each story as a CapCut project (CapCut must be installed).
 
 The work saves itself as you go. **Undo**, **Redo**, **Open** and **Download backup** are in the top bar.
 
@@ -62,7 +62,7 @@ These numbers come from our own test runs. They are not guarantees.
 | Transcribe a 15.8-minute Thai phone video on the graphics card (GeForce RTX 3070 Ti Laptop, GPU engine the app downloads, first video after launch) | 351.5 s and 358.9 s in two runs | [transcribe-and-export](docs/test-logs/rust-20261025/transcribe-and-export.md) |
 | Export 173 s of 4K phone video as 9:16 clips with subtitles (same PC) | 76.7 s, one run | [transcribe-and-export](docs/test-logs/rust-20261025/transcribe-and-export.md) |
 
-The test speech was generated from the scripts in that folder; it is not customer footage. The times were measured on one 20-thread desktop CPU, with whisper running on the CPU only. The app uses up to 8 threads because more threads gave little extra speed. Time saved compared with manual editing has not been measured by us. The editor who built the tool reports going from 2 to 4-5 short clips a day with the earlier prototype (ClipKit); that is their own report, not a controlled test, and not yet repeated with this app.
+The test speech was generated from the scripts in that folder; it is not customer footage. The first two rows and the two CPU rows were measured on one 20-thread desktop CPU, with whisper running on the CPU only; the app uses up to 8 threads because more threads gave little extra speed. The last two rows were measured on a laptop with a Core i9-12900H and a GeForce RTX 3070 Ti, transcribing on the graphics card. Time saved compared with manual editing has not been measured by us. The editor who built the tool reports going from 2 to 4-5 short clips a day with the earlier prototype (ClipKit); that is their own report, not a controlled test, and not yet repeated with this app.
 
 ## Known limits
 
@@ -75,11 +75,11 @@ The test speech was generated from the scripts in that folder; it is not custome
 
 ### 60-language test
 
-We ran the real app through all six steps on [Google FLEURS](https://huggingface.co/datasets/google/fleurs) read speech (CC BY 4.0), about 75 seconds per language. Thai, Chinese, Japanese and Korean are scored by character error rate, the rest by word error rate.
+We ran the real app through every step of the flow it had then (six steps; the title step has since been removed) on [Google FLEURS](https://huggingface.co/datasets/google/fleurs) read speech (CC BY 4.0), about 75 seconds per language. Thai, Chinese, Japanese and Korean are scored by character error rate, the rest by word error rate.
 
 | Result | Languages |
 |---|---|
-| All six steps and export passed | 50 of 60 |
+| Every step and the export passed | 50 of 60 |
 | Error rate 15% or lower | 24 (best: Chinese 1.2%, German 3.7%, Polish 3.9%, Finnish 5.5%, Slovak 5.8%) |
 | Error rate 15–40% | 17 |
 | Error rate above 40% | 8 |
