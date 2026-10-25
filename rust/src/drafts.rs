@@ -117,7 +117,14 @@ impl Store {
         let mut projects = Vec::new();
         for row in rows {
             let (project, text) = row?;
-            let document: Value = serde_json::from_str(&text)?;
+            // one unreadable saved project must not hide every other project: it is named on stderr and left out
+            let document: Value = match serde_json::from_str(&text) {
+                Ok(document) => document,
+                Err(error) => {
+                    eprintln!("project {project} is not listed, its saved document cannot be read: {error}");
+                    continue;
+                }
+            };
             let files = document["files"].as_array().map(Vec::as_slice).unwrap_or(&[]);
             projects.push(serde_json::json!({
                 "project_id": project,
@@ -394,5 +401,16 @@ mod tests {
         store.hide("old", false).unwrap();
         assert_eq!(store.list().unwrap().len(), 2);
         assert!(matches!(store.hide("missing", true), Err(Error::NotFound)));
+    }
+
+    #[test]
+    fn one_unreadable_project_does_not_hide_the_others() {
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        store.save("good", "1", 0, &json!({"title":"ดี","step":1,"files":[]})).unwrap();
+        store.save("bad", "2", 0, &json!({"title":"เสีย","step":1,"files":[]})).unwrap();
+        store.0.execute("UPDATE drafts SET document='{broken' WHERE project_id='bad'", []).unwrap();
+        let projects = store.list().unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0]["project_id"], "good");
     }
 }
