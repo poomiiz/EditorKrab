@@ -263,8 +263,10 @@
           do { await new Promise(x => setTimeout(x, 1500)); j = await fetch('/api/kit/job/update').then(x => x.json()); }
           while (j.status === 'running');
           if (j.status !== 'done') throw new Error((j.log || '').trim().split('\n').pop());
-          bar.firstChild.textContent = '✅ อัปเดตแล้ว · ปิดแล้วเปิด EditorKrab ใหม่ให้ครบทุกส่วน';
+          // new files on disk with old modules still in memory break lazy imports (read_brief): restart now
+          bar.firstChild.textContent = '✅ อัปเดตแล้ว · กำลังรีสตาร์ต EditorKrab';
           go.remove(); later.textContent = 'ปิด';
+          await systemControl('restart');
         } catch (e) { bar.firstChild.textContent = '❌ อัปเดตไม่สำเร็จ: ' + ckErr(e); go.disabled = false; go.textContent = 'ลองอีกครั้ง'; }
       };
       document.body.appendChild(bar);
