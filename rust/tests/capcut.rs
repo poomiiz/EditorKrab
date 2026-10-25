@@ -248,6 +248,60 @@ fn pilot_into_real_capcut() {
     println!("wrote {}", folder.display());
 }
 
+/// A real cut has dozens of pieces from one 4K phone file (Nina 16 is 38 pieces, 0.5 s to 11 s each, gaps between).
+/// Whatever the cuts are, the CapCut timeline must have no holes and no overlaps, its length must be the sum of the
+/// pieces, every piece must lie inside the file, and every subtitle must sit inside the timeline.
+#[test]
+fn a_long_story_has_no_gaps_and_every_subtitle_stays_inside_the_timeline() {
+    // lengths in ms, varied the way a real edit is, each followed by a gap of skipped speech
+    let lengths = [3_830u64, 1_700, 2_970, 2_230, 2_230, 2_370, 3_100, 7_230, 2_700, 1_770, 500, 730, 1_030, 11_200];
+    let mut pieces = Vec::new();
+    let mut at = 5_000u64;
+    for round in 0..3 {
+        for (n, len) in lengths.iter().enumerate() {
+            pieces.push(piece(0, at, at + len, &format!("ท่อน {round}-{n}")));
+            at += len + 1_000 + (n as u64 % 3) * 700;
+        }
+    }
+    let long = Story {
+        id: "long".to_owned(),
+        title: "ยาว".to_owned(),
+        sources: vec![PathBuf::from("phone.mov")],
+        pieces,
+    };
+    let media = vec![Media { duration_ms: at + 5_000, width: 2160, height: 3840, has_audio: true }];
+    let draft = capcut::build(&long, &document(), &media, &fonts, Path::new("root"), Path::new("root/ยาว · CapCut"), 1).unwrap();
+
+    let total: u64 = long.pieces.iter().map(|p| (p.end_ms - p.start_ms) * 1_000).sum();
+    assert_eq!(draft.content["duration"].as_u64().unwrap(), total, "the draft is as long as its pieces");
+    let video = tracks(&draft, "video");
+    assert_eq!(video.len(), 1);
+    let segs = video[0]["segments"].as_array().unwrap();
+    assert_eq!(segs.len(), long.pieces.len());
+    let mut next = 0u64;
+    for (seg, p) in segs.iter().zip(&long.pieces) {
+        let target = &seg["target_timerange"];
+        assert_eq!(target["start"].as_u64().unwrap(), next, "no hole or overlap before {}", p.text);
+        next += target["duration"].as_u64().unwrap();
+        let source = &seg["source_timerange"];
+        assert_eq!(source["start"].as_u64().unwrap(), p.start_ms * 1_000);
+        assert_eq!(source["duration"].as_u64().unwrap(), (p.end_ms - p.start_ms) * 1_000);
+        assert!(source["start"].as_u64().unwrap() + source["duration"].as_u64().unwrap() <= media[0].duration_ms * 1_000, "inside the file");
+    }
+    assert_eq!(next, total);
+    assert!(!tracks(&draft, "text").is_empty(), "the story has subtitles and a title to check");
+    for track in tracks(&draft, "text") {
+        let mut last_end = 0u64;
+        for seg in track["segments"].as_array().unwrap() {
+            let start = seg["target_timerange"]["start"].as_u64().unwrap();
+            let end = start + seg["target_timerange"]["duration"].as_u64().unwrap();
+            assert!(end <= total, "a subtitle ends after the timeline: {end} > {total}");
+            assert!(start >= last_end, "subtitles on one track overlap");
+            last_end = last_end.max(end);
+        }
+    }
+}
+
 #[test]
 fn write_never_replaces_an_existing_project() {
     let root = std::env::temp_dir().join(format!("ek-capcut-{}", uuid::Uuid::new_v4().simple()));
