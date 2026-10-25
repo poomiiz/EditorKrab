@@ -1,3 +1,5 @@
+> **History.** Written for the Python-era build, kept as a record. The Python app was removed on 25 Oct 2026; EditorKrab is now the Rust app only, so commands here that use Python no longer exist. / เอกสารเก่าของรุ่น Python เก็บไว้เป็นบันทึก แอป Python ถูกลบเมื่อ 25 ต.ค. 2026
+
 # large-v3 และ Turbo: ถอดไฟล์ 148 นาทีสองรอบ
 
 วันที่ 14 ตุลาคม 2026 ทดลองในเครื่อง Windows เครื่องเดียว โดยใช้โค้ดที่ `f4fb8b898eb9fab7be1ca7b9ab80b79122eed7f8` หลังแพตช์ภาษา `ba6e5a0` ยังเป็นงานในเครื่อง ไม่ใช่ release ใหม่
