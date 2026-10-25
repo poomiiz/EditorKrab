@@ -31,7 +31,10 @@ const textEditor=createStyleEditor(()=>draft.text_styles,value=>{draft.headline_
 document.querySelector('#textStyleWorkspace .text-inspector').prepend($('timingStatus'),$('timingDetails'));
 function headlineItems(){return draft.headline_items ?? (draft.text_styles?.headline ? [{id:'headline-main',...draft.text_styles.headline}] : []);}
 function headlinePreset(){return defaults().headline;}
-function activeStep(d){return d.flow_version===2?d.step:d.step===5?6:d.step;}
+// P'Ohm 25 Oct: the headline step (05) is gone from the flow; a project saved on it opens on the last step
+function activeStep(d){const s=d.flow_version===2?d.step:d.step===5?6:d.step;return s===5?6:s;}
+// the rail shows 5 steps; the last one keeps its internal number 6
+const shown=n=>n>5?n-1:n;
 function upgradeFlow(){if(draft.flow_version!==2){draft.step=activeStep(draft);draft.flow_version=2;}}
 // Moving between steps is view state: it is remembered per project but never becomes an undoable edit.
 const stepKey=()=>'editorkrab-step-'+projectId;
@@ -117,8 +120,8 @@ function renderSteps() {
     if (n === activeStep(draft)) b.setAttribute('aria-current', 'step');
     else b.removeAttribute('aria-current');
     b.toggleAttribute('data-done',finished);
-    b.querySelector('.step-number').textContent=finished ? '✓' : '0'+n;
-    b.setAttribute('aria-label',`ขั้น ${n} ${b.querySelector('small').textContent}`+(finished ? ' เสร็จแล้ว' : ''));
+    b.querySelector('.step-number').textContent=finished ? '✓' : '0'+shown(n);
+    b.setAttribute('aria-label',`ขั้น ${shown(n)} ${b.querySelector('small').textContent}`+(finished ? ' เสร็จแล้ว' : ''));
   }
   // Next is the primary action only once its step's work is done; otherwise say what is missing.
   const needs={1:[done[1],''],2:[done[2],'วางคำตอบจาก AI ก่อน'],3:[done[3],'ตรวจให้ครบทุกเรื่อง'],5:[false,'']};
@@ -576,10 +579,9 @@ render(); start();
 // what the clips will carry, read from the work itself (P'Ohm 24 Oct: step 6 promised a headline that was not there)
 function exportChecklist(){
  const s=[...stories.summary().values()].reduce((a,v)=>({n:a.n+v.stories,r:a.r+v.reviewed}),{n:0,r:0});
- const roles=draft.text_roles || [],heads=headlineItems().filter(h=>h.text.trim()).length;
+ const roles=draft.text_roles || [];
  return [{ok:s.n>0,text:s.n?`${s.n} เรื่อง ได้ ${s.n} คลิป`:'ยังไม่มีเรื่อง (วางคำตอบ AI ที่ขั้น 2)'},
   {ok:s.n>0&&s.r===s.n,text:s.n>0&&s.r===s.n?'ตรวจตัดต่อครบทุกเรื่อง':`ตรวจตัดต่อแล้ว ${s.r} จาก ${s.n} เรื่อง (ขั้น 3)`},
-  {ok:roles.includes('speech'),text:roles.includes('speech')?'มีซับคำพูด'+(roles.includes('emphasis')?' + คำเน้น':'')+(roles.includes('english')?' + อังกฤษ':''):'ไม่มีซับ (ติ๊กที่ขั้น 4)'},
-  {ok:heads>0,text:heads?'มีหัวคลิป':'ไม่มีหัวคลิป (ใส่ที่ขั้น 5)'}];
+  {ok:roles.includes('speech'),text:roles.includes('speech')?'มีซับคำพูด'+(roles.includes('emphasis')?' + คำเน้น':'')+(roles.includes('english')?' + อังกฤษ':''):'ไม่มีซับ (ติ๊กที่ขั้น 4)'}];
 }
 var exporter=createExport({project:projectId,planReady,checklist:exportChecklist,analysisReady:()=>!stories.analysisPending(),saved:()=>!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved});
