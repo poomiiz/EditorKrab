@@ -7,7 +7,6 @@ config.json.bak*
 preview-bg*
 
 bug_reports/
-app/sfx_builtin/
 project_templates/
 *.log
 motion/collection/
