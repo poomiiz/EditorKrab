@@ -29,7 +29,8 @@ let session, pendingLocal = 0, editingAllowed = false, jobWatcher;
 let activeUpload;
 const textEditor=createStyleEditor(()=>draft.text_styles,value=>{draft.headline_items??=headlineItems();draft.text_styles=value;save();},()=>({stage:activeStep(draft),roles:draft.text_roles || [],items:headlineItems()}),items=>{draft.headline_items=items;save();renderHeadline();renderSteps();});
 document.querySelector('#textStyleWorkspace .text-inspector').prepend($('timingStatus'),$('timingDetails'));
-function headlineItems(){return draft.headline_items ?? (draft.text_styles?.headline ? [{id:'headline-main',...draft.text_styles.headline}] : []);}
+// a headline still carrying the sample text was never written by the person: it is not a headline (step 5 is hidden, they could not remove it)
+function headlineItems(){const h=draft.text_styles?.headline;return draft.headline_items ?? (h?.text && h.text!==defaults().headline.text ? [{id:'headline-main',...h}] : []);}
 function headlinePreset(){return defaults().headline;}
 // P'Ohm 25 Oct: the headline step (05) is gone from the flow; a project saved on it opens on the last step
 function activeStep(d){const s=d.flow_version===2?d.step:d.step===5?6:d.step;return s===5?6:s;}

@@ -1124,7 +1124,10 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  }
  function checkEmphasisUi(){const c=rounds[round].check();
   const preview=$('emphasisPreview');preview.replaceChildren();preview.hidden=!c.picked;
-  if(c.picked){for(const [id,items] of Object.entries(c.picked)){const row=document.createElement('p');row.className='caption';row.textContent=round==='english'?items:items.map(p=>p.text).join(' · ');preview.append(row);}for(const issue of c.issues || []){const row=document.createElement('p');row.className='field-warning';row.textContent=`“${issue.text}” · ${issue.reason} · เก็บคำเดิมของท่อนนี้`;preview.append(row);}}
+  if(c.picked){for(const [id,items] of Object.entries(c.picked)){const row=document.createElement('p');row.className='caption';row.textContent=round==='english'?items:items.map(p=>p.text).join(' · ');preview.append(row);}
+   // the combined round also shows the English lines, so the person sees what both halves of the answer will do
+   if(round==='both')for(const text of Object.values(c.parts.s.picked)){const row=document.createElement('p');row.className='caption';row.textContent='EN · '+text;preview.append(row);}
+   for(const issue of c.issues || []){const row=document.createElement('p');row.className='field-warning';row.textContent=`“${issue.text}” · ${issue.reason} · เก็บคำเดิมของท่อนนี้`;preview.append(row);}}
   $('emphasisApply').textContent=c.issues?.length?`ใช้ ${c.count} คำที่พร้อม`:'ใช้คำตอบนี้';$('emphasisCheck').textContent=c.picked?c.note:c.error;$('emphasisCheck').dataset.state=c.picked?'ok':'error';$('emphasisCheck').hidden=!$('emphasisCheck').textContent;$('emphasisApply').disabled=!c.picked || !editable();}
  $('emphasisAnswer').oninput=()=>{try{sessionStorage.setItem('caption-reply:'+project+':'+round,$('emphasisAnswer').value);}catch(_){}checkEmphasisUi();};
  $('emphasisApply').onclick=event=>{
