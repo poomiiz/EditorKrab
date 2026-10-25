@@ -1,4 +1,4 @@
-use editorkrab::export::{Piece, ffmpeg_args, file_name, lines, plan, subtitles, unused_path};
+use editorkrab::export::{Piece, ffmpeg_args, ffmpeg_args_on, file_name, lines, plan, subtitles, unused_path};
 use editorkrab::jobs::Job;
 use serde_json::{Value, json};
 use std::path::Path;
@@ -228,6 +228,25 @@ fn ffmpeg_cuts_each_piece_from_its_own_input_and_burns_subs() {
     assert!(graph.contains("scale=1080:1920"));
     assert!(graph.ends_with("[v0][a0][v1][a1]concat=n=2:v=1:a=1[cv][ca];[cv]ass=subs.ass[vout]"));
     assert_eq!(args.last().unwrap(), "out.mp4");
+}
+
+#[test]
+fn a_source_marked_for_the_gpu_is_decoded_and_shrunk_there_then_cut_to_the_frame() {
+    let doc = document(json!({"stories": [{"segment_ids": ["b0", "a1"]}]}));
+    let story = &plan(&doc, &jobs()).unwrap()[0];
+    // only the first of the two inputs is on the GPU
+    let args = ffmpeg_args_on(story, &doc, Path::new("out.mp4"), &[true, false]);
+    let first = args.iter().position(|a| a == "-hwaccel").unwrap();
+    assert_eq!(&args[first..first + 4], ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]);
+    assert_eq!(args[first + 4], "-i");
+    assert_eq!(args.iter().filter(|a| *a == "-hwaccel").count(), 1, "the second input stays on the CPU");
+    let graph = &args[args.iter().position(|a| a == "-filter_complex").unwrap() + 1];
+    // piece 0 (input 0): shrunk by the card to the size at which the window is the frame, then cut
+    assert!(graph.contains("[0:v]trim=start=0.200:end=1.200,setpts=PTS-STARTPTS,fps=30,scale_cuda=w='trunc(iw*1080/(min(iw,ih*0.562500))/2)*2':h='trunc(ih*1920/(min(ih,iw/0.562500))/2)*2':format=nv12,hwdownload,format=nv12,crop=w=1080:h=1920:x='(iw-ow)*0.5000'"), "{graph}");
+    // piece 1 (input 1) is the unchanged CPU chain
+    assert!(graph.contains("[1:v]trim=start=1.500:end=4.000,setpts=PTS-STARTPTS,crop=w='min(iw,ih*0.562500)'"), "{graph}");
+    // no flags, same as ffmpeg_args
+    assert_eq!(ffmpeg_args_on(story, &doc, Path::new("out.mp4"), &[]), ffmpeg_args(story, &doc, Path::new("out.mp4")));
 }
 
 #[test]

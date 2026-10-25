@@ -293,7 +293,7 @@ async fn run_export(
             run_ffmpeg(
                 &ffmpeg,
                 &dir,
-                &editorkrab::export::ffmpeg_args(story, &document, &partial),
+                &editorkrab::export::ffmpeg_args_on(story, &document, &partial, &gpu_sources(&ffmpeg, &ffprobe, &story.sources, &runtime.setup.data).await),
                 signal.clone(),
                 progress,
             )
@@ -331,6 +331,64 @@ async fn run_export(
             }
         }
     });
+}
+/// Which of a story's source files are decoded and shrunk on the graphics card (4K phone footage). A source qualifies when
+/// it is large, has no phone-rotation tag, this PC has an NVIDIA card, "CPU only" is not chosen, and a real test decode
+/// on the card works. Each answer that is no is printed with its reason; nothing is switched during the export itself.
+async fn gpu_sources(
+    ffmpeg: &std::path::Path,
+    ffprobe: &std::path::Path,
+    sources: &[PathBuf],
+    data: &std::path::Path,
+) -> Vec<bool> {
+    let mut out = Vec::new();
+    for source in sources {
+        out.push(gpu_decode_ok(ffmpeg, ffprobe, source, data).await);
+    }
+    out
+}
+async fn gpu_decode_ok(
+    ffmpeg: &std::path::Path,
+    ffprobe: &std::path::Path,
+    source: &std::path::Path,
+    data: &std::path::Path,
+) -> bool {
+    if !nvidia() || force_cpu(data) {
+        return false;
+    }
+    let mut probe = tokio::process::Command::new(ffprobe);
+    probe
+        .args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:stream_side_data=rotation", "-of", "json"])
+        .arg(source);
+    #[cfg(windows)]
+    probe.creation_flags(0x0800_0000);
+    let Ok(out) = probe.output().await else { return false };
+    let Ok(info) = serde_json::from_slice::<Value>(&out.stdout) else { return false };
+    let stream = &info["streams"][0];
+    let big = stream["width"].as_u64().unwrap_or(0).max(stream["height"].as_u64().unwrap_or(0)) >= 3000;
+    let rotated = stream["side_data_list"]
+        .as_array()
+        .is_some_and(|l| l.iter().any(|d| d["rotation"].as_f64().is_some_and(|r| r != 0.0)));
+    if !big || rotated {
+        return false;
+    }
+    let mut test = tokio::process::Command::new(ffmpeg);
+    test.args(["-nostdin", "-v", "error", "-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-i"])
+        .arg(source)
+        .args(["-frames:v", "2", "-vf", "scale_cuda=64:64:format=nv12,hwdownload,format=nv12", "-f", "null", "-"]);
+    #[cfg(windows)]
+    test.creation_flags(0x0800_0000);
+    match test.output().await {
+        Ok(o) if o.status.success() => true,
+        Ok(o) => {
+            eprintln!("GPU decode test failed for {}, using the CPU: {}", source.display(), String::from_utf8_lossy(&o.stderr).trim());
+            false
+        }
+        Err(e) => {
+            eprintln!("GPU decode test could not run for {}, using the CPU: {e}", source.display());
+            false
+        }
+    }
 }
 async fn run_ffmpeg(
     ffmpeg: &std::path::Path,
