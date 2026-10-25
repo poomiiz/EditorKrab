@@ -75,7 +75,7 @@ The test speech was generated from the scripts in that folder; it is not custome
 
 ### 60-language test
 
-We ran the real app through every step of the flow it had then (six steps; the title step has since been removed) on [Google FLEURS](https://huggingface.co/datasets/google/fleurs) read speech (CC BY 4.0), about 75 seconds per language. Thai, Chinese, Japanese and Korean are scored by character error rate, the rest by word error rate.
+We ran the real app through every step of the flow it had then (six steps; the title step is no longer shown) on [Google FLEURS](https://huggingface.co/datasets/google/fleurs) read speech (CC BY 4.0), about 75 seconds per language. Thai, Chinese, Japanese and Korean are scored by character error rate, the rest by word error rate.
 
 | Result | Languages |
 |---|---|
