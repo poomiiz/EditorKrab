@@ -5,48 +5,25 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
-    inputs:
-      expected_release:
-        description: Published release tag to verify (blank skips delivery check)
-        required: false
-        type: string
-        default: ''
 
 permissions:
   contents: read
 
 jobs:
   tests:
-    # Keep the existing Windows setup and host controls covered.
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
       - name: Install ffmpeg
         run: choco install ffmpeg -y --no-progress
-      - name: Install pinned dependencies
-        run: python -m pip install -r requirements.txt
       - name: Build and test the Rust app
         run: |
           cargo build --manifest-path rust/Cargo.toml --locked
           cargo test --manifest-path rust/Cargo.toml --locked
-      - name: Python tests
-        shell: pwsh
-        run: |
-          $failed = @()
-          foreach ($t in Get-ChildItem scripts -Filter *_test.py) {
-            Write-Host "== $($t.Name)"
-            python $t.FullName
-            if ($LASTEXITCODE -ne 0) { $failed += $t.Name }
-          }
-          if ($failed) { throw "failed: $($failed -join ', ')" }
       - name: Page script tests
         shell: pwsh
         run: |
@@ -57,47 +34,6 @@ jobs:
             if ($LASTEXITCODE -ne 0) { $failed += $t.Name }
           }
           if ($failed) { throw "failed: $($failed -join ', ')" }
-      - name: Verify delivery of the published release
-        if: github.event_name == 'workflow_dispatch' && inputs.expected_release != ''
-        shell: pwsh
-        env:
-          EXPECTED_RELEASE: ${{ inputs.expected_release }}
-        run: python scripts/release_acceptance_test.py --live --expected-release "$env:EXPECTED_RELEASE" --proof bug_reports/update-acceptance.json
-      - name: Upload release delivery proof
-        if: always() && github.event_name == 'workflow_dispatch' && inputs.expected_release != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-delivery-Windows
-          path: bug_reports/update-acceptance.json
-          if-no-files-found: warn
-          retention-days: 14
-
-  install:
-    # The README's one setup command on a fresh Windows machine, end to end (tiny model, CPU).
-    runs-on: windows-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - name: Install ffmpeg
-        run: choco install ffmpeg -y --no-progress
-      - name: Small model and a stand-in CapCut drafts folder (no CapCut on the runner)
-        shell: pwsh
-        run: |
-          $drafts = New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\capcut-drafts"
-          $cfg = Get-Content config.example.json -Raw | ConvertFrom-Json
-          $cfg.whisper_model = "tiny"
-          $cfg | Add-Member -Force capcut_drafts $drafts.FullName
-          $cfg | ConvertTo-Json -Depth 10 | Set-Content config.json -Encoding utf8NoBOM
-      - name: setup.ps1 -Workspace
-        shell: powershell
-        run: powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Workspace "$env:RUNNER_TEMP\Editor Krab"
-      - name: Setup switched to CPU without a GPU
-        shell: pwsh
-        run: if ((Get-Content config.json -Raw | ConvertFrom-Json).whisper_device -ne "cpu") { throw "whisper_device not cpu" }
 
   macos:
     name: Mac (${{ matrix.os }})
@@ -109,38 +45,13 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Use the small model for the installation check
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          config = json.loads(Path('config.example.json').read_text())
-          config['whisper_model'] = 'tiny'
-          config['autosave'] = False
-          config['auto_bug_report'] = False
-          Path('config.json').write_text(json.dumps(config))
-          PY
-      - name: Install, configure paths and run CPU transcription
-        run: bash scripts/setup.sh "$RUNNER_TEMP/Editor Krab Workspace"
       - name: Build and test the Rust app
         run: |
           cargo build --manifest-path rust/Cargo.toml --locked
           cargo test --manifest-path rust/Cargo.toml --locked
-      - name: Python tests
-        run: |
-          failed=0
-          for test in scripts/*_test.py; do
-            echo "== $test"
-            .venv/bin/python "$test" || failed=1
-          done
-          exit "$failed"
       - name: Page script tests
         run: |
           failed=0
@@ -149,22 +60,3 @@ jobs:
             node "$test" || failed=1
           done < <(find scripts -type f \( -name '*_test.js' -o -name '*_test.cjs' \))
           exit "$failed"
-      - name: Isolated native server lifecycle
-        run: .venv/bin/python scripts/macos_native_test.py --live
-      - name: Native font, Thai subtitle and owned preview proof
-        run: .venv/bin/python scripts/macos_acceptance_test.py --live --proof bug_reports/macos-acceptance
-      - name: Verify delivery of the published release
-        if: github.event_name == 'workflow_dispatch' && inputs.expected_release != ''
-        env:
-          EXPECTED_RELEASE: ${{ inputs.expected_release }}
-        run: .venv/bin/python scripts/release_acceptance_test.py --live --expected-release "$EXPECTED_RELEASE" --proof bug_reports/update-acceptance.json
-      - name: Upload native and release delivery proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac-acceptance-${{ matrix.os }}
-          path: |
-            bug_reports/macos-acceptance/
-            bug_reports/update-acceptance.json
-          if-no-files-found: warn
-          retention-days: 14

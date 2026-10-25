@@ -107,10 +107,6 @@ The app serves its page only on `127.0.0.1:8871`, so nothing is reachable from o
 
 Keep client media, private projects and personal `config.json` files out of Git.
 
-## Older Python workflow
-
-The repository still contains the earlier Python tools: `app/`, `scripts/run_clip.py`, the CapCut drafts and the agent skills in `skills/`. These tools are not the desktop app described above. See the [documentation index](docs/index.md) for them. The agent plugin ID remains `clip-kit` for existing users.
-
 ## Contributing and license
 
 [Contributing](CONTRIBUTING.md) explains bug reports and pull requests. [Security](SECURITY.md) explains private vulnerability reporting. [Sponsor the project](https://github.com/sponsors/poomiiz) to support development.

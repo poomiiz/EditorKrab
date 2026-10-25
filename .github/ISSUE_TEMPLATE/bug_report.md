@@ -10,10 +10,6 @@ labels: bug
 **Steps to reproduce**
 1.
 
-**Output of `python scripts/doctor.py`**
-```
-
-```
 
 **EditorKrab version / commit, Windows version, CapCut version**
 
