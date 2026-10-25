@@ -289,13 +289,14 @@ fn a_long_story_has_no_gaps_and_every_subtitle_stays_inside_the_timeline() {
         assert!(source["start"].as_u64().unwrap() + source["duration"].as_u64().unwrap() <= media[0].duration_ms * 1_000, "inside the file");
     }
     assert_eq!(next, total);
+    assert!(!tracks(&draft, "text").is_empty(), "the story has subtitles and a title to check");
     for track in tracks(&draft, "text") {
         let mut last_end = 0u64;
         for seg in track["segments"].as_array().unwrap() {
             let start = seg["target_timerange"]["start"].as_u64().unwrap();
             let end = start + seg["target_timerange"]["duration"].as_u64().unwrap();
             assert!(end <= total, "a subtitle ends after the timeline: {end} > {total}");
-            assert!(start >= last_end || track["segments"].as_array().unwrap().len() == 1, "subtitles on one track overlap");
+            assert!(start >= last_end, "subtitles on one track overlap");
             last_end = last_end.max(end);
         }
     }
