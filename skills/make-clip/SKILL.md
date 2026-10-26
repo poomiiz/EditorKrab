@@ -1,6 +1,6 @@
 ---
 name: make-clip
-description: One-request runner for a whole short clip - "ทำคลิปนี้", "ตัดคลิปจากไฟล์นี้", "ทำคลิปสั้นไม่เกิน 2 นาที", "make a clip from this footage", "ทำเป็นโปรเจกต์ CapCut ด้วย", and the commands the ClipKit app asks the person to paste ("ClipKit: แบ่งเรื่อง ...", "ClipKit: เลือกคำเน้น ..."). Runs scripts/run_clip.py end to end (transcribe, stories, cuts, subtitles in the person's preset, title, b-roll, music, MP4 and/or CapCut project) and does its two thinking steps. Use this as the entry point; it uses clip-qc.
+description: RETIRED - the old Python ClipKit flow; its scripts are gone. For EditorKrab use the app or its MCP tools at http://127.0.0.1:8871/mcp and prompts/story_split.md. Kept for history; do not run its commands. Was the one-request runner for a whole short clip - "ทำคลิปนี้", "ตัดคลิปจากไฟล์นี้", "ทำคลิปสั้นไม่เกิน 2 นาที", "make a clip from this footage", "ทำเป็นโปรเจกต์ CapCut ด้วย", and the commands the ClipKit app asks the person to paste ("ClipKit: แบ่งเรื่อง ...", "ClipKit: เลือกคำเน้น ..."). Runs scripts/run_clip.py end to end (transcribe, stories, cuts, subtitles in the person's preset, title, b-roll, music, MP4 and/or CapCut project) and does its two thinking steps. Use this as the entry point; it uses clip-qc.
 ---
 
 # Make a clip (entry point)
