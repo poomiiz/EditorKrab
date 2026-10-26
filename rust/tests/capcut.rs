@@ -394,7 +394,9 @@ fn native_camera_follows_shared_face_crops_and_preserves_continuous_audio_ranges
     let video=tracks(&draft,"video");let segments=video[0]["segments"].as_array().unwrap();
     assert_eq!(segments.len(),3,"speaker changes and unknown-gap expiry must also reach native video");
     // the wide shot after the unknown gap is at least MIN_SHOT_MS long here, so it stays
-    let expected=[(1000,4000,1.5,-0.36,-0.06),(4000,9201,1.2,0.2,0.0),(9201,11000,1.0,0.0,0.0)];
+    // the dragged crop keeps its own zoom; the face-found cut takes the shot size of its turn (cut 2: close,
+    // capcut::SHOTS); nobody known keeps the whole picture
+    let expected=[(1000,4000,1.5,-0.36,-0.06),(4000,9201,2.67,0.1*2.0*2.67,0.0),(9201,11000,1.0,0.0,0.0)];
     let mut target=0;
     for (seg,(a,b,scale,x,y)) in segments.iter().zip(expected) {
         assert_eq!(seg["source_timerange"],json!({"start":a*1000,"duration":(b-a)*1000}));
@@ -426,25 +428,26 @@ fn native_crop_fills_the_selected_canvas_and_honours_manual_slack_position() {
 }
 
 #[test]
-fn a_landscape_camera_in_a_vertical_frame_changes_shot_size_every_cut_on_the_person_talking() {
-    // P'Ohm's cut of C4926: medium, close, medium, wide; the talker's face in the middle, the wide shot centred
+fn a_vertical_picture_changes_shot_size_every_cut_on_the_person_talking() {
+    // P'Ohm's cut of C4926 (vertical camera, two men seated): medium, close, medium, wide on the talker
     let story = Story { id:"shots".into(), title:"".into(), sources:vec!["a.mp4".into()],
         pieces:vec![piece(0,0,2000,""),piece(0,2000,4000,""),piece(0,4000,6000,""),piece(0,6000,8000,""),piece(0,8000,10000,"")] };
     let doc=json!({"files":[{"path":"a.mp4","source_id":"src"}],"text_roles":[],"follow_speaker":true,
-        "voice":{"src":{"faces":[{"cx":0.34,"cy":0.5}],"seen":[{"start_ms":0,"end_ms":10000,"person":0}]}}});
-    let media=vec![Media{duration_ms:10000,width:1920,height:1080,has_audio:true}];
+        "voice":{"src":{"faces":[{"cx":0.81,"cy":0.43}],"seen":[{"start_ms":0,"end_ms":10000,"person":0}]}}});
+    let media=vec![Media{duration_ms:10000,width:1080,height:1920,has_audio:true}];
     let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/shots"),1).unwrap();
     let segments=tracks(&draft,"video")[0]["segments"].as_array().unwrap().clone();
-    let shots:Vec<(f64,f64)>=segments.iter().map(|s|(s["clip"]["scale"]["x"].as_f64().unwrap(),s["clip"]["transform"]["x"].as_f64().unwrap())).collect();
-    // the picture is 1080 wide at scale 1, so the face at 0.34 moves right by (0.5-0.34)*2*scale half-frames
-    let want=[(1.9,0.16*2.0*1.9),(2.67,0.16*2.0*2.67),(1.9,0.16*2.0*1.9),(1.3,0.0),(1.9,0.16*2.0*1.9)];
+    let shots:Vec<(f64,f64,f64)>=segments.iter().map(|s|{let c=&s["clip"];
+        (c["scale"]["x"].as_f64().unwrap(),c["transform"]["x"].as_f64().unwrap(),c["transform"]["y"].as_f64().unwrap())}).collect();
+    // the face at x 0.81 moves left by (0.81-0.5)*2*scale half-frames, held so no picture edge shows (at most
+    // scale-1): medium stops at -0.9, close reaches it; y 0.43 moves down the same way
+    let want=[(1.9,-0.9,-0.07*2.0*1.9),(2.67,-0.31*2.0*2.67,-0.07*2.0*2.67),(1.9,-0.9,-0.07*2.0*1.9),(1.3,0.0,0.0),(1.9,-0.9,-0.07*2.0*1.9)];
     assert_eq!(shots.len(),want.len());
-    for ((scale,x),(ws,wx)) in shots.iter().zip(want) {assert!((scale-ws).abs()<1e-9&&(x-wx).abs()<1e-9,"{scale},{x} != {ws},{wx}");}
-    // following off: the full-height crop as before
+    for ((s,x,y),(ws,wx,wy)) in shots.iter().zip(want) {assert!((s-ws).abs()<1e-9&&(x-wx).abs()<1e-9&&(y-wy).abs()<1e-9,"{s},{x},{y} != {ws},{wx},{wy}");}
+    // following off: the whole picture, as before
     let mut off=doc;off["follow_speaker"]=json!(false);
     let draft=capcut::build(&story,&off,&media,&fonts,Path::new("root"),Path::new("root/still"),1).unwrap();
-    let fill=(1920.0/1080.0)/(1080.0/1920.0);
-    for s in tracks(&draft,"video")[0]["segments"].as_array().unwrap() {assert!((s["clip"]["scale"]["x"].as_f64().unwrap()-fill).abs()<1e-8);}
+    for s in tracks(&draft,"video")[0]["segments"].as_array().unwrap() {assert_eq!(s["clip"]["scale"],json!({"x":1.0,"y":1.0}));}
 }
 
 #[test]

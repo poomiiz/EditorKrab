@@ -134,7 +134,7 @@ export function validateEmphasisSelections(answer,input){
  return {picked,issues,count,note:`พร้อม ${count} คำ`+(issues.length?` · ต้องตรวจ ${issues.length} คำ`:'')};
 }
 // Caption timing contract: selected word IDs remain one phrase; only older split picks may coalesce.
-export const EMPHASIS_GAP_MS=160,EMPHASIS_HOLD_MS=450,EMPHASIS_TAIL_MS=180,VISUAL_RULES_VERSION=4;
+export const EMPHASIS_GAP_MS=160,EMPHASIS_HOLD_MS=450,EMPHASIS_TAIL_MS=180,VISUAL_RULES_VERSION=5;
 export function emphasisGroups(line,list){
  const letters=(line.words || []).flatMap(w=>{const text=[...w.text.trim()].filter(c=>! /\s/.test(c));return text.map((c,i)=>({c,start:w.start_ms+(w.end_ms-w.start_ms)*i/text.length}));}),flat=letters.map(x=>x.c).join('');
  const starts=(text,near)=>{let chosen=-1,gap=Infinity;for(let i=flat.indexOf(text);i>=0;i=flat.indexOf(text,i+1)){const d=Math.abs(letters[i].start-near);if(d<gap){chosen=i;gap=d;}}return chosen;};

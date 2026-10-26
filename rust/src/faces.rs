@@ -106,6 +106,11 @@ pub fn people(model: &Path, frames: &[Vec<u8>], w: u32, h: u32) -> Result<Vec<Fa
         }
     }
     found.retain(|(_, n)| *n >= 2);
+    // A real face is found in most looks; a hand, a vase or a knee now and then. On C4926 (two men seated) the
+    // faces were found 300 and 227 times in 300 looks, the vase 14: its "mouth" moved when hands did and took
+    // the talking turn from the men (26 Oct 2026). Keep faces found at least a fifth as often as the most found.
+    let most = found.iter().map(|(_, n)| *n).max().unwrap_or(0);
+    found.retain(|(_, n)| *n * 5 >= most);
     found.sort_by(|a, b| a.0.cx.total_cmp(&b.0.cx));
     Ok(found.into_iter().map(|(f, _)| f).collect())
 }
