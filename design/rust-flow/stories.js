@@ -185,7 +185,9 @@ export function cameraPersonAt(voice,ms){
  const before=turns.filter(t=>t.end_ms<=ms&&ms-t.end_ms<=1200).sort((a,b)=>b.end_ms-a.end_ms)[0];
  return (inside||before)?.who ?? null;
 }
-export function createStories({project,read,lines,write,go,editable,caption,emphasis=()=>{},subtitle=()=>{},editLine=()=>{},listen=()=>{},captionState=()=>({saved:true,revision:0})}){
+export function createStories({project,read,lines,write:writeDraft,go,editable,caption,emphasis=()=>{},subtitle=()=>{},editLine=()=>{},listen=()=>{},captionState=()=>({saved:true,revision:0})}){
+ // quietKey's per-run answers (below) end with any write from this file
+ let keyNow=null;const write=change=>{keyNow=null;return writeDraft(change);};
  let queue=[];
  let englishManifest=null,manifestDraft='',manifestCurrent='',manifestBusy=false,manifestError='',manifestRetry=0;
  function manifestInput(){return JSON.stringify([read(),captionRevision()]);}
@@ -285,21 +287,20 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  // word lists (kept as the same objects while unchanged, transcription.js timedWords), the shortest pause or the
  // kept pauses change
  const keySeen=new Map();
+ // drawing step 4 asks once per line; within one run of code the words cannot change unless this file writes,
+ // so the key is kept until the run ends (or a write)
  function quietKey(source){
+  if(!keyNow){keyNow=new Map();queueMicrotask(()=>{keyNow=null;});}
+  if(!keyNow.has(source))keyNow.set(source,quietKeyBuilt(source));
+  return keyNow.get(source);
+ }
+ function quietKeyBuilt(source){
   const words=lines().filter(l=>l.source_id===source).map(l=>l.words || []),min=airMin(),keep=JSON.stringify(keepOf(source)),seen=keySeen.get(source);
   if(seen&&seen.min===min&&seen.keep===keep&&seen.words.length===words.length&&seen.words.every((w,i)=>w===words[i] || (!w.length&&!words[i].length)))return seen.key;
   const key=quietTimingKey(min,AIR_RULE,keepOf(source),wordStarts(source));
   keySeen.set(source,{min,keep,words,key});return key;
  }
- // asked on every frame and redraw, and its key spells out every word: one answer serves for 300 ms unless the
- // voice results, their keys or the listening set change in between
- let pendingSeen=null;
- function analysisPending(){
-  const d=read(),now=performance.now(),same=pendingSeen&&now-pendingSeen.at<300&&pendingSeen.voice===d.voice&&pendingSeen.keys===d.quiet_key&&pendingSeen.listening===listening.size;
-  if(!same)pendingSeen={at:now,voice:d.voice,keys:d.quiet_key,listening:listening.size,value:pendingNow()};
-  return pendingSeen.value;
- }
- function pendingNow(){return read().files.some(f=>{if(!f.source_id)return false;const v=read().voice?.[f.source_id];return listening.has(f.source_id)||(airMin()>0&&v&&(read().quiet_key || {})[f.source_id]!==quietKey(f.source_id))||(read().follow_speaker&&v?.visual_rules_version!==VISUAL_RULES_VERSION);});}
+ function analysisPending(){return read().files.some(f=>{if(!f.source_id)return false;const v=read().voice?.[f.source_id];return listening.has(f.source_id)||(airMin()>0&&v&&(read().quiet_key || {})[f.source_id]!==quietKey(f.source_id))||(read().follow_speaker&&v?.visual_rules_version!==VISUAL_RULES_VERSION);});}
  async function findQuiet(){
   if(!editable()){clearTimeout(airRetry);airRetry=setTimeout(findQuiet,1000);return;}
   if(Number.isFinite(read().dead_min_ms)&&read().dead_min_ms>0&&read().dead_min_ms<AIR_LEAST*1000){write(d=>{d.dead_min_ms=AIR_LEAST*1000;});return;}
@@ -448,7 +449,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   let text;try{text=await pickMd();}catch(error){$('refineAnswer').value='';checkRefineUi();$('refineStatus').textContent=error.message;$('refineStatus').hidden=false;return;}
   if(text===null)return;
   $('refineAnswer').value=text;checkRefineUi();
-  if(!checkRefine().ids)$('refineStatus').textContent='ไฟล์คำตอบใช้ไม่ได้: '+$('refineStatus').textContent;
+  if(!checkRefine().ids){$('refineStatus').textContent='ไฟล์คำตอบใช้ไม่ได้: '+($('refineStatus').textContent || 'ไฟล์ว่าง');$('refineStatus').dataset.state='error';$('refineStatus').hidden=false;}
  };
  function checkRefine(){
   const story=refineStory(),raw=$('refineAnswer').value.trim();if(!story || !raw)return {error:''};
@@ -1138,7 +1139,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   for(let tries=0;tries<240&&!manifestReady();tries++){
    if(manifestError)return false;
    if(captionState().saved&&!analysisPending()&&!manifestBusy)await loadManifest();
-   else await new Promise(done=>setTimeout(done,500));
+   // a busy answer (409) returns at once: wait before asking again
+   if(!manifestReady())await new Promise(done=>setTimeout(done,500));
   }
   return !!manifestReady();
  }

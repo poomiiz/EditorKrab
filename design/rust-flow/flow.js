@@ -372,7 +372,10 @@ $('applyHeadline').onclick=async()=>{
  if(!editingAllowed)return;
  let text;try{text=await pickMd();}catch(error){$('headlineStatus').textContent=error.message;$('headlineStatus').hidden=false;return;}
  if(text===null)return;
- draft.headline_reply=$('headlineReply').value=text;$('headlineStatus').hidden=false;
+ // the draft keeps the answer (to tell a stale one): a headline answer is small, so a big file is not one
+ $('headlineStatus').hidden=false;
+ if(text.length>32000){$('headlineStatus').textContent='ไฟล์คำตอบใหญ่เกินไป เลือกไฟล์ .md ที่ AI ส่งมา';return;}
+ draft.headline_reply=$('headlineReply').value=text;
  try{
   const reply=draft.headline_reply,answer=readJson(reply).value,input=await headlineInput();
   if(!answer)throw Error('invalid_headline');
