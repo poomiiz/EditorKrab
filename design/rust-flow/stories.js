@@ -322,7 +322,8 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
   if(!status?.ready){airStatus(status?`ตัดช่วงเงียบต้องใช้ตัวแยกเสียง (${Math.round((status.download_bytes || 0)/1048576)} MB ครั้งเดียว)`:'อ่านสถานะตัวแยกเสียงไม่ได้');const b=$('airDownload');if(b)b.hidden=!status;return;}
   for(const f of todo){listening.add(f.source_id);const requestedKey=keyOf(f);airStatus('กำลังฟังเสียงและดูหน้าคนในภาพ…');
    try{const r=await fetch(`/api/v1/projects/${encodeURIComponent(project)}/sources/${encodeURIComponent(f.source_id)}/voice`,{method:'POST',headers:{'Content-Type':'application/json'},
-     body:JSON.stringify({words:wordStarts(f.source_id),min_ms:airMin() || AIR_MIN}),signal:AbortSignal.timeout(900000)});
+     // a 50-minute 1080p50 file took 33 minutes (C4926, 26 Oct 2026); the old 15-minute cut-off failed it every time
+     body:JSON.stringify({words:wordStarts(f.source_id),min_ms:airMin() || AIR_MIN}),signal:AbortSignal.timeout(4*3600000)});
     const a=await r.json();if(!r.ok || !Array.isArray(a.dead))throw Error(a.error || 'voice_failed');
     write(d=>{d.voice={...(d.voice || {}),[f.source_id]:{speech:a.speech,turns:a.turns,total_ms:a.total_ms,main:a.main,faces:a.faces || [],seen:a.seen || [],loud:a.loud || [],hush:a.hush || [],visual_rules_version:VISUAL_RULES_VERSION}};
      d.quiet={...(d.quiet || {}),[f.source_id]:a.dead};d.quiet_key={...(d.quiet_key || {}),[f.source_id]:airMin()&&keyOf(f)===requestedKey?requestedKey:''};});
