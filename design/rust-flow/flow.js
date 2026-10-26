@@ -4,7 +4,7 @@ import {uploadFile} from './uploads.js';
 import {createTranscription,validTranscriptEdits} from './transcription.js';
 import {createTextQc,alignWordClocks,wordClockIssues,validEnglishCues} from './text-qc.js';
 import {createExport} from './export.js';
-import {createStories,checkPlan} from './stories.js';
+import {createStories,checkPlan,readJson,saveMd,pickMd,MD_REPLY} from './stories.js';
 import {createStyleEditor,validTextStyles,validHeadlineItems,defaults} from './text-style.js';
 const $ = id => document.getElementById(id);
 // which build is open, at the bottom of the ... menu (P'Ohm 24 Oct: could not tell the old app from the new one)
@@ -125,7 +125,7 @@ function renderSteps() {
     b.setAttribute('aria-label',`ขั้น ${shown(n)} ${b.querySelector('small').textContent}`+(finished ? ' เสร็จแล้ว' : ''));
   }
   // Next is the primary action only once its step's work is done; otherwise say what is missing.
-  const needs={1:[done[1],''],2:[done[2],'วางคำตอบจาก AI ก่อน'],3:[done[3],'ตรวจให้ครบทุกเรื่อง'],5:[false,'']};
+  const needs={1:[done[1],''],2:[done[2],'อัปโหลดคำตอบจาก AI ก่อน'],3:[done[3],'ตรวจให้ครบทุกเรื่อง'],5:[false,'']};
   for (const foot of document.querySelectorAll('.stage-foot')) {
     const next=foot.querySelector('.actions [data-go]');if(!next)continue;
     const [ready,hint]=needs[Number(foot.closest('[data-panel]').dataset.panel)] || [true,''];
@@ -212,7 +212,7 @@ function validate() {
   $('planStatus').dataset.state=!check.plan ? 'error' : spare ? 'warn' : 'ok';
   document.querySelector('.ai-bar').dataset.done=String(!!check.plan);
   // once an answer is read, sending again is no longer the next thing to do
-  $('transcriptCopy').classList.toggle('primary',!check.plan);
+  $('transcriptPacket').classList.toggle('primary',!check.plan);
 }
 // files picked with their checkboxes on step 1, by source (or upload) id; only this page uses it
 const picked=new Set();
@@ -293,7 +293,13 @@ for(const button of document.querySelectorAll('[data-role-pick]'))button.onclick
  if(editingAllowed&&!(draft.text_roles || []).includes(role)){draft.text_roles=[...(draft.text_roles || []),role];save();renderSteps();}
  textEditor.select(role);
 };
-$('planOpen').onclick=()=>{$('planDialog').showModal();$('plan').focus();};
+// the AI's answer file goes through the same check a pasted answer did; only the result shows, in planStatus
+$('planOpen').onclick=async()=>{
+ if(!editingAllowed)return;
+ let text;try{text=await pickMd();}catch(error){$('planStatus').hidden=false;$('planStatus').textContent=error.message;$('planStatus').dataset.state='error';return;}
+ if(text===null)return;
+ $('plan').value=text;$('plan').dispatchEvent(new Event('input'));
+};
 // whole-project subtitle shift, 0.1 s a step (+ later, - earlier); stored in the draft, used by preview and export
 function showOffset(){const ms=Number(draft.subtitle_offset_ms) || 0;$('subOffsetValue').textContent=(ms>0?'+':'')+(ms/1000).toFixed(1)+' วิ';$('subOffsetLess').disabled=$('subOffsetMore').disabled=$('retime').disabled=!editingAllowed;
  const issues=wordClockIssues(speech.texts(),Number(draft.subtitle_offset_ms)||0),status=$('timingStatus');status.hidden=!issues.length;$('timingDetails').hidden=!issues.length;status.textContent=issues.length?`ตรวจเวลาคำ ${issues.length} จุด`:'';status.title=issues.map(w=>`${(w.start_ms/1000).toFixed(1)} วิ · ${w.text} · ${w.problem}`).join('\n');
@@ -341,7 +347,7 @@ $('headlineReply').oninput=()=>{if(editingAllowed){draft.headline_reply=$('headl
 function renderHeadline(){
  const ready=planReady();
  $('headlinePacket').disabled=!editingAllowed || !ready;
- $('headlinePrerequisite').textContent=ready?'ส่งไฟล์นี้ให้ AI แล้ววางคำตอบด้านบน':'วางคำตอบ AI ในขั้น 2 ก่อน';
+ $('headlinePrerequisite').textContent=ready?'แนบไฟล์นี้ในแชท AI แล้วอัปโหลดไฟล์ .md ที่ AI ส่งกลับ':'อัปโหลดคำตอบ AI ในขั้น 2 ก่อน';
 }
 function headlineContent(){return {title:draft.title,plan:planCheck().plan,headline_slots:headlineItems().map(v=>({id:v.id,text:v.text})),sources:draft.files.map(f=>({id:f.source_id || f.upload_id,name:f.name,size:f.size,modified_ns:f.modified_ns}))};}
 async function headlineInput(){
@@ -357,14 +363,19 @@ $('headlinePacket').onclick=async()=>{
   const packet={schema_version:1,project_id:projectId,draft_revision:session.record.revision,pending_changes:session.record.pending.length,...input,
    instructions:'สรุปหัวคลิปจากร่างที่ให้เท่านั้น ให้สั้น ชัด ไม่แต่งข้อมูลใหม่ ส่ง JSON ตาม response_schema โดยคง project_id, content_hash เดิม ข้อความไม่เกิน 80 ตัวอักษร ไม่มีขึ้นบรรทัดใหม่',
    response_schema:{schema_version:1,project_id:projectId,content_hash:input.content_hash,...(input.content.headline_slots.length?{texts:input.content.headline_slots.map(v=>({id:v.id,text:'หัวคลิปที่สรุป'}))}:{headline:'หัวคลิปที่สรุป'})}};
-  const url=URL.createObjectURL(new Blob([JSON.stringify(packet,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='editorkrab-headline-ai.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-  $('headlineStatus').textContent='ดาวน์โหลดแล้ว';
+  saveMd('editorkrab-หัวคลิป.md',packet.instructions+'\n'+MD_REPLY+'\n\n'+JSON.stringify(packet,null,2));
+  $('headlineStatus').textContent='ดาวน์โหลดแล้ว แนบไฟล์นี้ในแชท AI';
  }catch(_){$('headlineStatus').textContent='ดาวน์โหลดไม่ได้ ลองใหม่';}
+ $('headlineStatus').hidden=false;
 };
 $('applyHeadline').onclick=async()=>{
  if(!editingAllowed)return;
+ let text;try{text=await pickMd();}catch(error){$('headlineStatus').textContent=error.message;$('headlineStatus').hidden=false;return;}
+ if(text===null)return;
+ draft.headline_reply=$('headlineReply').value=text;$('headlineStatus').hidden=false;
  try{
-  const reply=draft.headline_reply,answer=JSON.parse(reply || ''),input=await headlineInput();
+  const reply=draft.headline_reply,answer=readJson(reply).value,input=await headlineInput();
+  if(!answer)throw Error('invalid_headline');
   if(!editingAllowed || draft.headline_reply!==reply || JSON.stringify(input.content)!==JSON.stringify(headlineContent()))throw Error('draft_changed');
   if(answer.schema_version!==1 || answer.project_id!==projectId || answer.content_hash!==input.content_hash)throw Error('invalid_headline');
   let items=structuredClone(headlineItems());
@@ -377,8 +388,8 @@ $('applyHeadline').onclick=async()=>{
    if(items.length)items[0].text=answer.headline;else items=[{...headlinePreset(),id:crypto.randomUUID(),text:answer.headline}];
   }
   if(!validHeadlineItems(items))throw Error('invalid_headline_items');
-  draft.headline_items=items;await save();textEditor.render();$('headlineStatus').textContent='ใช้แล้ว';
- }catch(_){$('headlineStatus').textContent='ใช้ไม่ได้ ลองคัดลอกคำตอบใหม่ทั้งหมด';}
+  draft.headline_items=items;await save();textEditor.render();$('headlineStatus').textContent='ใช้หัวคลิปจากไฟล์แล้ว';
+ }catch(_){$('headlineStatus').textContent='ไฟล์คำตอบใช้ไม่ได้ ดาวน์โหลดไฟล์ .md ใหม่แล้วให้ AI ตอบอีกครั้ง';}
 };
 async function addFiles(files) {
   if (!editingAllowed || !session || session.blocked) return;
@@ -581,7 +592,7 @@ render(); start();
 function exportChecklist(){
  const s=[...stories.summary().values()].reduce((a,v)=>({n:a.n+v.stories,r:a.r+v.reviewed}),{n:0,r:0});
  const roles=draft.text_roles || [];
- return [{ok:s.n>0,text:s.n?`${s.n} เรื่อง ได้ ${s.n} คลิป`:'ยังไม่มีเรื่อง (วางคำตอบ AI ที่ขั้น 2)'},
+ return [{ok:s.n>0,text:s.n?`${s.n} เรื่อง ได้ ${s.n} คลิป`:'ยังไม่มีเรื่อง (อัปโหลดคำตอบ AI ที่ขั้น 2)'},
   {ok:s.n>0&&s.r===s.n,text:s.n>0&&s.r===s.n?'ตรวจตัดต่อครบทุกเรื่อง':`ตรวจตัดต่อแล้ว ${s.r} จาก ${s.n} เรื่อง (ขั้น 3)`},
   {ok:roles.includes('speech'),text:roles.includes('speech')?'มีซับคำพูด'+(roles.includes('emphasis')?' + คำเน้น':'')+(roles.includes('english')?' + อังกฤษ':''):'ไม่มีซับ (ติ๊กที่ขั้น 4)'}];
 }

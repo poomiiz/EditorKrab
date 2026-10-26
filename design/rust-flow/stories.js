@@ -7,13 +7,30 @@ const clock=ms=>`${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padSta
 // (some AIs drop the {"stories": ...} wrapper) are fixed into the one shape export reads (`fixed`); anything else names
 // the first thing missing so the paste can be redone, never guessed at.
 // the JSON inside a chat answer: a ```json fence or words around it are dropped; json is undefined when none parses
-function readJson(raw){
+export function readJson(raw){
  // Gemini's copy indents with non-breaking spaces (U+00A0), which JSON does not allow as spacing; chat pages also
  // slip in other wide or zero-width spaces. They become plain spaces before reading.
  raw=raw.replace(/[\u00a0\u1680\u2000-\u200b\u202f\u205f\u3000\ufeff]/g,' ');
  const fence=raw.match(/```(?:json)?\s*([\s\S]*?)```/),body=(fence?fence[1]:raw).trim();
  const from=body.search(/[[{]/),to=Math.max(body.lastIndexOf('}'),body.lastIndexOf(']')),json=from<0?body:body.slice(from,to+1);
  try{return {value:JSON.parse(json),json};}catch(_){return {};}
+}
+// P'Ohm 26 Oct: no copy and paste with the browser AI. Every request goes out as a .md file and the AI sends a .md
+// file back, which is read without showing its text.
+export const MD_REPLY='ส่งคำตอบกลับเป็นไฟล์ .md หนึ่งไฟล์ ข้างในเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องพิมพ์คำตอบหรือคำอธิบายในแชท';
+export function saveMd(name,text){
+ const url=URL.createObjectURL(new Blob([text],{type:'text/markdown;charset=utf-8'})),a=document.createElement('a');
+ a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+// the text of the answer file the person picks; null when they pick none
+export function pickMd(){
+ return new Promise((done,fail)=>{
+  const input=document.createElement('input');input.type='file';input.accept='.md,.markdown,.txt,.json,text/markdown,text/plain,application/json';
+  input.onchange=()=>{const file=input.files?.[0];if(!file)return done(null);
+   if(file.size>5*1024*1024)return fail(Error('ไฟล์คำตอบใหญ่เกินไป เลือกไฟล์ .md ที่ AI ส่งมา'));
+   file.text().then(done,()=>fail(Error('อ่านไฟล์คำตอบไม่ได้')));};
+  input.click();
+ });
 }
 // chat AIs rename fields (Gemini answered story_id and no title); take the usual synonyms, else the summary's opening
 export function storyFields(s,index){
@@ -23,8 +40,8 @@ export function storyFields(s,index){
 }
 export function checkPlan(text,lines){
  const raw=String(text || '').trim();if(!raw)return {error:''};
- const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
- if(value?.response_schema)return {error:'นี่คือข้อความที่ส่งให้ AI ยังไม่ใช่คำตอบ วางในแชท AI ก่อน แล้วคัดลอกคำตอบของ AI กลับมา'};
+ const {value,json}=readJson(raw);if(json===undefined)return {error:'ในไฟล์ไม่มีคำตอบ JSON ที่ครบ ให้ AI ส่งไฟล์ .md ใหม่'};
+ if(value?.response_schema)return {error:'นี่คือไฟล์ที่ส่งให้ AI ยังไม่ใช่คำตอบ อัปโหลดไฟล์ .md ที่ AI ส่งกลับมา'};
  const plan=Array.isArray(value)?{stories:value}:value;
  if(!Array.isArray(plan?.stories) || !plan.stories.length)return {error:'ไม่พบรายการเรื่องในคำตอบ ลองให้ AI ตอบใหม่ตามไฟล์ที่ส่ง'};
  const known=new Set((lines || []).map(l=>l.segment_id));
@@ -76,7 +93,7 @@ export function resolveWordSelection(line,ids){
 }
 export function validateEnglishCueReply(value,project,manifest){
  if(!manifest?.cues?.length)return {error:'รอจัดช่วงซับให้ครบก่อน'};
- if(value?.project_id!==project||value?.input_revision!==manifest.input_revision)return {error:'คำตอบเป็นร่างเก่า คัดลอกคำสั่งจากช่วงซับปัจจุบัน'};
+ if(value?.project_id!==project||value?.input_revision!==manifest.input_revision)return {error:'คำตอบเป็นร่างเก่า ดาวน์โหลดไฟล์ .md ใหม่แล้วให้ AI ตอบอีกครั้ง'};
  const answer=value.subtitles;if(!answer||typeof answer!=='object'||Array.isArray(answer))return {error:'ไม่พบคำแปลในคำตอบ'};
  const ids=new Set(manifest.cues.map(c=>c.id)),picked={};
  for(const [id,text] of Object.entries(answer)){
@@ -264,8 +281,25 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  // each transcribed word as [start, end]: dead air never cuts into one (voice.rs)
  const wordStarts=source=>lines().filter(l=>l.source_id===source).flatMap(l=>(l.words || []).map(w=>[w.start_ms,Number.isFinite(w.end_ms)?w.end_ms:w.start_ms])).filter(([a])=>Number.isFinite(a));
  function airStatus(text){airNote=text;const el=$('airStatus');if(el)el.textContent=text;}
- function quietKey(source){return quietTimingKey(airMin(),AIR_RULE,keepOf(source),wordStarts(source));}
- function analysisPending(){return read().files.some(f=>{if(!f.source_id)return false;const v=read().voice?.[f.source_id];return listening.has(f.source_id)||(airMin()>0&&v&&(read().quiet_key || {})[f.source_id]!==quietKey(f.source_id))||(read().follow_speaker&&v?.visual_rules_version!==VISUAL_RULES_VERSION);});}
+ // every line asks for this key and it spells out every word of the video: it is rebuilt only when the lines'
+ // word lists (kept as the same objects while unchanged, transcription.js timedWords), the shortest pause or the
+ // kept pauses change
+ const keySeen=new Map();
+ function quietKey(source){
+  const words=lines().filter(l=>l.source_id===source).map(l=>l.words || []),min=airMin(),keep=JSON.stringify(keepOf(source)),seen=keySeen.get(source);
+  if(seen&&seen.min===min&&seen.keep===keep&&seen.words.length===words.length&&seen.words.every((w,i)=>w===words[i] || (!w.length&&!words[i].length)))return seen.key;
+  const key=quietTimingKey(min,AIR_RULE,keepOf(source),wordStarts(source));
+  keySeen.set(source,{min,keep,words,key});return key;
+ }
+ // asked on every frame and redraw, and its key spells out every word: one answer serves for 300 ms unless the
+ // voice results, their keys or the listening set change in between
+ let pendingSeen=null;
+ function analysisPending(){
+  const d=read(),now=performance.now(),same=pendingSeen&&now-pendingSeen.at<300&&pendingSeen.voice===d.voice&&pendingSeen.keys===d.quiet_key&&pendingSeen.listening===listening.size;
+  if(!same)pendingSeen={at:now,voice:d.voice,keys:d.quiet_key,listening:listening.size,value:pendingNow()};
+  return pendingSeen.value;
+ }
+ function pendingNow(){return read().files.some(f=>{if(!f.source_id)return false;const v=read().voice?.[f.source_id];return listening.has(f.source_id)||(airMin()>0&&v&&(read().quiet_key || {})[f.source_id]!==quietKey(f.source_id))||(read().follow_speaker&&v?.visual_rules_version!==VISUAL_RULES_VERSION);});}
  async function findQuiet(){
   if(!editable()){clearTimeout(airRetry);airRetry=setTimeout(findQuiet,1000);return;}
   if(Number.isFinite(read().dead_min_ms)&&read().dead_min_ms>0&&read().dead_min_ms<AIR_LEAST*1000){write(d=>{d.dead_min_ms=AIR_LEAST*1000;});return;}
@@ -353,7 +387,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   if(story.refined){const done=document.createElement('span');done.className='badge story-refined';done.textContent='เรียบเรียงแล้ว';marks.append(done);}
   button.title=`${story.title}\n${summary.textContent}`;button.append(marks,title,summary,meta);
   button.onclick=()=>{write(d=>{d.edit_story=story.id;});go(3);};
-  const refine=document.createElement('button');refine.type='button';refine.dataset.icon='cut';refine.textContent=story.refined?'เรียบเรียงใหม่':'ตัดต่อเรียบเรียง';refine.title=story.refined?'คัดลอกเรื่องนี้ให้ AI เรียบเรียงอีกครั้ง':'คัดลอกเรื่องนี้ให้ AI เลือกและเรียงท่อน';
+  const refine=document.createElement('button');refine.type='button';refine.dataset.icon='cut';refine.textContent=story.refined?'เรียบเรียงใหม่':'ตัดต่อเรียบเรียง';refine.title=story.refined?'ดาวน์โหลดไฟล์ .md เรื่องนี้ให้ AI เรียบเรียงอีกครั้ง':'ดาวน์โหลดไฟล์ .md เรื่องนี้ให้ AI เลือกและเรียงท่อน';
   refine.disabled=!story.kept.length || !editable();refine.onclick=()=>openRefine(story);
   // two stories that read as one half each become one: the next story of the same video joins this one
   const next=model()?.stories.slice(story.index+1).find(s=>s.source_id===story.source_id);
@@ -398,22 +432,28 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    +'เก็บคำถาม ข้อสงสัย และเสียงหัวเราะของคนถาม/คนฟังไว้ (เป็นเสียงแทนคนดู) เก็บรายละเอียดเฉพาะ ตัดคำพูดกว้างๆ ที่ไม่มีสาระ ตัดท่อนที่พูดซ้ำหรือพูดติดขัด '
    +'เรียงลำดับใหม่ได้ถ้าเล่าแล้วดีขึ้นแต่ต้องคงความหมายเดิม ห้ามจบกลางประโยค อ้างท่อนด้วย id ใน lines เท่านั้น ห้ามสร้างท่อนหรือเวลาใหม่ '
    +'segment_ids คือท่อนที่เก็บ เรียงตามลำดับที่จะเล่น title ต้องเป็นคำที่พูดจริงในท่อนที่เก็บ ไม่เกิน 40 ตัวอักษร ปรับ summary ให้ตรงกับเรื่องที่เรียบเรียงแล้ว\n'
-   +'ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,1);
+   +MD_REPLY+'\n\n'+JSON.stringify(packet,null,1);
  }
  const refineStory=()=>model()?.stories.find(s=>s.id===refining) || null;
- async function copyRefine(){
+ function sendRefine(){
   const story=refineStory();if(!story)return;
-  try{await navigator.clipboard.writeText(refineText(story));$('refineCopyNote').textContent=`คัดลอก ${offered(story).length} ท่อนแล้ว วางในแชท AI ได้เลย`;}
-  catch(_){$('refineCopyNote').textContent='คัดลอกไม่ได้ กด "คัดลอกอีกครั้ง"';}
+  saveMd(`editorkrab-เรียบเรียง-เรื่อง${story.index+1}.md`,refineText(story));
+  $('refineCopyNote').textContent=`ดาวน์โหลดไฟล์ .md แล้ว (${offered(story).length} ท่อน) แนบไฟล์นี้ในแชท AI`;
  }
  function openRefine(story){
   refining=story.id;$('refineTitle').textContent=`ตัดต่อเรียบเรียง · ${story.index+1}. ${story.title}`;
-  $('refineAnswer').value='';checkRefineUi();$('refineDialog').showModal();copyRefine();
+  $('refineAnswer').value='';checkRefineUi();$('refineDialog').showModal();sendRefine();
  }
+ $('refineUpload').onclick=async()=>{
+  let text;try{text=await pickMd();}catch(error){$('refineAnswer').value='';checkRefineUi();$('refineStatus').textContent=error.message;$('refineStatus').hidden=false;return;}
+  if(text===null)return;
+  $('refineAnswer').value=text;checkRefineUi();
+  if(!checkRefine().ids)$('refineStatus').textContent='ไฟล์คำตอบใช้ไม่ได้: '+$('refineStatus').textContent;
+ };
  function checkRefine(){
   const story=refineStory(),raw=$('refineAnswer').value.trim();if(!story || !raw)return {error:''};
-  const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
-  if(value?.response_schema)return {error:'นี่คือข้อความที่ส่งให้ AI ยังไม่ใช่คำตอบ วางในแชท AI ก่อน แล้วคัดลอกคำตอบของ AI กลับมา'};
+  const {value,json}=readJson(raw);if(json===undefined)return {error:'ในไฟล์ไม่มีคำตอบ JSON ที่ครบ ให้ AI ส่งไฟล์ .md ใหม่'};
+  if(value?.response_schema)return {error:'นี่คือไฟล์ที่ส่งให้ AI ยังไม่ใช่คำตอบ อัปโหลดไฟล์ .md ที่ AI ส่งกลับมา'};
   const answer=Array.isArray(value)?{segment_ids:value}:Array.isArray(value?.stories)?value.stories[0]:value;
   if(answer?.story_id&&String(answer.story_id)!==story.id)return {error:'คำตอบนี้เป็นของเรื่องอื่น'};
   const ids=answer?.segment_ids,allowed=new Set(offered(story).map(l=>l.segment_id));
@@ -429,7 +469,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   $('refineStatus').hidden=!$('refineStatus').textContent;$('refineApply').disabled=!c.ids || !editable();
  }
  $('refineAnswer').oninput=checkRefineUi;
- $('refineCopy').onclick=copyRefine;
+ $('refineCopy').onclick=sendRefine;
  $('refineApply').onclick=event=>{
   const story=refineStory(),c=checkRefine();if(!story || !c.ids){event.preventDefault();return;}
   write(d=>{
@@ -1010,7 +1050,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  function captionRevision(){return captionInputRevision(project,read(),keptLines().map(({line})=>line));}
  // only another project's reply is refused: every pick is checked by its words against the line as it is now
  // (validateEmphasisSelections), so re-timed words (24 Oct: fitted to speech) do not make a good reply stale
- function checkReply(value){return value?.project_id!==project?'คำตอบเป็นร่างเก่า คัดลอกคำสั่งใหม่แล้วให้ AI ตอบอีกครั้ง':'';}
+ function checkReply(value){return value?.project_id!==project?'คำตอบเป็นร่างเก่า ดาวน์โหลดไฟล์ .md ใหม่แล้วให้ AI ตอบอีกครั้ง':'';}
  function emphasisText(part=false){
   const sent=new Map(keptLines().map(({line})=>[line.segment_id,line]));
   const packet={schema_version:3,step:'emphasis',project_id:project,input_revision:captionRevision(),speakers_keep:read().speakers_keep ?? null,
@@ -1028,12 +1068,12 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    '5. เลือกด้วย word_ids ที่ติดกันจาก words เท่านั้น ให้รวมรหัสจนได้คำหรือชื่อเต็ม ห้ามแต่งคำ แปล หรือเดาเวลา ถ้าคำถอดผิดให้ข้ามไป',
    'คำที่ has_duration=false รวมได้เฉพาะด้านในระหว่างคำที่มีเวลาจริง ถ้าอยู่ต้นหรือท้ายวลีให้ข้าม ห้ามเดาเวลา',
    '6. คืน project_id และ input_revision ตามที่ให้ ห้ามแก้รหัส ถ้าไม่มีคำเหมาะสมคืน emphasis เป็น {}',
-   ...(part?[]:['ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย']),''].join('\n')+'\n'+JSON.stringify(packet,null,1);
+   ...(part?[]:[MD_REPLY]),''].join('\n')+'\n'+JSON.stringify(packet,null,1);
  }
  function pasted(){
   const raw=$('emphasisAnswer').value.trim();if(!raw)return {error:''};
-  const {value,json}=readJson(raw);if(json===undefined)return {error:'คำตอบไม่ครบ ลองคัดลอกใหม่ทั้งหมด'};
-  if(value?.response_schema)return {error:'นี่คือข้อความที่ส่งให้ AI ยังไม่ใช่คำตอบ วางในแชท AI ก่อน แล้วคัดลอกคำตอบของ AI กลับมา'};
+  const {value,json}=readJson(raw);if(json===undefined)return {error:'ในไฟล์ไม่มีคำตอบ JSON ที่ครบ ให้ AI ส่งไฟล์ .md ใหม่'};
+  if(value?.response_schema)return {error:'นี่คือไฟล์ที่ส่งให้ AI ยังไม่ใช่คำตอบ อัปโหลดไฟล์ .md ที่ AI ส่งกลับมา'};
   return {value};
  }
  function checkEmphasis(){const p=pasted();return p.value?emphasisFrom(p.value):p;}
@@ -1056,7 +1096,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    '2. แปลตามความหมาย เป็นภาษาพูดที่เป็นธรรมชาติ ไม่ต้องแปลคำเติม เช่น อ่ะ อืม เออ',
    '3. ชื่อเฉพาะและชื่อแบรนด์เขียนแบบที่คนพูดอังกฤษใช้',
    '4. อ้างแต่ละช่วงด้วย id ที่ให้ คืน project_id และ input_revision ให้ตรง ห้ามรวม เพิ่ม หรือข้ามช่วง ห้ามเดาหรือเปลี่ยนเวลา',
-   ...(part?[]:['ตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย']),''].join('\n')+'\n'+JSON.stringify(packet,null,1);
+   ...(part?[]:[MD_REPLY]),''].join('\n')+'\n'+JSON.stringify(packet,null,1);
  }
  function checkSubtitles(){const p=pasted();return p.value?englishFrom(p.value):p;}
  function englishFrom(value){
@@ -1064,7 +1104,7 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
   return validateEnglishCueReply(value,project,englishManifest);
  }
  const rounds={
-  emphasis:{make:'สร้างคำเน้น',title:'วางคำตอบคำเน้นจาก AI',text:emphasisText,check:checkEmphasis,file:'editorkrab-คำเน้น.txt',
+  emphasis:{make:'สร้างคำเน้น',title:'วางคำตอบคำเน้นจาก AI',text:emphasisText,check:checkEmphasis,file:'editorkrab-คำเน้น.md',
    has:()=>Object.keys(read().emphasis || {}).length>0,
    // the answer covers every line that was sent: lines it left out lose their old emphasis (the AI now picks
    // only the stand-out lines); lines that were not sent keep theirs
@@ -1072,19 +1112,19 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
     for(const issue of c.issues || [])sent.delete(issue.id);
     write(d=>{const all=Object.fromEntries(Object.entries(d.emphasis || {}).filter(([id])=>!sent.has(id)));d.emphasis={...all,...c.picked};if(d.caption_reply_drafts)delete d.caption_reply_drafts.emphasis;
     if(!(d.text_roles || []).includes('emphasis'))d.text_roles=[...(d.text_roles || []),'emphasis'];});}},
-  english:{make:'สร้างซับอังกฤษ',title:'วางคำตอบซับอังกฤษจาก AI',text:subtitleText,check:checkSubtitles,file:'editorkrab-ซับอังกฤษ.txt',
+  english:{make:'สร้างซับอังกฤษ',title:'วางคำตอบซับอังกฤษจาก AI',text:subtitleText,check:checkSubtitles,file:'editorkrab-ซับอังกฤษ.md',
    has:()=>!!read().english_cues||Object.keys(read().subtitles || {}).length>0,
    apply:c=>write(d=>{d.english_cues={input_revision:englishManifest.input_revision,translations:c.picked};d.subtitle_language='en';
     if(!(d.text_roles || []).includes('english'))d.text_roles=[...(d.text_roles || []),'english'];})},
   // one trip to the chat for both layers (P'Ohm 24 Oct: too many copy-paste rounds)
-  both:{make:'ให้ AI ทำคำเน้นและซับอังกฤษ',title:'วางคำตอบจาก AI (คำเน้นและซับอังกฤษ)',file:'editorkrab-คำเน้นและอังกฤษ.txt',
+  both:{make:'ให้ AI ทำคำเน้นและซับอังกฤษ',title:'วางคำตอบจาก AI (คำเน้นและซับอังกฤษ)',file:'editorkrab-คำเน้นและอังกฤษ.md',
    has:()=>rounds.emphasis.has()||rounds.english.has(),
    text:()=>{
     return ['ทำ 2 งานแล้วตอบในคำตอบเดียว',
-     'ตอบกลับเป็น JSON ก้อนเดียวอย่างเดียว ไม่ต้องมีคำอธิบาย: {"emphasis_reply": คำตอบงานที่ 1 ตาม response_schema ของงานที่ 1, "english_reply": คำตอบงานที่ 2 ตาม response_schema ของงานที่ 2}',
+     'ส่งคำตอบกลับเป็นไฟล์ .md หนึ่งไฟล์ ข้างในเป็น JSON ก้อนเดียวอย่างเดียว ไม่ต้องพิมพ์คำตอบหรือคำอธิบายในแชท: {"emphasis_reply": คำตอบงานที่ 1 ตาม response_schema ของงานที่ 1, "english_reply": คำตอบงานที่ 2 ตาม response_schema ของงานที่ 2}',
      '','=== งานที่ 1: คำเน้น ===',emphasisText(true),'','=== งานที่ 2: ซับอังกฤษ ===',subtitleText(true)].join('\n');},
    check:()=>{const p=pasted();if(!p.value)return p;
-    if(!p.value.emphasis_reply||!p.value.english_reply)return {error:'คำตอบต้องมีทั้ง emphasis_reply และ english_reply ลองคัดลอกคำตอบใหม่ทั้งหมด'};
+    if(!p.value.emphasis_reply||!p.value.english_reply)return {error:'คำตอบต้องมีทั้ง emphasis_reply และ english_reply ให้ AI ส่งไฟล์ .md ใหม่'};
     const e=emphasisFrom(p.value.emphasis_reply),s=englishFrom(p.value.english_reply);
     if(!e.picked)return {error:'คำเน้น: '+e.error};if(!s.picked)return {error:'ซับอังกฤษ: '+s.error};
     return {...e,note:e.note+' · '+s.note,parts:{e,s}};},
@@ -1093,10 +1133,32 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
  let round='emphasis';const opened={emphasis:false,english:false,both:false};
  function say(text,ok){$('emphasisStatus').textContent=text;$('emphasisStatus').dataset.state=ok?'ok':'error';$('emphasisStatus').hidden=false;}
  function action(label,icon,run,needsEdit){const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.icon=icon;b.onclick=run;if(needsEdit)b.disabled=!editable();return b;}
- async function copyRound(key){try{await navigator.clipboard.writeText(rounds[key].text());say(key==='both'?'คัดลอกแล้ว วางในแชท AI ได้เลย':`คัดลอก ${key==='english'?englishManifest.cues.length:keptLines().length} ช่วงแล้ว วางในแชท AI ได้เลย`,true);}catch(error){say(error.message==='รอบันทึกงานและคำนวณช่วงซับให้เสร็จก่อน'||error.message===manifestError?error.message:'คัดลอกไม่ได้ ลองกดอีกครั้ง',false);loadManifest();}}
- function downloadRound(key){try{const url=URL.createObjectURL(new Blob([rounds[key].text()],{type:'text/plain;charset=utf-8'}));
-  const a=document.createElement('a');a.href=url;a.download=rounds[key].file;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){say(error.message,false);loadManifest();}}
- function openRound(key){round=key;$('emphasisTitle').textContent=rounds[key].title;$('emphasisAnswer').value=read().caption_reply_drafts?.[key] || sessionStorage.getItem('caption-reply:'+project+':'+key) || '';checkEmphasisUi();$('emphasisDialog').showModal();}
+ // English needs the subtitle cues: a press while they are not ready waits for them instead of doing nothing
+ async function cuesReady(){
+  for(let tries=0;tries<240&&!manifestReady();tries++){
+   if(manifestError)return false;
+   if(captionState().saved&&!analysisPending()&&!manifestBusy)await loadManifest();
+   else await new Promise(done=>setTimeout(done,500));
+  }
+  return !!manifestReady();
+ }
+ async function downloadRound(key){
+  if(key!=='emphasis'&&!manifestReady()){say(analysisPending()?'รอฟังเสียงในคลิปเสร็จ แล้วจะดาวน์โหลดให้เอง…':'กำลังเตรียมช่วงซับ แล้วจะดาวน์โหลดให้เอง…',true);
+   if(!await cuesReady()){say(manifestError || 'ช่วงซับยังไม่พร้อม ลองกดอีกครั้ง',false);return;}
+   $('emphasisStatus').hidden=true;}
+  try{saveMd(rounds[key].file,rounds[key].text());}catch(error){say(error.message,false);loadManifest();}}
+ // the AI's answer file is checked and applied as a pasted answer was; its text is not shown, only the result
+ async function uploadRound(key){
+  let text;try{text=await pickMd();}catch(error){say(error.message,false);return;}
+  if(text===null)return;
+  if(key!=='emphasis'&&!manifestReady()){say('กำลังเตรียมช่วงซับก่อนอ่านคำตอบ…',true);
+   if(!await cuesReady()){say(manifestError || 'ช่วงซับยังไม่พร้อม ลองอัปโหลดอีกครั้ง',false);return;}}
+  round=key;$('emphasisAnswer').value=text;
+  const c=rounds[key].check();
+  if(!c.picked){say('ไฟล์คำตอบใช้ไม่ได้: '+(c.error || 'ไม่พบคำตอบในไฟล์'),false);return;}
+  opened[key]=false;for(const k of key==='both'?['both','emphasis','english']:[key])sessionStorage.removeItem('caption-reply:'+project+':'+k);
+  rounds[key].apply(c);say(c.note,true);drawLayerActions();
+ }
  function drawLayerActions(){
   const host=$('layerActions');if(!host)return;
   const inStep4=!!$('editTrack').closest('#captionTransport')&&!!model();
@@ -1107,8 +1169,8 @@ export function createStories({project,read,lines,write,go,editable,caption,emph
    slot.hidden=!inStep4 || (r.has()&&!opened[key]);
    if(!opened[key]){const make=action(r.make,'plus',()=>{opened[key]=true;drawLayerActions();},true);make.classList.add('primary');slot.append(make);}
    else{const label=document.createElement('span');label.textContent='ส่งข้อความให้ AI';
-    slot.append(label,action('คัดลอกให้ AI','copy',()=>copyRound(key)),action('ดาวน์โหลดไฟล์','download',()=>downloadRound(key)),
-     action('วางคำตอบ','paste',()=>openRound(key),true),action('ปิด','x',()=>{opened[key]=false;drawLayerActions();}));}
+    // P'Ohm 26 Oct: no copy and paste; the request goes out as a .md file and the AI sends a .md file back.
+    slot.append(label,action('ดาวน์โหลดไฟล์ .md','download',()=>downloadRound(key)),action('อัปโหลดคำตอบ .md','upload',()=>uploadRound(key),true),action('ปิด','x',()=>{opened[key]=false;drawLayerActions();}));}
    return slot;}));
   // a layer already made can be made again from the play row
   const redo=$('captionRedo');
