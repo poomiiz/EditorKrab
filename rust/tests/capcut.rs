@@ -426,6 +426,28 @@ fn native_crop_fills_the_selected_canvas_and_honours_manual_slack_position() {
 }
 
 #[test]
+fn a_landscape_camera_in_a_vertical_frame_changes_shot_size_every_cut_on_the_person_talking() {
+    // P'Ohm's cut of C4926: medium, close, medium, wide; the talker's face in the middle, the wide shot centred
+    let story = Story { id:"shots".into(), title:"".into(), sources:vec!["a.mp4".into()],
+        pieces:vec![piece(0,0,2000,""),piece(0,2000,4000,""),piece(0,4000,6000,""),piece(0,6000,8000,""),piece(0,8000,10000,"")] };
+    let doc=json!({"files":[{"path":"a.mp4","source_id":"src"}],"text_roles":[],"follow_speaker":true,
+        "voice":{"src":{"faces":[{"cx":0.34,"cy":0.5}],"seen":[{"start_ms":0,"end_ms":10000,"person":0}]}}});
+    let media=vec![Media{duration_ms:10000,width:1920,height:1080,has_audio:true}];
+    let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/shots"),1).unwrap();
+    let segments=tracks(&draft,"video")[0]["segments"].as_array().unwrap().clone();
+    let shots:Vec<(f64,f64)>=segments.iter().map(|s|(s["clip"]["scale"]["x"].as_f64().unwrap(),s["clip"]["transform"]["x"].as_f64().unwrap())).collect();
+    // the picture is 1080 wide at scale 1, so the face at 0.34 moves right by (0.5-0.34)*2*scale half-frames
+    let want=[(1.9,0.16*2.0*1.9),(2.67,0.16*2.0*2.67),(1.9,0.16*2.0*1.9),(1.3,0.0),(1.9,0.16*2.0*1.9)];
+    assert_eq!(shots.len(),want.len());
+    for ((scale,x),(ws,wx)) in shots.iter().zip(want) {assert!((scale-ws).abs()<1e-9&&(x-wx).abs()<1e-9,"{scale},{x} != {ws},{wx}");}
+    // following off: the full-height crop as before
+    let mut off=doc;off["follow_speaker"]=json!(false);
+    let draft=capcut::build(&story,&off,&media,&fonts,Path::new("root"),Path::new("root/still"),1).unwrap();
+    let fill=(1920.0/1080.0)/(1080.0/1920.0);
+    for s in tracks(&draft,"video")[0]["segments"].as_array().unwrap() {assert!((s["clip"]["scale"]["x"].as_f64().unwrap()-fill).abs()<1e-8);}
+}
+
+#[test]
 fn the_camera_never_cuts_to_a_shot_under_a_second() {
     // the unknown-gap wide shot would be 0.8 s at the end of the piece: the close-up holds instead
     let story = Story { id:"short".into(), title:"".into(), sources:vec!["a.mp4".into()], pieces:vec![piece(0,1000,10000,"")] };

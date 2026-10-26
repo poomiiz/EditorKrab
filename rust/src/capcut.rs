@@ -178,6 +178,28 @@ fn video_transform(document: &Value, source: &Path, media: &Media, ms: u64, fram
     (scale,(iw-ow-2.0*left)/ow,(2.0*top+oh-ih)/oh)
 }
 
+/// Shot sizes, one per cut in turn, when the camera follows the person talking on a landscape camera in a
+/// vertical frame: medium on them, close on them, medium again, then wide. CapCut scale 1 fits the whole
+/// picture across the frame; the numbers are the ones in P'Ohm's own cut of C4926 ("Punthai เปิดพันธุ์ไทย
+/// ต้องจ่ายอะไรบ้าง", 26 Oct 2026), which leaves bands above and below the picture for the text.
+pub const SHOTS: [f64; 4] = [1.9, 2.67, 1.9, 1.3];
+
+/// The cut's (scale, x, y) from `SHOTS` when it applies (following on, landscape source, vertical frame); the
+/// face of the person talking sits in the middle of the frame, the wide shot is centred.
+fn shot(document: &Value, source: &Path, media: &Media, ms: u64, frame: (u32,u32), cut: usize) -> Option<(f64,f64,f64)> {
+    if document["follow_speaker"]!=true || media.width<=media.height || frame.0>=frame.1 {return None;}
+    let (cx,cy,_,centred)=export::crop_at(document,source,ms);
+    // nobody known to be talking: the wide shot, not a jump to a full-height crop
+    let wide=!centred || cut%SHOTS.len()==SHOTS.len()-1;
+    let scale=if wide {SHOTS[SHOTS.len()-1]} else {SHOTS[cut%SHOTS.len()]};
+    let (cx,cy)=if wide {(0.5,0.5)} else {(cx,cy)};
+    let (iw,ih)=(media.width as f64,media.height as f64);
+    let (width,height)=(frame.0 as f64,frame.1 as f64);
+    let fit=(width/iw).min(height/ih);
+    // translation is in half-frame units, Y upwards: move the picture so the face lands in the middle
+    Some((scale,(0.5-cx)*iw*fit*scale/(width/2.0),(cy-0.5)*ih*fit*scale/(height/2.0)))
+}
+
 /// The CapCut project for one story. `media` describes each of `story.sources`; `fonts` finds the
 /// file of an installed font family. `folder` is where the project will live inside `root`.
 pub fn build(
@@ -239,7 +261,8 @@ pub fn build(
             seg["last_nonzero_volume"] = json!(1.0);
             seg["render_index"] = json!(0);
             seg["track_render_index"] = json!(0);
-            let (scale,x,y)=video_transform(document,source,info,start,frame);
+            let (scale,x,y)=shot(document,source,info,start,frame,footage.len())
+                .unwrap_or_else(||video_transform(document,source,info,start,frame));
             seg["clip"]["scale"] = json!({"x": scale, "y": scale});
             seg["clip"]["transform"] = json!({"x": x, "y": y});
             footage.push(seg);
