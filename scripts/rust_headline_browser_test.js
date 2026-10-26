@@ -29,14 +29,16 @@ async(page)=>{
  await page.locator('[data-step="3"]').click();await page.locator('#plan').fill(JSON.stringify({stories:[{title:'เริ่มทำคอนเทนต์',text:'เริ่มจากสิ่งที่มี',segment_ids:['s0']}]}));await saved();
  await page.locator('[data-step="5"]').click();await saved();
  await page.evaluate(()=>{const original=URL.createObjectURL;URL.createObjectURL=blob=>{window.headlineTestBlob=blob;return original(blob);};});
- const pending=page.waitForEvent('download');await page.locator('#headlinePacket').click();const download=await pending;await download.saveAs('output/headline-ai-test-packet.json');
- const packet=await page.evaluate(async()=>JSON.parse(await window.headlineTestBlob.text()));
+ const pending=page.waitForEvent('download');await page.locator('#headlinePacket').click();const download=await pending;await download.saveAs('output/headline-ai-test-packet.md');
+ const packet=await page.evaluate(async()=>{const text=await window.headlineTestBlob.text();return JSON.parse(text.slice(text.indexOf('{')));});
  check(packet.project_id===project&&packet.content_hash.length===64,'packet not bound to current draft/template');
  const answer={...packet.response_schema,texts:packet.response_schema.texts.map(v=>({...v,text:'เริ่มจากสิ่งที่มี'}))};
- await page.locator('#headlineReply').fill(JSON.stringify(answer));await saved();await page.locator('#applyHeadline').click();await saved();
+ // the AI's answer comes back as a .md file the person uploads
+ const upload=async text=>{const chooser=page.waitForEvent('filechooser');await page.locator('#applyHeadline').click();await(await chooser).setFiles({name:'editorkrab-หัวคลิป-คำตอบ.md',mimeType:'text/markdown',buffer:Buffer.from(text)});};
+ await upload('```json\n'+JSON.stringify(answer)+'\n```');await saved();
  check(await page.locator('[data-text-role=headline] span').textContent()===answer.texts[0].text,'AI headline not applied');
  const current=(await read()).document.headline_items[0].text;
- await page.locator('#text-text').fill('แก้หัวคลิปใหม่');await saved();await page.locator('#applyHeadline').click();
+ await page.locator('#text-text').fill('แก้หัวคลิปใหม่');await saved();await upload(JSON.stringify(answer));
  await page.waitForFunction(()=>document.querySelector('#headlineStatus').textContent.includes('ใช้ไม่ได้'));
  check((await read()).document.headline_items[0].text==='แก้หัวคลิปใหม่','stale response overwrote headline');
  await page.locator('[data-step="6"]').click();await saved();check(await page.locator('#createTitle').isVisible(),'creation stage not moved');

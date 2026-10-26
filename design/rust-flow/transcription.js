@@ -1,3 +1,4 @@
+import {saveMd,MD_REPLY} from './stories.js';
 // Source clocks and raw transcripts stay immutable; manual text corrections live in the draft.
 const $=id=>document.getElementById(id);
 const stamp=(v)=>[v?.id,v?.size,v?.modified_ns].join('|');
@@ -25,8 +26,9 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   const fits=step=>matching(file).filter(j=>grid(step).some(([a,b])=>j.task.context.start_ms===a&&j.task.context.end_ms===b)).length;
   return grid(fits(240000)>fits(300000)?240000:300000);
  }
- function matching(file){return [...jobs.values()].filter(j=>j.task.kind==='transcribe'&&j.task.path===file.path&&stamp(j.task.context.source)===stamp({id:file.source_id,size:file.size,modified_ns:file.modified_ns})&&j.task.context.language===read().language&&configKey(j.task.settings)===configKey(settings));}
- function chunks(file){return ranges(file).map(([start,end])=>matching(file).filter(j=>j.task.context.start_ms===start&&j.task.context.end_ms===end).sort((a,b)=>(a.status==='succeeded'?-1:0)-(b.status==='succeeded'?-1:0)||b.created_at-a.created_at||a.id.localeCompare(b.id))[0]);}
+ function matching(file){const source=stamp({id:file.source_id,size:file.size,modified_ns:file.modified_ns}),config=configKey(settings);
+  return [...jobs.values()].filter(j=>j.task.kind==='transcribe'&&j.task.path===file.path&&stamp(j.task.context.source)===source&&j.task.context.language===read().language&&configKey(j.task.settings)===config);}
+ function chunks(file){const mine=matching(file);return ranges(file).map(([start,end])=>mine.filter(j=>j.task.context.start_ms===start&&j.task.context.end_ms===end).sort((a,b)=>(a.status==='succeeded'?-1:0)-(b.status==='succeeded'?-1:0)||b.created_at-a.created_at||a.id.localeCompare(b.id))[0]);}
  function complete(){const files=eligible();return configuration==='ready'&&files.length>0&&read().files.every(f=>probe(f))&&files.every(f=>{const list=chunks(f);return list.length>0&&list.every(j=>j?.status==='succeeded');});}
  function segments(file){return chunks(file).filter(j=>j?.status==='succeeded').flatMap(job=>(job.result?.transcript?.segments || []).map(segment=>({job,segment})));}
  function correction(job,segment){return (read().transcript_edits || []).find(v=>v.job_id===job.id&&v.segment_id===segment.id&&v.source_sha256===job.result.source.sha256&&v.original_text===segment.text);}
@@ -111,7 +113,7 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   const optionsKey=JSON.stringify(files.map(f=>[f.source_id,f.name]));if($('transcriptFile').dataset.options!==optionsKey){$('transcriptFile').replaceChildren(...files.map(f=>{const option=document.createElement('option');option.value=f.source_id;option.textContent=f.name;return option;}));$('transcriptFile').dataset.options=optionsKey;}
   $('transcriptFile').value=chosen;$('transcriptFile').disabled=!editable;
   $('transcriptResult').hidden=!files.some(f=>segments(f).length>0);paintRows(force);
-  $('transcriptPacket').disabled=!editable||!ready||!complete()||busy;$('transcriptPacket').hidden=!complete();$('transcriptCopy').disabled=$('transcriptPacket').disabled;$('transcriptCopy').hidden=!complete();$('transcriptGoPrepare').hidden=complete();
+  $('transcriptPacket').disabled=!editable||!ready||!complete()||busy;$('transcriptPacket').hidden=!complete();$('transcriptGoPrepare').hidden=complete();
   $('transcriptPacketTitle').textContent=complete()?'ส่งข้อความให้ AI':'ถอดเสียงในขั้น 1 ก่อน';
   $('transcriptPacketHint').textContent=complete()?'วางในแชท ChatGPT, Gemini หรือ Claude หรือแนบไฟล์ที่ดาวน์โหลด':'ถอดเสียงเสร็จแล้วจึงส่งได้';
   changed();
@@ -181,7 +183,7 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  $('transcriptFile').onchange=()=>{chosen=$('transcriptFile').value;page=0;rowsKey='';clearAudio();refresh(true);};
  $('transcriptPrevious').onclick=()=>{page=Math.max(0,page-1);paintRows(true);};$('transcriptNext').onclick=()=>{page++;paintRows(true);};
  $('transcriptRows').onfocusout=event=>{if(!$('transcriptRows').contains(event.relatedTarget))queueMicrotask(()=>paintRows());};
- // one packet for both hand-offs: a file to attach, or text to paste straight into a chat
+ // the packet goes to the browser AI as a .md file to attach; the AI sends a .md file back
  async function sendPacket(deliver){
   if($('transcriptPacket').disabled)return;
   busy=true;packetNotice='';refresh();
@@ -198,35 +200,49 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   }catch(error){packetNotice=error.message;}finally{busy=false;refresh();}
  }
  // the instructions lead the file: an AI handed the bare JSON only described it (Gemini, 20 Oct 2026)
- const forAi=packet=>packet.instructions+'\nตอบกลับเป็น JSON ตาม response_schema อย่างเดียว ไม่ต้องมีคำอธิบาย\n\n'+JSON.stringify(packet,null,2);
- $('transcriptPacket').onclick=()=>sendPacket(packet=>{const url=URL.createObjectURL(new Blob([forAi(packet)],{type:'text/plain;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='editorkrab-ส่งให้AI.txt';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
- $('transcriptCopy').onclick=()=>sendPacket(async packet=>{
-  try{await navigator.clipboard.writeText(forAi(packet));}
-  catch(_){throw Error('คัดลอกไม่ได้ ใช้ปุ่มดาวน์โหลดไฟล์แทน');}
-  $('toast').textContent='คัดลอกแล้ว วางในแชท AI ได้เลย';$('toast').hidden=false;
- });
+ const forAi=packet=>packet.instructions+'\n'+MD_REPLY+'\n\n'+JSON.stringify(packet,null,2);
+ $('transcriptPacket').onclick=()=>sendPacket(packet=>saveMd('editorkrab-แบ่งเรื่อง.md',forAi(packet)));
  queueMicrotask(loadSettings);queueMicrotask(()=>gpuCall('/api/v1/transcription/gpu'));
  // Every subtitle line as it will show (hand edit if any), timed on its own source file.
  // a segment's words with the draft's re-timed clocks (one [start,end] per word) and the whole-project
  // subtitle shift; the transcript itself never changes (export.rs spoken() does the same)
+ // the inputs are replaced, never edited in place (a re-time or a new listen writes new lists), so a segment whose
+ // inputs are the same objects as last time reuses its words: every redraw asks for every line
+ const timedSeen=new WeakMap();
  function timedWords(segment,source){
   const words=segment.words || [],times=read().word_times?.[segment.id],offset=Math.max(-5000,Math.min(5000,Number(read().subtitle_offset_ms) || 0));
-  const clocks=fitWords(words.map((w,i)=>Array.isArray(times)&&times.length===words.length&&Array.isArray(times[i])&&times[i][1]>=times[i][0]?times[i]:[w.start_ms,w.end_ms]),read().voice?.[source]?.speech,read().voice?.[source]?.hush);
-  return words.map((w,i)=>({...w,start_ms:Math.max(0,clocks[i][0]+offset),end_ms:Math.max(0,clocks[i][1]+offset)}));
+  const speech=read().voice?.[source]?.speech,hush=read().voice?.[source]?.hush,seen=timedSeen.get(segment);
+  if(seen&&seen.times===times&&seen.offset===offset&&seen.speech===speech&&seen.hush===hush)return seen.out;
+  const clocks=fitWords(words.map((w,i)=>Array.isArray(times)&&times.length===words.length&&Array.isArray(times[i])&&times[i][1]>=times[i][0]?times[i]:[w.start_ms,w.end_ms]),speech,hush);
+  const out=words.map((w,i)=>({...w,start_ms:Math.max(0,clocks[i][0]+offset),end_ms:Math.max(0,clocks[i][1]+offset)}));
+  timedSeen.set(segment,{times,offset,speech,hush,out});return out;
  }
  // word clocks fitted to the speech VAD heard (the same rule as voice.rs fit_words): a word starting in a pause
  // starts with the next speech it reaches, one running over 150 ms past its speech ends there, a zero-length
  // word gets 200 ms; a word with no speech under it is left alone
  // a word timed wholly inside a hushed run moves to the speech starting within 1 s after it (voice.rs
  // fit_words_hushed): nothing is said where it was put
+ // runs in time order that never overlap (what voice.rs gives) are searched by halving: an hour of speech has
+ // thousands of runs and every word on screen is fitted on each redraw (P'Ohm 26 Oct: step 4 froze after listening)
+ const orderedSeen=new WeakMap();
+ const ordered=runs=>{if(!orderedSeen.has(runs))orderedSeen.set(runs,runs.every((r,i)=>r[0]<=r[1]&&(!i || runs[i-1][1]<=r[0])));return orderedSeen.get(runs);};
+ function firstAt(runs,test){let lo=0,hi=runs.length;while(lo<hi){const mid=(lo+hi)>>1;if(test(runs[mid]))hi=mid;else lo=mid+1;}return runs[lo];}
  function fitWords(clocks,speech,hush=[]){
   if(!Array.isArray(speech) || !speech.length)return clocks;
-  clocks=clocks.map(([s,e0])=>{const e=Math.max(e0,s);if(speech.some(([a,b])=>a<Math.max(e,s+1)&&b>s))return [s,e0];
-   const run=(hush || []).find(([a,b])=>a<=s&&e<=b),next=run&&speech.find(([a])=>a>=run[1]&&a<=run[1]+1000);return next?[next[0],next[0]]:[s,e0];});
-  const SLACK=150,LEAST=200,spanAt=t=>speech.find(([a,b])=>a<=t+SLACK&&t<b);
+  hush=hush || [];
+  const fast=ordered(speech)&&ordered(hush);
+  // the first run of each kind that the old in-order searches would have found
+  const overlaps=(s,x)=>fast?(r=>!!r&&r[0]<x)(firstAt(speech,([,b])=>b>s)):speech.some(([a,b])=>a<x&&b>s);
+  const runAround=(s,e)=>fast?(r=>r&&r[0]<=s?r:undefined)(firstAt(hush,([,b])=>b>=e)):hush.find(([a,b])=>a<=s&&e<=b);
+  // the first run starting in [from, to] (to inclusive) or (from, to) (exclusive)
+  const startIn=(from,to,inclusive)=>{const r=fast?firstAt(speech,([a])=>inclusive?a>=from:a>from):speech.find(([a])=>(inclusive?a>=from&&a<=to:a>from&&a<to));
+   return r&&(inclusive?r[0]<=to:r[0]<to)?r:undefined;};
+  clocks=clocks.map(([s,e0])=>{const e=Math.max(e0,s);if(overlaps(s,Math.max(e,s+1)))return [s,e0];
+   const run=runAround(s,e),next=run&&startIn(run[1],run[1]+1000,true);return next?[next[0],next[0]]:[s,e0];});
+  const SLACK=150,LEAST=200,spanAt=t=>fast?(r=>r&&r[0]<=t+SLACK?r:undefined)(firstAt(speech,([,b])=>t<b)):speech.find(([a,b])=>a<=t+SLACK&&t<b);
   return clocks.map(([s0,e0],i)=>{
    let s=s0,e=Math.max(e0,s0),span=spanAt(s);
-   if(!span){span=speech.find(([a])=>a>s&&a<e);if(span)s=span[0];}
+   if(!span){span=startIn(s,e,false);if(span)s=span[0];}
    if(!span)return [s0,e0];
    const b=span[1];if(e>b+SLACK)e=Math.max(b,s);
    if(e<=s){const n=clocks[i+1]?.[0],next=n>s?n:Infinity;e=Math.min(s+LEAST,next,Math.max(b,s+1));}

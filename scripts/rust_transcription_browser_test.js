@@ -33,17 +33,13 @@ async(page)=>{
  await page.locator('[data-step="2"]').click();
  await page.evaluate(()=>{const create=URL.createObjectURL;URL.createObjectURL=function(blob){window.__packetBlob=blob;return create.call(this,blob)}});
  const download=page.waitForEvent('download',{timeout:120000});await page.locator('#transcriptPacket').click();
- await(await download).saveAs('output/native-browser-ai-packet.json');
- const packet=await page.evaluate(async()=>JSON.parse(await window.__packetBlob.text()));
+ await(await download).saveAs('output/native-browser-ai-packet.md');
+ const packet=await page.evaluate(async()=>{const text=await window.__packetBlob.text();return JSON.parse(text.slice(text.indexOf('{')));});
  check(packet.project_id===project&&packet.content_hash.length===64,'packet provenance absent');
  check(packet.content.sources.length===1&&packet.content.sources[0].segments[0].text===corrected,'packet missed correction or included silent transcript');
  check(packet.content.sources[0].segments[0].original_text===original&&packet.content.sources[0].segments[0].alignment==='unverified','raw provenance lost');
  check(!JSON.stringify(packet).includes('C:\\')&&!JSON.stringify(packet).includes('D:\\'),'machine paths leaked in AI packet');
- // the copy button hands over the same packet as text, ready to paste into a chat
- await page.evaluate(()=>{navigator.clipboard.writeText=async text=>{window.__copied=text}});
- await page.locator('#transcriptCopy').click();await page.waitForFunction(()=>window.__copied,null,{timeout:120000});
- const clipText=await page.evaluate(()=>window.__copied),pasted=JSON.parse(clipText.slice(clipText.indexOf('{')));
- check(clipText.startsWith(packet.instructions)&&pasted.content_hash===packet.content_hash&&JSON.stringify(pasted.content)===JSON.stringify(packet.content),'copied packet differs from download');
+ check((await download).suggestedFilename().endsWith('.md'),'AI packet is not a .md file');
  await page.locator('[data-step="1"]').click();await complete();await page.locator('#transcribe').click();
  await page.waitForFunction(()=>!document.querySelector('#transcribe').disabled,null,{timeout:120000});
  const after=(await(await page.request.get(`${base}/api/v1/projects/${project}/jobs`)).json()).filter(j=>j.task.kind==='transcribe');

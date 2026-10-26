@@ -17,14 +17,14 @@ async(page)=>{
  await page.locator('[data-panel="4"] [data-go="5"]').click();await saved();
  check(await page.locator('#headlineTitle').isVisible(),'next step failed');
  check(!await page.locator('#textControls').isVisible(),'empty headline shows controls');
- check(!await page.locator('#headlineReply').isVisible(),'optional AI expanded by default');
+ check(!await page.locator('#applyHeadline').isVisible(),'optional AI expanded by default');
  await page.locator('#addHeadline').click();await saved();await page.locator('#text-text').fill('เริ่มจากสิ่งที่มี');await saved();
  check(await page.locator('#sampleLabel').textContent()==='ข้อความบนหัวคลิป','headline input unclear');
  await page.locator('#text-font').fill('Arial');await saved();await page.locator('#text-color').fill('#24cbaa');await saved();
  await page.locator('#addHeadline').click();await saved();await page.locator('#text-text').fill('ข้อความนิ่ง ปรับเอง');await saved();
  await page.locator('#text-color').fill('#e67a3c');await saved();
  const before=await read();
- await page.locator('#headlineAi > summary').click();check(await page.locator('#headlineReply').isVisible(),'optional AI inaccessible');
+ await page.locator('#headlineAi > summary').click();check(await page.locator('#applyHeadline').isVisible(),'optional AI inaccessible');
  await page.locator('#headlineAi > summary').click();
  check((await read()).revision===before.revision,'disclosure changed draft');
  for(const width of [1440]){
