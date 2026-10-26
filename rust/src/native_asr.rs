@@ -692,12 +692,18 @@ async fn infer(
 /// Decoding options passed to whisper-cli; part of the cache key, so changing them re-transcribes.
 /// `-sns` suppresses non-speech tokens: without it, large-v3 looped one Chinese sentence 8 times
 /// at the end of a 75 s FLEURS clip (CER 64% -> 11%) while Thai and English stayed level.
-/// `-mc 0` also broke the loop but cost Thai 2 points of CER.
+/// `-mc 0` stops each window from reading the text before it. `-sns` alone was not enough: on 10 minutes of
+/// FLEURS English (25 Oct 2026) one 5-minute piece looped "map of the city of Dunlap and this is the" 12 to 177
+/// times and was either refused (`invalid_segment_clock_or_text`, so the whole file failed) or kept as garbage
+/// (WER 132%). With `-mc 0` the same files went through the app with no failed piece: English 15.4% and 8.5% WER
+/// (loudness-evened copy), Thai FLEURS 11.9% CER. On a looping stretch run directly it was 180% -> 12% and
+/// 50% -> 20%. The cost where nothing loops: English 11.3% -> 12.6%; Thai FLEURS went 15.7% -> 13.5% and
+/// 39.0% -> 32.8% (an earlier trial on other audio had measured 2 points worse for Thai). One file per language.
 /// `-dtw large.v3` aligns each token to the audio for word clocks; whisper-cli only does that with
 /// flash attention off (`-nfa`). The app ships large-v3 only, so the preset fits. On an 18 s Thai
 /// clip the plain clocks put "อะไร" at 22.0 s (where the pause before it began); DTW put it at
 /// 23.0 s, where it is said, so subtitles stop arriving before the voice.
-pub const DECODE_ARGS: [&str; 4] = ["-sns", "-nfa", "-dtw", "large.v3"];
+pub const DECODE_ARGS: [&str; 6] = ["-sns", "-nfa", "-dtw", "large.v3", "-mc", "0"];
 
 pub fn cache_key(
     source: &Artifact,
@@ -835,7 +841,7 @@ mod tests {
         );
         // transcripts cached before decode options joined the key (which could hold a
         // repetition loop) must not be reused
-        assert_eq!(DECODE_ARGS, ["-sns", "-nfa", "-dtw", "large.v3"]);
+        assert_eq!(DECODE_ARGS, ["-sns", "-nfa", "-dtw", "large.v3", "-mc", "0"]);
         let before=serde_json::to_vec(&serde_json::json!({"source":source,"identity":context.source,"start_ms":context.start_ms,"end_ms":context.end_ms,"language":context.language,"settings":settings,"output_format":"whisper.cpp-full-json-v1.9.2"})).unwrap();
         assert_ne!(format!("{:x}", Sha256::digest(before)), key);
     }
