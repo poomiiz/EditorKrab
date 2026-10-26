@@ -1,9 +1,16 @@
 ---
 name: make-clip
-description: One-request runner for a whole short clip - "ทำคลิปนี้", "ตัดคลิปจากไฟล์นี้", "ทำคลิปสั้นไม่เกิน 2 นาที", "make a clip from this footage", "ทำเป็นโปรเจกต์ CapCut ด้วย", and the commands the ClipKit app asks the person to paste ("ClipKit: แบ่งเรื่อง ...", "ClipKit: เลือกคำเน้น ..."). Runs scripts/run_clip.py end to end (transcribe, stories, cuts, subtitles in the person's preset, title, b-roll, music, MP4 and/or CapCut project) and does its two thinking steps. Use this as the entry point; it uses clip-qc.
+description: RETIRED - the old Python ClipKit flow; its scripts are gone. For EditorKrab use the app or its MCP tools at http://127.0.0.1:8871/mcp and prompts/story_split.md. Kept for history; do not run its commands. Was the one-request runner for a whole short clip - "ทำคลิปนี้", "ตัดคลิปจากไฟล์นี้", "ทำคลิปสั้นไม่เกิน 2 นาที", "make a clip from this footage", "ทำเป็นโปรเจกต์ CapCut ด้วย", and the commands the ClipKit app asks the person to paste ("ClipKit: แบ่งเรื่อง ...", "ClipKit: เลือกคำเน้น ..."). Runs scripts/run_clip.py end to end (transcribe, stories, cuts, subtitles in the person's preset, title, b-roll, music, MP4 and/or CapCut project) and does its two thinking steps. Use this as the entry point; it uses clip-qc.
 ---
 
 # Make a clip (entry point)
+
+> **Retired flow.** This file describes the old Python ClipKit. Its scripts (`scripts/run_clip.py`,
+> `scripts/web_ai.py` and the rest) are no longer in the repository, so do not run them or quote their rules.
+> EditorKrab is now the Rust app: work in the app, or, while it is open, through its MCP tools at
+> `http://127.0.0.1:8871/mcp` (`import_videos`, `transcribe`, `get_project`, `get_transcript`, `set_clips`,
+> `export_clips`). Story rules are `prompts/story_split.md`, which matches the app's step 2. Never report a
+> story count before the footage is transcribed.
 
 Run from the ClipKit folder. Stop and report `Blocked` with the exact error if any command fails - never skip a step or guess a value.
 
@@ -105,8 +112,8 @@ the recovery state and both versions if an external edit prevents recovery.
    `words` clocks (`n`, `end_n`, `start`, `end`, `text`, seconds), the
    person's brief and their saved duration choice. Missing transcript = report the error and ask them to
    transcribe first. Choose and shape stories to match the brief while following the rules below.
-2. Read the packet's duration preference before selecting ranges. Follow `prompts/story_split.md`: one point each,
-   a meaningful opening and finished ending near that target, without a compulsory title or fixed length bracket.
+2. (Retired flow; the current rules are `prompts/story_split.md`: cover the whole file, one point each, about
+   1-2 minutes, never ending mid-sentence.) Read the packet's duration preference before selecting ranges.
    Use source `start_anchor`/`end_anchor` (`cue_id`, `word` copied from `words[].n`) to choose whole-word edges
    inside ASR rows. Word numbers may skip because partial Thai pieces form one complete word. With no word
    clock, omit `word` and use the row edge. Numeric times, if included, must match the actual anchors. Retain
