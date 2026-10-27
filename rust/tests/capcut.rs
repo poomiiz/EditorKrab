@@ -470,6 +470,17 @@ fn lines_marked_host_or_guest_are_framed_on_the_face_whose_mouth_moved_in_them()
     // medium on the host (right, held at -0.9), close on the guest (left, +0.16*2*2.67), medium on the host
     let want=[-0.9,0.16*2.0*2.67,-0.9];
     for (got,want) in x.iter().zip(want) {assert!((got-want).abs()<1e-9,"{got} != {want}");}
+    // a zoom set in step 3 for the host (person 1) is kept: the host's lines are not framed by the marks
+    let mut set=doc.clone();set["crops"]=json!({"src":{"speakers":{"1":{"zoom":1.5}}}});
+    let draft=capcut::build(&story,&set,&media,&fonts,Path::new("root"),Path::new("root/set"),1).unwrap();
+    let first=&tracks(&draft,"video")[0]["segments"][0]["clip"];
+    let marked_host=(first["scale"]["x"].as_f64().unwrap()-1.9).abs()<1e-9&&(first["transform"]["x"].as_f64().unwrap()+0.9).abs()<1e-9;
+    assert!(!marked_host,"the host's line follows the mouths, not the marks: {first}");
+    // a landscape picture: the marks do not apply, the camera cuts on the mouths like the MP4 export
+    let wide=vec![Media{duration_ms:9000,width:1920,height:1080,has_audio:true}];
+    let draft=capcut::build(&story,&doc,&wide,&fonts,Path::new("root"),Path::new("root/wide"),1).unwrap();
+    let plain=capcut::build(&story,&{let mut d=doc.clone();d["plan"]=json!(json!({"stories":plan["stories"]}).to_string());d},&wide,&fonts,Path::new("root"),Path::new("root/plain"),1).unwrap();
+    assert_eq!(tracks(&draft,"video")[0]["segments"].as_array().unwrap().len(),tracks(&plain,"video")[0]["segments"].as_array().unwrap().len());
     // without marks the camera still follows the mouths
     let mut unmarked=doc.clone();unmarked["plan"]=json!(json!({"stories":plan["stories"]}).to_string());
     let draft=capcut::build(&story,&unmarked,&media,&fonts,Path::new("root"),Path::new("root/unmarked"),1).unwrap();

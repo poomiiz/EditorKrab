@@ -360,7 +360,7 @@ async fn transcript(runtime: Runtime, args: Value) -> Outcome {
         "language": draft.document["language"],
         "sources": sources,
         "instructions": "Group segments into stories that each make sense alone. Use only these segment_ids, keep each story's ending complete, \
-    take each story's segments from one file only, never invent times, and do not treat different files as synced cameras. Then call set_clips."
+    take each story's segments from one file only, never invent times, and do not treat different files as synced cameras.     Mark who says each segment in speakers: \"host\" for the one asking or hosting, \"guest\" for the one answering (\"guest\" for all when one person talks). Then call set_clips."
     }))
 }
 
@@ -375,6 +375,12 @@ async fn set_clips(runtime: Runtime, args: Value) -> Outcome {
         .enumerate()
         .map(|(n, c)| json!({"id":format!("story-{}", n + 1),"title":c["title"],"segment_ids":c["segment_ids"]}))
         .collect();
+    // who says each line, as step 2 asks the browser AI: the CapCut camera frames that person
+    let speakers = match &args["speakers"] {
+        Value::Null => json!({}),
+        Value::Object(m) if m.values().all(|r| r == "host" || r == "guest") => args["speakers"].clone(),
+        _ => return Err(refuse("speakers_must_be_host_or_guest")),
+    };
     let (draft, jobs) = load(&runtime, &project).await?;
     let mut document = draft.document;
     // the agent skips step 4, so speech subtitles are on unless the person already chose otherwise there
@@ -384,7 +390,7 @@ async fn set_clips(runtime: Runtime, args: Value) -> Outcome {
     // stored exactly as a reply pasted at step 3, so the page shows and edits it the same way
     document["plan"] = json!(
         serde_json::to_string_pretty(
-            &json!({"schema_version":1,"project_id":project,"stories":stories})
+            &json!({"schema_version":1,"project_id":project,"stories":stories,"speakers":speakers})
         )
         .unwrap_or_default()
     );

@@ -305,7 +305,8 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
   if(!editable()){clearTimeout(airRetry);airRetry=setTimeout(findQuiet,1000);return;}
   if(Number.isFinite(read().dead_min_ms)&&read().dead_min_ms>0&&read().dead_min_ms<AIR_LEAST*1000){write(d=>{d.dead_min_ms=AIR_LEAST*1000;});return;}
   const voice=read().voice || {},files=read().files.filter(f=>f.source_id&&lines().some(l=>l.source_id===f.source_id));
-  const needsVisual=f=>!voice[f.source_id] || !Array.isArray(voice[f.source_id].seen) || voice[f.source_id].visual_rules_version!==VISUAL_RULES_VERSION;
+  // newer face rules matter only to a camera that follows the talker: other projects are not looked at again
+  const needsVisual=f=>!voice[f.source_id] || !Array.isArray(voice[f.source_id].seen) || (read().follow_speaker&&voice[f.source_id].visual_rules_version!==VISUAL_RULES_VERSION);
   const todo=files.filter(f=>needsVisual(f)&&!listening.has(f.source_id));
   const keyOf=f=>quietKey(f.source_id);
   const stale=files.filter(f=>voice[f.source_id]&&!needsVisual(f)&&(read().quiet_key || {})[f.source_id]!==keyOf(f)&&airMin()>0&&!listening.has(f.source_id));

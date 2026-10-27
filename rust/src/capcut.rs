@@ -238,7 +238,11 @@ fn role_faces(story: &Story, document: &Value, roles: &HashMap<String,String>) -
         let best=(0..faces.len()).flat_map(|h|(0..faces.len()).filter(move|g|*g!=h).map(move|g|(h,g)))
             .max_by_key(|&(h,g)|votes[0][h]+votes[1][g]).filter(|&(h,g)|votes[0][h]+votes[1][g]>0);
         let Some((h,g))=best else {continue};
-        for (role,face) in [("host",h),("guest",g)] {
+        for (k,role,face) in [(0,"host",h),(1,"guest",g)] {
+            // a role nobody was seen talking for gets no face (it would be a guess), and a crop or zoom set for
+            // that person in step 3 is theirs to keep: those lines follow the mouths as before
+            let set=document["crops"][id]["speakers"][face.to_string()].is_object();
+            if votes[k][face]==0 || set {continue;}
             if let (Some(cx),Some(cy))=(faces[face]["cx"].as_f64(),faces[face]["cy"].as_f64()) {out.insert((n,role.to_owned()),(cx,cy));}
         }
     }
@@ -281,7 +285,10 @@ pub fn build(
         let source = &story.sources[piece.source];
         let info = media.get(piece.source).ok_or("capcut_media_missing")?;
         if info.width==0 || info.height==0 {return Err("capcut_media_dimensions_invalid".to_owned());}
-        let face=roles.get(&piece.segment).and_then(|role|marked.get(&(piece.source,role.clone()))).copied();
+        // the marked path only where its shot sizes apply (vertical picture and frame); elsewhere the line is cut
+        // where the talker changes, as the MP4 export does
+        let upright=info.width<info.height && frame.0<frame.1;
+        let face=roles.get(&piece.segment).and_then(|role|marked.get(&(piece.source,role.clone()))).copied().filter(|_|upright);
         let spans=if face.is_some() {vec![(piece.start_ms,piece.end_ms)]} else if document["follow_speaker"]==true {
             export::source_id(document,source).map(|id|export::speaker_cuts(document,id,piece.start_ms,piece.end_ms))
                 .unwrap_or_else(||vec![(piece.start_ms,piece.end_ms)])
