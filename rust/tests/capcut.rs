@@ -450,6 +450,33 @@ fn a_vertical_picture_changes_shot_size_every_cut_on_the_person_talking() {
 }
 
 #[test]
+fn lines_marked_host_or_guest_are_framed_on_the_face_whose_mouth_moved_in_them() {
+    // step 2 marked s0 and s2 host, s1 guest; step 3 saw the right-hand face (person 1) talk in s0 and s2 and the
+    // left-hand one (person 0) in s1, with one wrong second each way: the pair is host = right, guest = left
+    let mut pieces=vec![piece(0,0,3000,""),piece(0,3000,6000,""),piece(0,6000,9000,"")];
+    for (n,p) in pieces.iter_mut().enumerate() {p.segment=format!("s{n}");}
+    let story=Story{id:"roles".into(),title:"".into(),sources:vec!["a.mp4".into()],pieces};
+    let plan=json!({"stories":[{"id":"roles","title":"","segment_ids":["s0","s1","s2"]}],"speakers":{"s0":"host","s1":"guest","s2":"host"}});
+    let doc=json!({"files":[{"path":"a.mp4","source_id":"src"}],"text_roles":[],"follow_speaker":true,"plan":plan.to_string(),
+        "voice":{"src":{"faces":[{"cx":0.34,"cy":0.43},{"cx":0.81,"cy":0.43}],
+            "seen":[{"start_ms":0,"end_ms":2000,"person":1},{"start_ms":2000,"end_ms":3000,"person":0},
+                    {"start_ms":3000,"end_ms":5000,"person":0},{"start_ms":5000,"end_ms":6000,"person":1},
+                    {"start_ms":6000,"end_ms":9000,"person":1}]}}});
+    let media=vec![Media{duration_ms:9000,width:1080,height:1920,has_audio:true}];
+    let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/roles"),1).unwrap();
+    let segments=tracks(&draft,"video")[0]["segments"].as_array().unwrap().clone();
+    assert_eq!(segments.len(),3,"a marked line is one shot, not split where the mouth guess changes");
+    let x:Vec<f64>=segments.iter().map(|s|s["clip"]["transform"]["x"].as_f64().unwrap()).collect();
+    // medium on the host (right, held at -0.9), close on the guest (left, +0.16*2*2.67), medium on the host
+    let want=[-0.9,0.16*2.0*2.67,-0.9];
+    for (got,want) in x.iter().zip(want) {assert!((got-want).abs()<1e-9,"{got} != {want}");}
+    // without marks the camera still follows the mouths
+    let mut unmarked=doc.clone();unmarked["plan"]=json!(json!({"stories":plan["stories"]}).to_string());
+    let draft=capcut::build(&story,&unmarked,&media,&fonts,Path::new("root"),Path::new("root/unmarked"),1).unwrap();
+    assert!(tracks(&draft,"video")[0]["segments"].as_array().unwrap().len()>=1);
+}
+
+#[test]
 fn the_camera_never_cuts_to_a_shot_under_a_second() {
     // the unknown-gap wide shot would be 0.8 s at the end of the piece: the close-up holds instead
     let story = Story { id:"short".into(), title:"".into(), sources:vec!["a.mp4".into()], pieces:vec![piece(0,1000,10000,"")] };

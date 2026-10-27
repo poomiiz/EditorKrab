@@ -187,21 +187,62 @@ pub const SHOTS: [f64; 4] = [1.9, 2.67, 1.9, 1.3];
 /// vertical picture and frame); the face sits in the middle of the frame, the wide shot is centred. A crop or
 /// zoom the person set, or nobody known to be talking, keeps the window `video_transform` gives.
 fn shot(document: &Value, source: &Path, media: &Media, ms: u64, frame: (u32,u32), cut: usize) -> Option<(f64,f64,f64)> {
-    if document["follow_speaker"]!=true || media.width>=media.height || frame.0>=frame.1 {return None;}
+    if document["follow_speaker"]!=true {return None;}
     let (cx,cy,zoom,centred)=export::crop_at(document,source,ms);
     // a zoom set for this person in step 3 is theirs to keep
     if !centred || zoom!=export::FOLLOW_ZOOM {return None;}
+    framed(media,frame,cut,cx,cy)
+}
+/// `SHOTS[cut]` on the face at (cx, cy): the picture moved so the face lands in the middle, but never so far that
+/// an edge of the picture shows inside the frame. Vertical picture in a vertical frame only, where the numbers
+/// were measured.
+fn framed(media: &Media, frame: (u32,u32), cut: usize, cx: f64, cy: f64) -> Option<(f64,f64,f64)> {
+    if media.width>=media.height || frame.0>=frame.1 {return None;}
     let wide=cut%SHOTS.len()==SHOTS.len()-1;
     let scale=SHOTS[cut%SHOTS.len()];
     let (cx,cy)=if wide {(0.5,0.5)} else {(cx,cy)};
     let (iw,ih)=(media.width as f64,media.height as f64);
     let (width,height)=(frame.0 as f64,frame.1 as f64);
     let fit=(width/iw).min(height/ih);
-    // translation is in half-frame units, Y upwards: move the picture so the face lands in the middle, but
-    // never so far that an edge of the picture shows inside the frame
+    // translation is in half-frame units, Y upwards
     let (sw,sh)=(iw*fit*scale/width,ih*fit*scale/height);
     let room=|half:f64|(half-1.0).max(0.0);
     Some((scale,((0.5-cx)*2.0*sw).clamp(-room(sw),room(sw)),((cy-0.5)*2.0*sh).clamp(-room(sh),room(sh))))
+}
+
+/// Who says each line, "host" or "guest", as the step 2 AI marked it (`plan.speakers`, by segment id).
+fn line_roles(document: &Value) -> HashMap<String,String> {
+    let plan:Value=document["plan"].as_str().and_then(|p|serde_json::from_str(p).ok()).unwrap_or(Value::Null);
+    plan["speakers"].as_object().into_iter().flatten()
+        .filter_map(|(id,role)|Some((id.clone(),role.as_str()?.to_owned())))
+        .filter(|(_,role)|role=="host"||role=="guest").collect()
+}
+/// Which face is the host and which the guest in each of the story's videos: the pair of different faces whose
+/// mouths step 3 saw moving most (`voice[id].seen`) during the lines marked for them. One second of mouth motion is
+/// right about 6 times in 10 on C4926; summed over a story's lines it picks the pair (P'Ohm 27 Oct).
+fn role_faces(story: &Story, document: &Value, roles: &HashMap<String,String>) -> HashMap<(usize,String),(f64,f64)> {
+    let mut out=HashMap::new();
+    for (n,source) in story.sources.iter().enumerate() {
+        let Some(id)=export::source_id(document,source) else {continue};
+        let faces=document["voice"][id]["faces"].as_array().cloned().unwrap_or_default();
+        let seen:Vec<(u64,u64,usize)>=document["voice"][id]["seen"].as_array().into_iter().flatten()
+            .filter_map(|s|Some((s["start_ms"].as_u64()?,s["end_ms"].as_u64()?,s["person"].as_u64()? as usize))).collect();
+        if faces.len()<2 {continue;}
+        let mut votes=[vec![0u64;faces.len()],vec![0u64;faces.len()]];
+        for p in story.pieces.iter().filter(|p|p.source==n) {
+            let Some(role)=roles.get(&p.segment) else {continue};
+            for &(a,b,who) in seen.iter().filter(|s|s.2<faces.len()) {
+                votes[(role=="guest") as usize][who]+=b.min(p.end_ms).saturating_sub(a.max(p.start_ms));
+            }
+        }
+        let best=(0..faces.len()).flat_map(|h|(0..faces.len()).filter(move|g|*g!=h).map(move|g|(h,g)))
+            .max_by_key(|&(h,g)|votes[0][h]+votes[1][g]).filter(|&(h,g)|votes[0][h]+votes[1][g]>0);
+        let Some((h,g))=best else {continue};
+        for (role,face) in [("host",h),("guest",g)] {
+            if let (Some(cx),Some(cy))=(faces[face]["cx"].as_f64(),faces[face]["cy"].as_f64()) {out.insert((n,role.to_owned()),(cx,cy));}
+        }
+    }
+    out
 }
 
 /// The CapCut project for one story. `media` describes each of `story.sources`; `fonts` finds the
@@ -233,11 +274,15 @@ pub fn build(
 
     let mut footage = Vec::new();
     let mut at = 0;
+    // following the talker: a line the step 2 AI marked host or guest is framed on that person, whole
+    let roles=if document["follow_speaker"]==true {line_roles(document)} else {HashMap::new()};
+    let marked=role_faces(story,document,&roles);
     for piece in &story.pieces {
         let source = &story.sources[piece.source];
         let info = media.get(piece.source).ok_or("capcut_media_missing")?;
         if info.width==0 || info.height==0 {return Err("capcut_media_dimensions_invalid".to_owned());}
-        let spans=if document["follow_speaker"]==true {
+        let face=roles.get(&piece.segment).and_then(|role|marked.get(&(piece.source,role.clone()))).copied();
+        let spans=if face.is_some() {vec![(piece.start_ms,piece.end_ms)]} else if document["follow_speaker"]==true {
             export::source_id(document,source).map(|id|export::speaker_cuts(document,id,piece.start_ms,piece.end_ms))
                 .unwrap_or_else(||vec![(piece.start_ms,piece.end_ms)])
         } else {vec![(piece.start_ms,piece.end_ms)]};
@@ -265,7 +310,8 @@ pub fn build(
             seg["last_nonzero_volume"] = json!(1.0);
             seg["render_index"] = json!(0);
             seg["track_render_index"] = json!(0);
-            let (scale,x,y)=shot(document,source,info,start,frame,footage.len())
+            let (scale,x,y)=face.and_then(|(cx,cy)|framed(info,frame,footage.len(),cx,cy))
+                .or_else(||shot(document,source,info,start,frame,footage.len()))
                 .unwrap_or_else(||video_transform(document,source,info,start,frame));
             seg["clip"]["scale"] = json!({"x": scale, "y": scale});
             seg["clip"]["transform"] = json!({"x": x, "y": y});
