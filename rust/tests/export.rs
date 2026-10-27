@@ -729,3 +729,33 @@ fn a_card_too_long_ends_at_its_widest_pause_and_a_short_tail_joins_the_card_befo
     let words = [("ฉันถาม", 0, 1500), ("คำถาม", 1520, 3000), ("แก", 3050, 3200)];
     assert_eq!(text(&card_groups(&words, |_| true)), ["ฉันถามคำถามแก"]);
 }
+
+#[test]
+fn a_corrected_line_keeps_the_clocks_it_was_heard_at_and_breaks_at_its_spaces() {
+    use editorkrab::export::{layout_lines, realign};
+    let w = |t: &str, a: u64, b: u64| (t.to_owned(), a, b);
+    // C4926 27 Oct: heard "ก็มีค่าแลกเข้าค่าแลกเข้า ค่าประกัน", said "ก็มีค่าแรกเข้า ค่าประกัน"
+    let heard = vec![w("ก็", 0, 200), w("มี", 200, 400), w("ค่า", 400, 600), w("แลก", 600, 900), w("เข้า", 900, 1200),
+        w("ค่า", 1300, 1500), w("แลก", 1500, 1800), w("เข้า", 1800, 2100), w("ค่า", 2400, 2600), w("ประกัน", 2600, 3000)];
+    let fixed = realign(&heard, "ก็มีค่าแรกเข้า ค่าประกัน");
+    // the dropped repeat is still said: the first phrase holds over it, up to where the next one starts
+    assert_eq!(fixed, vec![w("ก็มีค่าแรกเข้า ", 0, 2100), w("ค่าประกัน", 2400, 3000)]);
+    // Latin words and numbers stay one phrase
+    let fee = realign(&[w("โล", 0, 300), w("ยีตี้", 300, 700), w("ฟรี", 700, 900), w("3", 1000, 1100)], "Royalty Fee 3%");
+    assert_eq!(fee, vec![w("Royalty Fee 3%", 0, 1100)]);
+    // a card ends only between phrases, and two phrases on one card keep their space
+    let piece = Piece { source: 0, start_ms: 0, end_ms: 3000, text: String::new(), words: fixed, timed: true, segment: "s".into() };
+    let rows = layout_lines(&piece, &json!({"font":"system","size":40}));
+    assert_eq!(rows.iter().map(|r| r.2.as_str()).collect::<Vec<_>>(), ["ก็มีค่าแรกเข้า ค่าประกัน"]);
+    // two phrases heard as one word share its time instead of both starting with it ("บาท" and "แต่..." on s38)
+    assert_eq!(realign(&[w("บาทแต่ถ้า", 0, 900)], "บาท แต่ถ้า"), vec![w("บาท ", 0, 300), w("แต่ถ้า", 300, 900)]);
+    assert!(realign(&[], "อะไร").is_empty());
+}
+
+#[test]
+fn a_card_said_in_no_time_joins_the_next_one_instead_of_flashing_on_its_own_track() {
+    // C4926 s38: "บาท" fell in cut dead air (0 ms played), then "แต่ถ้าหักกับค่าออกแบบ" ran over CARD_MAX_MS
+    let words = [("บาท ", 1000, 1000), ("แต่ถ้าหักกับค่าออกแบบ", 1000, 4200)];
+    let groups = editorkrab::export::card_groups(&words, |_| true);
+    assert_eq!(groups, vec![words.to_vec()]);
+}

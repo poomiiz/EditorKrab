@@ -42,6 +42,8 @@ export function captionRows(words,style={},maxMs=3000,measure=captionMeasure){
   cur.push(w);
  }
  if(cur.length)rows.push(cur);
+ // a card said in no time (its words in cut dead air) joins the card after it (export.rs FLASH_MS)
+ for(let k=0;k+1<rows.length;){if(rows[k].at(-1).end_ms-rows[k][0].start_ms<120)rows.splice(k,2,[...rows[k],...rows[k+1]]);else k++;}
  if(rows.length>1){const tail=rows.at(-1),prev=rows.at(-2),letters=tail.reduce((n,x)=>n+[...x.text].length,0);
   if(letters<=5&&tail[0].start_ms-prev.at(-1).end_ms<650&&fits([...prev,...tail])){rows.pop();rows[rows.length-1]=[...prev,...tail];}}
  return rows;

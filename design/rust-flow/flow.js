@@ -53,7 +53,7 @@ history.replaceState(null, '', projectUrl);
 try { localStorage.setItem('editorkrab-last-project', projectId); } catch (_) { /* URL retains project identity. */ }
 const speech=createTranscription({project:projectId,read:()=>draft,
  state:()=>({editing:editingAllowed,saved:!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved,revision:session?.record?.revision || 0}),
- writeEdit:edit=>{if(!editingAllowed)return;const entries=(draft.transcript_edits || []).filter(v=>v.job_id!==edit.job_id||v.segment_id!==edit.segment_id);if(edit.text!==edit.original_text)entries.push(edit);if(!validTranscriptEdits(entries))return;draft.transcript_edits=entries;save();},
+ writeEdit:edit=>{if(!editingAllowed)return;let entries=draft.transcript_edits || [];for(const e of [edit].flat()){entries=entries.filter(v=>v.job_id!==e.job_id||v.segment_id!==e.segment_id);if(e.text!==e.original_text)entries.push(e);}if(!validTranscriptEdits(entries))return;draft.transcript_edits=entries;save();},
  changed:()=>queueMicrotask(()=>{renderSteps();renderTimeline();stories.renderCards();if([3,4].includes(activeStep(draft)))stories.renderEditor();}),
  // pressing transcribe moves on to step 2, where the transcript fills in while the person prepares the AI step
  started:()=>{if(activeStep(draft)===1)document.querySelector('[data-step="2"]').click();}});
@@ -147,7 +147,7 @@ const textQc=createTextQc({summary:$('textQcSummary'),go:$('textQcGo'),list:$('t
  }});
 const stories=createStories({project:projectId,read:()=>draft,lines:()=>speech.texts(),editable:()=>editingAllowed,
  captionState:()=>({revision:session?.record?.revision||0,saved:!!session?.record&&!session.blocked&&!session.volatile&&!session.record.pending.length&&!unsaved}),
- editLine:(line,text)=>{if(!editingAllowed)throw Error('not_editable');speech.edit(line.id,text);textQc.run(true);},listen:line=>speech.listen(line.id),caption:text=>textEditor.live('speech',text),emphasis:text=>textEditor.live('emphasis',text),subtitle:text=>textEditor.live('english',text),
+ editLine:(line,text)=>{if(!editingAllowed)throw Error('not_editable');speech.edit(line.id,text);textQc.run(true);},editLines:list=>{if(!editingAllowed)throw Error('not_editable');speech.editAll(list.map(([line,text])=>[line.id,text]));textQc.run(true);},listen:line=>speech.listen(line.id),caption:text=>textEditor.live('speech',text),emphasis:text=>textEditor.live('emphasis',text),subtitle:text=>textEditor.live('english',text),
  write:change=>{if(!editingAllowed)return;change(draft);save();render();},
  go:step=>document.querySelector(`[data-step="${step}"]`).click()});
 document.addEventListener('caption-font-ready',()=>stories.renderEditor());

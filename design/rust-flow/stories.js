@@ -185,7 +185,7 @@ export function cameraPersonAt(voice,ms){
  const before=turns.filter(t=>t.end_ms<=ms&&ms-t.end_ms<=1200).sort((a,b)=>b.end_ms-a.end_ms)[0];
  return (inside||before)?.who ?? null;
 }
-export function createStories({project,read,lines,write:writeDraft,go,editable,caption,emphasis=()=>{},subtitle=()=>{},editLine=()=>{},listen=()=>{},captionState=()=>({saved:true,revision:0})}){
+export function createStories({project,read,lines,write:writeDraft,go,editable,caption,emphasis=()=>{},subtitle=()=>{},editLine=()=>{},editLines=()=>{},listen=()=>{},captionState=()=>({saved:true,revision:0})}){
  // quietKey's per-run answers (below) end with any write from this file
  let keyNow=null;const write=change=>{keyNow=null;return writeDraft(change);};
  let queue=[];
@@ -426,7 +426,7 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
  function refineText(story){
   const packet={schema_version:1,step:'refine_story',project_id:project,story_id:story.id,title:story.title,summary:story.summary,
    lines:offered(story).map(l=>({id:l.segment_id,start_ms:l.start_ms,end_ms:l.end_ms,text:l.text})),
-   response_schema:{story_id:story.id,title:'หัวข้อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[]}};
+   response_schema:{story_id:story.id,title:'หัวข้อเรื่อง',summary:'สรุปเนื้อหา 1-2 ประโยค',segment_ids:[],texts:{'<id ที่เก็บ>':'ข้อความที่แก้คำแล้ว เว้นวรรคตรงที่ตัดบรรทัด'}}};
   // the shape of a finished Nina clip (NinaStyleBook, 5 CapCut drafts measured 23 Oct): hook, setup, proof, twist,
   // lesson, button; 60-130 s; the listener's questions and laughs stay in
   return 'เรียบเรียงเรื่องนี้ให้เป็นคลิปสั้นที่ดูแล้วรู้เรื่องในตัวเอง ยาวประมาณ 60-130 วินาที ลำดับการเล่า: '
@@ -434,7 +434,11 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
    +'4) จุดหักมุม 5) บทเรียนประโยคเดียว 6) ปิดด้วยมุก คำคม หรือประโยคที่อยากให้ดูต่อ '
    +'เก็บคำถาม ข้อสงสัย และเสียงหัวเราะของคนถาม/คนฟังไว้ (เป็นเสียงแทนคนดู) เก็บรายละเอียดเฉพาะ ตัดคำพูดกว้างๆ ที่ไม่มีสาระ ตัดท่อนที่พูดซ้ำหรือพูดติดขัด '
    +'เรียงลำดับใหม่ได้ถ้าเล่าแล้วดีขึ้นแต่ต้องคงความหมายเดิม ห้ามจบกลางประโยค อ้างท่อนด้วย id ใน lines เท่านั้น ห้ามสร้างท่อนหรือเวลาใหม่ '
-   +'segment_ids คือท่อนที่เก็บ เรียงตามลำดับที่จะเล่น title ต้องเป็นคำที่พูดจริงในท่อนที่เก็บ ไม่เกิน 40 ตัวอักษร ปรับ summary ให้ตรงกับเรื่องที่เรียบเรียงแล้ว\n'
+   +'segment_ids คือท่อนที่เก็บ เรียงตามลำดับที่จะเล่น title ต้องเป็นคำที่พูดจริงในท่อนที่เก็บ ไม่เกิน 40 ตัวอักษร ปรับ summary ให้ตรงกับเรื่องที่เรียบเรียงแล้ว '
+   // ASR mishears (C4926 27 Oct: "ค่าแลกเข้า" for ค่าแรกเข้า, "โลยีตี้ฟรี" for Royalty Fee) and its lines break mid-phrase;
+   // export.rs realign keeps each corrected phrase on the clock of the words it was heard as
+   +'texts คือข้อความของทุกท่อนที่เก็บ (id ใน segment_ids) แก้คำที่ระบบถอดเสียงผิดให้เป็นคำที่พูดจริงตามเนื้อเรื่อง เช่น ชื่อเฉพาะ ตัวเลข คำภาษาอังกฤษ (เขียนเป็นภาษาอังกฤษ เช่น Royalty Fee) '
+   +'เขียนตามที่พูดตามลำดับเดิม ห้ามเพิ่มหรือตัดเนื้อความ ห้ามสรุปความ เว้นวรรคหนึ่งครั้งตรงจุดจบวลีที่ตัดขึ้นบรรทัดซับใหม่ได้ วลีละไม่เกินประมาณ 20 ตัวอักษร ห้ามเว้นวรรคกลางคำหรือกลางวลี เขียน ๆ ติดคำหน้า (จริงๆ)\n'
    +MD_REPLY+'\n\n'+JSON.stringify(packet,null,1);
  }
  const refineStory=()=>model()?.stories.find(s=>s.id===refining) || null;
@@ -464,8 +468,13 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
   if(ids.some(id=>!allowed.has(id)))return {error:'คำตอบอ้างท่อนที่ไม่ได้ส่งไป ลองให้ AI ตอบใหม่'};
   if(new Set(ids).size!==ids.length)return {error:'คำตอบใช้ท่อนเดียวกันซ้ำ'};
   const byId=new Map(lines().map(l=>[l.segment_id,l]));
-  return {ids,title:String(answer.title || '').trim(),summary:String(answer.summary || '').trim(),
-   note:`เก็บ ${ids.length} จาก ${allowed.size} ท่อน · ยาว ${clock(length(ids.map(id=>byId.get(id))))}`};
+  const texts=answer.texts===undefined?{}:answer.texts;
+  if(!texts || typeof texts!=='object' || Array.isArray(texts))return {error:'texts ในคำตอบต้องเป็น {id: ข้อความ}'};
+  if(Object.keys(texts).some(id=>!ids.includes(id)))return {error:'texts แก้ท่อนที่ไม่ได้เก็บ ลองให้ AI ตอบใหม่'};
+  if(Object.values(texts).some(t=>typeof t!=='string' || !t.trim() || t.length>2000))return {error:'texts มีข้อความว่างหรือยาวเกิน'};
+  const fixed=Object.entries(texts).map(([id,t])=>[id,t.trim().replace(/\s+/g,' ')]).filter(([id,t])=>t!==byId.get(id)?.text);
+  return {ids,fixed,title:String(answer.title || '').trim(),summary:String(answer.summary || '').trim(),
+   note:`เก็บ ${ids.length} จาก ${allowed.size} ท่อน · ยาว ${clock(length(ids.map(id=>byId.get(id))))}`+(fixed.length?` · แก้คำ ${fixed.length} ท่อน`:'')};
  }
  function checkRefineUi(){
   const c=checkRefine();$('refineStatus').textContent=c.ids?c.note:c.error;$('refineStatus').dataset.state=c.ids?'ok':'error';
@@ -475,6 +484,10 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
  $('refineCopy').onclick=sendRefine;
  $('refineApply').onclick=event=>{
   const story=refineStory(),c=checkRefine();if(!story || !c.ids){event.preventDefault();return;}
+  // corrected words are hand edits of those lines (step 1 shows them, undo stays the person's)
+  const byId=new Map(lines().map(l=>[l.segment_id,l]));
+  try{if(c.fixed.length)editLines(c.fixed.map(([id,text])=>[byId.get(id),text]));}
+  catch(_){event.preventDefault();$('refineStatus').textContent='บันทึกคำที่แก้ไม่ได้ ตรวจว่าแก้ไขได้อยู่';$('refineStatus').dataset.state='error';$('refineStatus').hidden=false;return;}
   write(d=>{
    const plan=parsePlan(d.plan),entry=plan?.stories[story.index];if(!entry)return;
    entry.round1_ids=entry.round1_ids || entry.segment_ids.slice();entry.segment_ids=c.ids;
@@ -657,7 +670,7 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
  const segmenter=typeof Intl!=='undefined'&&Intl.Segmenter?new Intl.Segmenter('th',{granularity:'word'}):null;
  const latin=/[A-Za-z0-9]/;
  function timedText(line){
-  const words=(line?.words || []).map(w=>({text:w.text.trim(),start_ms:w.start_ms,end_ms:w.end_ms})).filter(w=>w.text);
+  const words=(line?.words || []).map(w=>({text:w.text.trimStart(),start_ms:w.start_ms,end_ms:w.end_ms})).filter(w=>w.text.trim());
   let text='';const from=[],to=[],said=[];
   for(const w of words){
    if(latin.test(text.at(-1) || '')&&latin.test(w.text[0])){text+=' ';from.push(w.start_ms);to.push(w.start_ms);said.push(w.start_ms);}
@@ -696,7 +709,7 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
   // (lines() in export.rs): a line holds words while their letters fit `limit`
   const words=[];[...text].forEach((c,i)=>{if(!keep[i])return;const last=words.at(-1);if(last&&last.at===said[i]){last.text+=c;last.end_ms=Math.max(last.end_ms,to[i]);}else words.push({at:said[i],start_ms:said[i],end_ms:to[i],text:c});});
   // grouped on the played clock (dead air inside the line cut out), so a card runs across a cut (export.rs speech_cues)
-  const rows=captionRows(words.map(w=>({...w,text:w.text.trim(),src_end:w.end_ms,start_ms:playedIn(line,w.start_ms),end_ms:playedIn(line,w.end_ms)})).filter(w=>w.text),read().text_styles?.speech || defaults().speech);
+  const rows=captionRows(words.map(w=>({...w,text:w.text.trimStart(),src_end:w.end_ms,start_ms:playedIn(line,w.start_ms),end_ms:playedIn(line,w.end_ms)})).filter(w=>w.text),read().text_styles?.speech || defaults().speech);
   if(!rows.length)return '';
   if(now===null)return rows.flat().map(w=>w.text).reduce(captionJoin,'');
   const row=[...rows].reverse().find(r=>r[0].at<=now);
