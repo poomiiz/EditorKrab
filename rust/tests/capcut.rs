@@ -392,11 +392,10 @@ fn native_camera_follows_shared_face_crops_and_preserves_continuous_audio_ranges
     let media=vec![Media{duration_ms:12000,width:2160,height:3840,has_audio:true}];
     let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/camera"),1).unwrap();
     let video=tracks(&draft,"video");let segments=video[0]["segments"].as_array().unwrap();
-    assert_eq!(segments.len(),3,"speaker changes and unknown-gap expiry must also reach native video");
-    // the wide shot after the unknown gap is at least MIN_SHOT_MS long here, so it stays
+    assert_eq!(segments.len(),2,"speaker changes must also reach native video");
     // the dragged crop keeps its own zoom; the face-found cut takes the shot size of its turn (cut 2: close,
-    // capcut::SHOTS); nobody known keeps the whole picture
-    let expected=[(1000,4000,1.5,-0.36,-0.06),(4000,9201,2.67,0.1*2.0*2.67,0.0),(9201,11000,1.0,0.0,0.0)];
+    // capcut::SHOTS) and holds through the gap after its turn to the end (P'Ohm 27 Oct: stay on the last talker)
+    let expected=[(1000,4000,1.5,-0.36,-0.06),(4000,11000,2.67,0.1*2.0*2.67,0.0)];
     let mut target=0;
     for (seg,(a,b,scale,x,y)) in segments.iter().zip(expected) {
         assert_eq!(seg["source_timerange"],json!({"start":a*1000,"duration":(b-a)*1000}));
