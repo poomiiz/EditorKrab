@@ -392,9 +392,10 @@ fn native_camera_follows_shared_face_crops_and_preserves_continuous_audio_ranges
     let media=vec![Media{duration_ms:12000,width:2160,height:3840,has_audio:true}];
     let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/camera"),1).unwrap();
     let video=tracks(&draft,"video");let segments=video[0]["segments"].as_array().unwrap();
-    assert_eq!(segments.len(),3,"speaker changes and unknown-gap expiry must also reach native video");
-    // the wide shot after the unknown gap is at least MIN_SHOT_MS long here, so it stays
-    let expected=[(1000,4000,1.5,-0.36,-0.06),(4000,9201,1.2,0.2,0.0),(9201,11000,1.0,0.0,0.0)];
+    assert_eq!(segments.len(),2,"speaker changes must also reach native video");
+    // the dragged crop keeps its own zoom; the face-found cut takes the shot size of its turn (cut 2: close,
+    // capcut::SHOTS) and holds through the gap after its turn to the end (P'Ohm 27 Oct: stay on the last talker)
+    let expected=[(1000,4000,1.5,-0.36,-0.06),(4000,11000,2.67,0.1*2.0*2.67,0.0)];
     let mut target=0;
     for (seg,(a,b,scale,x,y)) in segments.iter().zip(expected) {
         assert_eq!(seg["source_timerange"],json!({"start":a*1000,"duration":(b-a)*1000}));
@@ -423,6 +424,67 @@ fn native_crop_fills_the_selected_canvas_and_honours_manual_slack_position() {
     assert_eq!(draft.content["canvas_config"]["width"],1920);
     assert_eq!(draft.content["canvas_config"]["height"],1080);
     assert_eq!(tracks(&draft,"video")[0]["segments"][0]["clip"]["scale"],json!({"x":1.0,"y":1.0}));
+}
+
+#[test]
+fn a_vertical_picture_changes_shot_size_every_cut_on_the_person_talking() {
+    // P'Ohm's cut of C4926 (vertical camera, two men seated): medium, close, medium, wide on the talker
+    let story = Story { id:"shots".into(), title:"".into(), sources:vec!["a.mp4".into()],
+        pieces:vec![piece(0,0,2000,""),piece(0,2000,4000,""),piece(0,4000,6000,""),piece(0,6000,8000,""),piece(0,8000,10000,"")] };
+    let doc=json!({"files":[{"path":"a.mp4","source_id":"src"}],"text_roles":[],"follow_speaker":true,
+        "voice":{"src":{"faces":[{"cx":0.81,"cy":0.43}],"seen":[{"start_ms":0,"end_ms":10000,"person":0}]}}});
+    let media=vec![Media{duration_ms:10000,width:1080,height:1920,has_audio:true}];
+    let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/shots"),1).unwrap();
+    let segments=tracks(&draft,"video")[0]["segments"].as_array().unwrap().clone();
+    let shots:Vec<(f64,f64,f64)>=segments.iter().map(|s|{let c=&s["clip"];
+        (c["scale"]["x"].as_f64().unwrap(),c["transform"]["x"].as_f64().unwrap(),c["transform"]["y"].as_f64().unwrap())}).collect();
+    // the face at x 0.81 moves left by (0.81-0.5)*2*scale half-frames, held so no picture edge shows (at most
+    // scale-1): medium stops at -0.9, close reaches it; y 0.43 moves down the same way
+    let want=[(1.9,-0.9,-0.07*2.0*1.9),(2.67,-0.31*2.0*2.67,-0.07*2.0*2.67),(1.9,-0.9,-0.07*2.0*1.9),(1.3,0.0,0.0),(1.9,-0.9,-0.07*2.0*1.9)];
+    assert_eq!(shots.len(),want.len());
+    for ((s,x,y),(ws,wx,wy)) in shots.iter().zip(want) {assert!((s-ws).abs()<1e-9&&(x-wx).abs()<1e-9&&(y-wy).abs()<1e-9,"{s},{x},{y} != {ws},{wx},{wy}");}
+    // following off: the whole picture, as before
+    let mut off=doc;off["follow_speaker"]=json!(false);
+    let draft=capcut::build(&story,&off,&media,&fonts,Path::new("root"),Path::new("root/still"),1).unwrap();
+    for s in tracks(&draft,"video")[0]["segments"].as_array().unwrap() {assert_eq!(s["clip"]["scale"],json!({"x":1.0,"y":1.0}));}
+}
+
+#[test]
+fn lines_marked_host_or_guest_are_framed_on_the_face_whose_mouth_moved_in_them() {
+    // step 2 marked s0 and s2 host, s1 guest; step 3 saw the right-hand face (person 1) talk in s0 and s2 and the
+    // left-hand one (person 0) in s1, with one wrong second each way: the pair is host = right, guest = left
+    let mut pieces=vec![piece(0,0,3000,""),piece(0,3000,6000,""),piece(0,6000,9000,"")];
+    for (n,p) in pieces.iter_mut().enumerate() {p.segment=format!("s{n}");}
+    let story=Story{id:"roles".into(),title:"".into(),sources:vec!["a.mp4".into()],pieces};
+    let plan=json!({"stories":[{"id":"roles","title":"","segment_ids":["s0","s1","s2"]}],"speakers":{"s0":"host","s1":"guest","s2":"host"}});
+    let doc=json!({"files":[{"path":"a.mp4","source_id":"src"}],"text_roles":[],"follow_speaker":true,"plan":plan.to_string(),
+        "voice":{"src":{"faces":[{"cx":0.34,"cy":0.43},{"cx":0.81,"cy":0.43}],
+            "seen":[{"start_ms":0,"end_ms":2000,"person":1},{"start_ms":2000,"end_ms":3000,"person":0},
+                    {"start_ms":3000,"end_ms":5000,"person":0},{"start_ms":5000,"end_ms":6000,"person":1},
+                    {"start_ms":6000,"end_ms":9000,"person":1}]}}});
+    let media=vec![Media{duration_ms:9000,width:1080,height:1920,has_audio:true}];
+    let draft=capcut::build(&story,&doc,&media,&fonts,Path::new("root"),Path::new("root/roles"),1).unwrap();
+    let segments=tracks(&draft,"video")[0]["segments"].as_array().unwrap().clone();
+    assert_eq!(segments.len(),3,"a marked line is one shot, not split where the mouth guess changes");
+    let x:Vec<f64>=segments.iter().map(|s|s["clip"]["transform"]["x"].as_f64().unwrap()).collect();
+    // medium on the host (right, held at -0.9), close on the guest (left, +0.16*2*2.67), medium on the host
+    let want=[-0.9,0.16*2.0*2.67,-0.9];
+    for (got,want) in x.iter().zip(want) {assert!((got-want).abs()<1e-9,"{got} != {want}");}
+    // a zoom set in step 3 for the host (person 1) is kept: the host's lines are not framed by the marks
+    let mut set=doc.clone();set["crops"]=json!({"src":{"speakers":{"1":{"zoom":1.5}}}});
+    let draft=capcut::build(&story,&set,&media,&fonts,Path::new("root"),Path::new("root/set"),1).unwrap();
+    let first=&tracks(&draft,"video")[0]["segments"][0]["clip"];
+    let marked_host=(first["scale"]["x"].as_f64().unwrap()-1.9).abs()<1e-9&&(first["transform"]["x"].as_f64().unwrap()+0.9).abs()<1e-9;
+    assert!(!marked_host,"the host's line follows the mouths, not the marks: {first}");
+    // a landscape picture: the marks do not apply, the camera cuts on the mouths like the MP4 export
+    let wide=vec![Media{duration_ms:9000,width:1920,height:1080,has_audio:true}];
+    let draft=capcut::build(&story,&doc,&wide,&fonts,Path::new("root"),Path::new("root/wide"),1).unwrap();
+    let plain=capcut::build(&story,&{let mut d=doc.clone();d["plan"]=json!(json!({"stories":plan["stories"]}).to_string());d},&wide,&fonts,Path::new("root"),Path::new("root/plain"),1).unwrap();
+    assert_eq!(tracks(&draft,"video")[0]["segments"].as_array().unwrap().len(),tracks(&plain,"video")[0]["segments"].as_array().unwrap().len());
+    // without marks the camera still follows the mouths
+    let mut unmarked=doc.clone();unmarked["plan"]=json!(json!({"stories":plan["stories"]}).to_string());
+    let draft=capcut::build(&story,&unmarked,&media,&fonts,Path::new("root"),Path::new("root/unmarked"),1).unwrap();
+    assert!(tracks(&draft,"video")[0]["segments"].as_array().unwrap().len()>=1);
 }
 
 #[test]

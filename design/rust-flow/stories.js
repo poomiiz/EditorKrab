@@ -134,7 +134,7 @@ export function validateEmphasisSelections(answer,input){
  return {picked,issues,count,note:`พร้อม ${count} คำ`+(issues.length?` · ต้องตรวจ ${issues.length} คำ`:'')};
 }
 // Caption timing contract: selected word IDs remain one phrase; only older split picks may coalesce.
-export const EMPHASIS_GAP_MS=160,EMPHASIS_HOLD_MS=450,EMPHASIS_TAIL_MS=180,VISUAL_RULES_VERSION=4;
+export const EMPHASIS_GAP_MS=160,EMPHASIS_HOLD_MS=450,EMPHASIS_TAIL_MS=180,VISUAL_RULES_VERSION=5;
 export function emphasisGroups(line,list){
  const letters=(line.words || []).flatMap(w=>{const text=[...w.text.trim()].filter(c=>! /\s/.test(c));return text.map((c,i)=>({c,start:w.start_ms+(w.end_ms-w.start_ms)*i/text.length}));}),flat=letters.map(x=>x.c).join('');
  const starts=(text,near)=>{let chosen=-1,gap=Infinity;for(let i=flat.indexOf(text);i>=0;i=flat.indexOf(text,i+1)){const d=Math.abs(letters[i].start-near);if(d<gap){chosen=i;gap=d;}}return chosen;};
@@ -305,7 +305,8 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
   if(!editable()){clearTimeout(airRetry);airRetry=setTimeout(findQuiet,1000);return;}
   if(Number.isFinite(read().dead_min_ms)&&read().dead_min_ms>0&&read().dead_min_ms<AIR_LEAST*1000){write(d=>{d.dead_min_ms=AIR_LEAST*1000;});return;}
   const voice=read().voice || {},files=read().files.filter(f=>f.source_id&&lines().some(l=>l.source_id===f.source_id));
-  const needsVisual=f=>!voice[f.source_id] || !Array.isArray(voice[f.source_id].seen) || voice[f.source_id].visual_rules_version!==VISUAL_RULES_VERSION;
+  // newer face rules matter only to a camera that follows the talker: other projects are not looked at again
+  const needsVisual=f=>!voice[f.source_id] || !Array.isArray(voice[f.source_id].seen) || (read().follow_speaker&&voice[f.source_id].visual_rules_version!==VISUAL_RULES_VERSION);
   const todo=files.filter(f=>needsVisual(f)&&!listening.has(f.source_id));
   const keyOf=f=>quietKey(f.source_id);
   const stale=files.filter(f=>voice[f.source_id]&&!needsVisual(f)&&(read().quiet_key || {})[f.source_id]!==keyOf(f)&&airMin()>0&&!listening.has(f.source_id));
@@ -842,7 +843,7 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
    row.append(document.createElement('span'),dot,name,zoomPick(source,p.id,`คนที่ ${p.id+1}`));return row;}));}
   if($('followSpeaker')){$('followSpeaker').checked=following();$('followSpeaker').disabled=!editable();}
  }
- if($('followSpeaker'))$('followSpeaker').onchange=()=>{if(!editable())return;const on=$('followSpeaker').checked;write(d=>{d.follow_speaker=on;});};
+ if($('followSpeaker'))$('followSpeaker').onchange=()=>{if(!editable())return;const on=$('followSpeaker').checked;write(d=>{d.follow_speaker=on;});if(on)findQuiet();};
 
  {
   let drag=null;

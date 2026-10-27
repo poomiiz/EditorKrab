@@ -102,16 +102,19 @@ pub const JOIN_GAP_MS: u64 = 250;
 pub const FOLLOW_ZOOM: f64 = 1.2;
 /// Shortest turn the camera cuts to; a shorter one (a "yes" from the other side) keeps the shot.
 pub const FOLLOW_MIN_MS: u64 = 1000;
-/// Who is talking at `ms` in a video, by the diarization step 3 stored (`voice[id].turns`); between turns,
-/// whoever spoke last. Turns under FOLLOW_MIN_MS do not count.
+/// Who is talking at `ms` in a video, by the turns step 3 stored (`follow_turns`); between turns, whoever spoke
+/// last, held until the next turn, and before the first turn whoever speaks first. P'Ohm 27 Oct: the camera
+/// stays on the last known talker; dropping to the whole picture after 1.2 s left 31 of 46 cuts wide on C4926.
+/// Turns under FOLLOW_MIN_MS do not count.
 pub fn speaker_at(document: &Value, id: &str, ms: u64) -> Option<i32> {
     let turns: Vec<(u64, u64, i64)> = follow_turns(document, id)
         .into_iter()
         .filter(|(a, b, _)| b >= &(a + FOLLOW_MIN_MS))
         .collect();
     let inside = turns.iter().filter(|(a, b, _)| *a <= ms && ms < *b).min_by_key(|(a, _, _)| *a);
-    let before = turns.iter().filter(|(_, b, _)| *b <= ms && ms-*b<=1200).max_by_key(|(_, b, _)| *b);
-    inside.or(before).map(|t| t.2 as i32)
+    let before = turns.iter().filter(|(_, b, _)| *b <= ms).max_by_key(|(_, b, _)| *b);
+    let first = turns.iter().filter(|(a, _, _)| *a > ms).min_by_key(|(a, _, _)| *a);
+    inside.or(before).or(first).map(|t| t.2 as i32)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

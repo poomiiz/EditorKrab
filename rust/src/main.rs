@@ -539,7 +539,7 @@ async fn probe_media(
             "-v",
             "error",
             "-show_entries",
-            "format=duration:stream=codec_type,width,height",
+            "format=duration:stream=codec_type,width,height:stream_tags=rotate:stream_side_data=rotation",
             "-of",
             "json",
         ])
@@ -561,10 +561,17 @@ async fn probe_media(
         .and_then(|d| d.parse::<f64>().ok())
         .filter(|d| d.is_finite() && *d > 0.0)
         .ok_or("source_unreadable")?;
+    let (width, height) = (video["width"].as_u64().ok_or("source_unreadable")?, video["height"].as_u64().ok_or("source_unreadable")?);
+    // a phone or camera clip stored on its side plays turned (C4926: 1920x1080 stored, -90, plays 1080x1920);
+    // CapCut and the face clocks see the picture as it plays
+    let turn = video["tags"]["rotate"].as_str().and_then(|r| r.parse::<f64>().ok())
+        .or_else(|| video["side_data_list"].as_array()?.iter().find_map(|d| d["rotation"].as_f64()))
+        .unwrap_or(0.0);
+    let (width, height) = if (turn.abs() / 90.0).round() as i64 % 2 == 1 { (height, width) } else { (width, height) };
     Ok(editorkrab::capcut::Media {
         duration_ms: (duration_ms * 1000.0).round() as u64,
-        width: video["width"].as_u64().ok_or("source_unreadable")?,
-        height: video["height"].as_u64().ok_or("source_unreadable")?,
+        width,
+        height,
         has_audio: streams.iter().any(|s| s["codec_type"] == "audio"),
     })
 }

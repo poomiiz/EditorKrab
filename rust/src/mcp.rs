@@ -110,7 +110,9 @@ pub fn tools() -> Value {
                 "clips": {"type":"array","minItems":1,"items":{"type":"object","properties":{
                     "title": {"type":"string"},
                     "segment_ids": {"type":"array","items":{"type":"string"},"minItems":1}
-                },"required":["title","segment_ids"]}}
+                },"required":["title","segment_ids"]}},
+                "speakers": {"type":"object","description":"Who says each segment id: host (asking) or guest (answering). The CapCut camera frames that person.",
+                    "additionalProperties":{"type":"string","enum":["host","guest"]}}
             },"required":["project","clips"]}
         },
         {
