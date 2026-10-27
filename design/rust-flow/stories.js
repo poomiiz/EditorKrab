@@ -843,7 +843,7 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
    row.append(document.createElement('span'),dot,name,zoomPick(source,p.id,`คนที่ ${p.id+1}`));return row;}));}
   if($('followSpeaker')){$('followSpeaker').checked=following();$('followSpeaker').disabled=!editable();}
  }
- if($('followSpeaker'))$('followSpeaker').onchange=()=>{if(!editable())return;const on=$('followSpeaker').checked;write(d=>{d.follow_speaker=on;});};
+ if($('followSpeaker'))$('followSpeaker').onchange=()=>{if(!editable())return;const on=$('followSpeaker').checked;write(d=>{d.follow_speaker=on;});if(on)findQuiet();};
 
  {
   let drag=null;

@@ -241,7 +241,9 @@ fn role_faces(story: &Story, document: &Value, roles: &HashMap<String,String>) -
         for (k,role,face) in [(0,"host",h),(1,"guest",g)] {
             // a role nobody was seen talking for gets no face (it would be a guess), and a crop or zoom set for
             // that person in step 3 is theirs to keep: those lines follow the mouths as before
-            let set=document["crops"][id]["speakers"][face.to_string()].is_object();
+            let c=&document["crops"][id]["speakers"][face.to_string()];
+            // the same "set" as export::crop_at: x 0.5, y 0.5 and no zoom was written by the first picker, unset
+            let set=c.is_object()&&!(c["x"].as_f64()==Some(0.5)&&c["y"].as_f64()==Some(0.5)&&!c["zoom"].is_number());
             if votes[k][face]==0 || set {continue;}
             if let (Some(cx),Some(cy))=(faces[face]["cx"].as_f64(),faces[face]["cy"].as_f64()) {out.insert((n,role.to_owned()),(cx,cy));}
         }
