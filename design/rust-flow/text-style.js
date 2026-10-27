@@ -21,7 +21,7 @@ export function captionWidth(style={}){
  const x=(Number.isFinite(style.x)?style.x:50)*10.8,edge=54+(style.outline ?? 4)+(style.box_on?(style.box_pad_x ?? 12):0);
  return Math.max(24,style.align==='left'?1080-edge-x:style.align==='right'?x-edge:2*Math.min(x-edge,1080-edge-x));
 }
-export const captionJoin=(a,b)=>a+(a&&!/[\u0E00-\u0E7F]$/.test(a)&&b&&!/^[\u0E00-\u0E7F]/.test(b)?' ':'')+b;
+export const captionJoin=(a,b)=>a+(a&&!/[\u0E00-\u0E7F\s]$/.test(a)&&b&&!/^[\u0E00-\u0E7F]/.test(b)?' ':'')+b;
 // maxMs: longest speech one card holds (export.rs CARD_MAX_MS; Nina 16 white cards median 1.9 s, p75 3 s)
 // a breath under 650 ms stays inside a card; a card too long or too wide ends at its widest pause (120 ms+),
 // not before the word that did not fit; a short tail (5 letters or fewer) joins the card before
@@ -43,7 +43,7 @@ export function captionRows(words,style={},maxMs=style.card_ms ?? 3000,measure=c
  }
  if(cur.length)rows.push(cur);
  // a card said in no time (its words in cut dead air) joins the card after it (export.rs FLASH_MS)
- for(let k=0;k+1<rows.length;){if(rows[k].at(-1).end_ms-rows[k][0].start_ms<120)rows.splice(k,2,[...rows[k],...rows[k+1]]);else k++;}
+ for(let k=0;k+1<rows.length;){if(rows[k].at(-1).end_ms-rows[k][0].start_ms<120&&fits([...rows[k],...rows[k+1]]))rows.splice(k,2,[...rows[k],...rows[k+1]]);else k++;}
  if(rows.length>1){const tail=rows.at(-1),prev=rows.at(-2),letters=tail.reduce((n,x)=>n+[...x.text].length,0);
   if(letters<=5&&tail[0].start_ms-prev.at(-1).end_ms<650&&fits([...prev,...tail])){rows.pop();rows[rows.length-1]=[...prev,...tail];}}
  return rows;

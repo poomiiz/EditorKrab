@@ -220,7 +220,7 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)dp[i*(m+1)+j]=old[i][0]===neu[j][0]?dp[(i+1)*(m+1)+j+1]+1:Math.max(dp[(i+1)*(m+1)+j],dp[i*(m+1)+j+1]);
   const clock=new Array(m).fill(null);
   for(let i=0,j=0;i<n&&j<m;){if(old[i][0]===neu[j][0]){clock[j]=[old[i][1],old[i][2]];i++;j++;}else if(dp[(i+1)*(m+1)+j]>=dp[i*(m+1)+j+1])i++;else j++;}
-  if(clock.every(c=>c===null))return [];
+  // no letter in common: the fix is spread over the whole line as heard (export.rs realign)
   // changed letters are spread over the time between their matched neighbours
   for(let j=0;j<m;){
    if(clock[j]!==null){j++;continue;}
@@ -283,6 +283,7 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   const rows=list.map(([id,text])=>({...find(id),text}));
   writeEdit(rows.map(({job,segment,text})=>({job_id:job.id,segment_id:segment.id,source_sha256:job.result.source.sha256,original_text:segment.text,text})));
   if(rows.some(({job,segment,text})=>(correction(job,segment)?.text ?? segment.text)!==text))throw Error('edit_not_saved');
+  // not learned: these words come from the AI, and the learned list is for the person's own fixes
   rowsKey='';paintRows(true);
  }
  function edit(id,text){

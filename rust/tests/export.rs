@@ -749,6 +749,8 @@ fn a_corrected_line_keeps_the_clocks_it_was_heard_at_and_breaks_at_its_spaces() 
     assert_eq!(rows.iter().map(|r| r.2.as_str()).collect::<Vec<_>>(), ["ก็มีค่าแรกเข้า ค่าประกัน"]);
     // two phrases heard as one word share its time instead of both starting with it ("บาท" and "แต่..." on s38)
     assert_eq!(realign(&[w("บาทแต่ถ้า", 0, 900)], "บาท แต่ถ้า"), vec![w("บาท ", 0, 300), w("แต่ถ้า", 300, 900)]);
+    // no letter in common at all: the fix still runs over the line as heard
+    assert_eq!(realign(&[w("โล", 0, 300), w("ยีตี้ฟรี", 300, 900)], "Royalty Fee"), vec![w("Royalty Fee", 0, 900)]);
     assert!(realign(&[], "อะไร").is_empty());
 }
 

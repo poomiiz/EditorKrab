@@ -484,6 +484,7 @@ export function createStories({project,read,lines,write:writeDraft,go,editable,c
  $('refineCopy').onclick=sendRefine;
  $('refineApply').onclick=event=>{
   const story=refineStory(),c=checkRefine();if(!story || !c.ids){event.preventDefault();return;}
+  if(!parsePlan(read().plan)?.stories[story.index]){event.preventDefault();$('refineStatus').textContent='ไม่พบเรื่องนี้ในแผน ลองเปิดขั้นแบ่งเรื่องใหม่';$('refineStatus').dataset.state='error';$('refineStatus').hidden=false;return;}
   // corrected words are hand edits of those lines (step 1 shows them, undo stays the person's)
   const byId=new Map(lines().map(l=>[l.segment_id,l]));
   try{if(c.fixed.length)editLines(c.fixed.map(([id,text])=>[byId.get(id),text]));}

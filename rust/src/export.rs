@@ -817,9 +817,7 @@ pub fn realign(heard: &[(String, u64, u64)], fixed: &str) -> Vec<(String, u64, u
         if old[i].0 == new[j].0 { clock[j] = Some((old[i].1, old[i].2)); i += 1; j += 1; }
         else if dp[(i + 1) * (m + 1) + j] >= dp[i * (m + 1) + j + 1] { i += 1; } else { j += 1; }
     }
-    if clock.iter().all(Option::is_none) {
-        return Vec::new();
-    }
+    // no letter in common ("Royalty Fee" for "โลยีตี้ฟรี"): the fix is spread over the whole line as heard
     let mut j = 0;
     while j < m {
         if clock[j].is_some() { j += 1; continue; }
@@ -967,9 +965,10 @@ pub fn card_groups_within<'a>(words: &[(&'a str, u64, u64)], most: u64, fits: im
     // 27 Oct) would flash for a frame and sit on a track of its own in CapCut: it joins the card after it
     let mut k = 0;
     while k + 1 < groups.len() {
-        if groups[k][groups[k].len() - 1].2.saturating_sub(groups[k][0].1) < FLASH_MS {
-            let mut both = groups.remove(k);
-            both.extend(groups[k].iter().copied());
+        let mut both = groups[k].clone();
+        both.extend(groups[k + 1].iter().copied());
+        if groups[k][groups[k].len() - 1].2.saturating_sub(groups[k][0].1) < FLASH_MS && fits(&both) {
+            groups.remove(k);
             groups[k] = both;
         } else {
             k += 1;
@@ -1348,7 +1347,9 @@ pub fn speech_cues(story: &Story, document: &Value) -> Vec<(u64,u64,String)> {
     while k + 1 < unique.len() {
         if unique[k].1.saturating_sub(unique[k].0) < FLASH_MS && unique[k + 1].0.saturating_sub(unique[k].1) < FLASH_MS {
             let (a, _, text) = unique.remove(k);
-            unique[k] = (a, unique[k].1, format!("{} {}", text.trim_end(), unique[k].2));
+            let mut joined = text.trim_end().to_owned();
+            join(&mut joined, &unique[k].2);
+            unique[k] = (a, unique[k].1, joined);
         } else {
             k += 1;
         }
