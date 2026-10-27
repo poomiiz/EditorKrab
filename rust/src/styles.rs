@@ -65,6 +65,9 @@ struct Text {
     shadow_angle: Option<i16>,
     #[serde(default)]
     box_opacity: Option<u8>,
+    /// longest stretch of speech one card holds, ms (export.rs CARD_MAX_MS when unset)
+    #[serde(default)]
+    card_ms: Option<u16>,
 }
 fn hex(v: &str) -> bool {
     v.len() == 7 && v.starts_with('#') && v[1..].bytes().all(|b| b.is_ascii_hexdigit())
@@ -122,6 +125,7 @@ fn valid_text(v: &Text) -> bool {
         && v.glow_range.is_none_or(|n| n <= 60)
         && v.shadow_angle.is_none_or(|n| (-180..=180).contains(&n))
         && v.box_opacity.is_none_or(|n| n <= 100)
+        && v.card_ms.is_none_or(|n| (1000..=8000).contains(&n))
 }
 /// How a text layer mixes with the video under it.
 pub const BLENDS: [&str; 4] = ["normal", "add", "screen", "multiply"];

@@ -21,12 +21,12 @@ export function captionWidth(style={}){
  const x=(Number.isFinite(style.x)?style.x:50)*10.8,edge=54+(style.outline ?? 4)+(style.box_on?(style.box_pad_x ?? 12):0);
  return Math.max(24,style.align==='left'?1080-edge-x:style.align==='right'?x-edge:2*Math.min(x-edge,1080-edge-x));
 }
-export const captionJoin=(a,b)=>a+(a&&!/[\u0E00-\u0E7F]$/.test(a)&&b&&!/^[\u0E00-\u0E7F]/.test(b)?' ':'')+b;
+export const captionJoin=(a,b)=>a+(a&&!/[\u0E00-\u0E7F\s]$/.test(a)&&b&&!/^[\u0E00-\u0E7F]/.test(b)?' ':'')+b;
 // maxMs: longest speech one card holds (export.rs CARD_MAX_MS; Nina 16 white cards median 1.9 s, p75 3 s)
 // a breath under 650 ms stays inside a card; a card too long or too wide ends at its widest pause (120 ms+),
 // not before the word that did not fit; a short tail (5 letters or fewer) joins the card before
 // (export.rs card_groups, from Nina 16's timeline transcribed 24 Oct)
-export function captionRows(words,style={},maxMs=3000,measure=captionMeasure){
+export function captionRows(words,style={},maxMs=style.card_ms ?? 3000,measure=captionMeasure){
  const fits=g=>measure(g.map(x=>x.text).reduce(captionJoin,''),style)<=captionWidth(style)*.96;
  const rows=[];let cur=[];
  for(const w of words){
@@ -42,6 +42,8 @@ export function captionRows(words,style={},maxMs=3000,measure=captionMeasure){
   cur.push(w);
  }
  if(cur.length)rows.push(cur);
+ // a card said in no time (its words in cut dead air) joins the card after it (export.rs FLASH_MS)
+ for(let k=0;k+1<rows.length;){if(rows[k].at(-1).end_ms-rows[k][0].start_ms<120&&fits([...rows[k],...rows[k+1]]))rows.splice(k,2,[...rows[k],...rows[k+1]]);else k++;}
  if(rows.length>1){const tail=rows.at(-1),prev=rows.at(-2),letters=tail.reduce((n,x)=>n+[...x.text].length,0);
   if(letters<=5&&tail[0].start_ms-prev.at(-1).end_ms<650&&fits([...prev,...tail])){rows.pop();rows[rows.length-1]=[...prev,...tail];}}
  return rows;
@@ -70,7 +72,8 @@ const effectValid={outline:v=>Number.isInteger(v)&&v>=0&&v<=20,shadow:v=>Number.
  bold:v=>typeof v==='boolean',italic:v=>typeof v==='boolean',underline:v=>typeof v==='boolean',glow_on:v=>typeof v==='boolean',
  case:v=>['none','upper','lower','title'].includes(v),align:v=>['left','center','right'].includes(v),spacing:v=>Number.isInteger(v)&&v>=-20&&v<=100,
  glow_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),glow_strength:v=>Number.isInteger(v)&&v>=0&&v<=100,glow_range:v=>Number.isInteger(v)&&v>=0&&v<=60,
- shadow_angle:v=>Number.isInteger(v)&&v>=-180&&v<=180,box_opacity:v=>Number.isInteger(v)&&v>=0&&v<=100};
+ shadow_angle:v=>Number.isInteger(v)&&v>=-180&&v<=180,box_opacity:v=>Number.isInteger(v)&&v>=0&&v<=100,
+ card_ms:v=>Number.isInteger(v)&&v>=1000&&v<=8000};
 // every role, speech included, shows its whole line at once unless an entrance is picked (P'Ohm 23 Oct)
 export const roleEffects=()=>effectDefaults;
 // one press sets speech, emphasis and English together (P'Ohm 24 Oct: step 4 too hard); positions stay

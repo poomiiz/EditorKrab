@@ -203,10 +203,7 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
             let edited = edits
                 .get(&(job.id.as_str(), id))
                 .filter(|(original, _)| *original == text);
-            // a corrected line no longer matches its timed words, so it is split by length instead
-            let words = match edited {
-                Some(_) => Vec::new(),
-                None => s["words"]
+            let words: Vec<(String, u64, u64)> = s["words"]
                     .as_array()
                     .into_iter()
                     .flatten()
@@ -217,8 +214,7 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
                             w["end_ms"].as_u64()?,
                         ))
                     })
-                    .collect(),
-            };
+                    .collect();
             // re-timed word clocks ("จัดเวลาคำใหม่", one [start, end] per word in order), then the
             // whole-project subtitle shift; both live in the draft, the transcript stays as it was
             let mut words = words;
@@ -239,6 +235,10 @@ fn spoken(document: &Value, jobs: &[Job]) -> HashMap<String, Spoken> {
             let offset = subtitle_offset(document);
             for w in &mut words {
                 (w.1, w.2) = ((w.1 as i64 + offset).max(0) as u64, (w.2 as i64 + offset).max(0) as u64);
+            }
+            // a corrected line keeps the clocks of the words it was heard as, one per phrase it is written in
+            if let Some((_, fixed)) = edited {
+                words = realign(&words, fixed);
             }
             let text = edited.map_or(text, |(_, fixed)| fixed);
             found.insert(
@@ -771,12 +771,71 @@ fn units(text: &str) -> usize {
         .count()
 }
 fn join(line: &mut String, word: &str) {
-    let gap = line.chars().last().is_some_and(|c| !thai(c))
+    let gap = line.chars().last().is_some_and(|c| !thai(c) && !c.is_whitespace())
         && word.chars().next().is_some_and(|c| !thai(c));
     if gap {
         line.push(' ');
     }
     line.push_str(word);
+}
+/// A corrected line on the clocks of the words it was heard as. The fixed text's spaces mark where a card may
+/// end (its phrases); a space between two Latin words or numbers ("Royalty Fee 3%") stays inside one phrase.
+/// Every heard letter is said at its share of its word's time; the fixed letters are matched to them in order
+/// (longest common subsequence) and take their clocks, and a run of changed letters ("Royalty Fee" for
+/// "โลยีตี้ฟรี") is spread over the time between its matched neighbours. Each phrase is one word from its
+/// first letter to its last; all but the last keep a trailing space so a card of two phrases reads with it.
+/// Before 27 Oct a corrected line lost its clocks and showed as one card of the whole line.
+pub fn realign(heard: &[(String, u64, u64)], fixed: &str) -> Vec<(String, u64, u64)> {
+    let mut old: Vec<(char, u64, u64)> = Vec::new();
+    for (text, from, to) in heard {
+        let letters: Vec<char> = text.chars().filter(|c| !c.is_whitespace()).collect();
+        let (count, span) = (letters.len().max(1) as u64, to.saturating_sub(*from));
+        old.extend(letters.into_iter().enumerate().map(|(k, c)| (c, from + span * k as u64 / count, from + span * (k as u64 + 1) / count)));
+    }
+    let latin = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric() || c == '%');
+    let mut phrases: Vec<String> = Vec::new();
+    for t in fixed.split_whitespace() {
+        match phrases.last_mut() {
+            Some(last) if latin(last.chars().last()) && latin(t.chars().next()) => { last.push(' '); last.push_str(t); }
+            _ => phrases.push(t.to_owned()),
+        }
+    }
+    let new: Vec<(char, usize)> = phrases.iter().enumerate().flat_map(|(n, p)| p.chars().filter(|c| !c.is_whitespace()).map(move |c| (c, n))).collect();
+    let (n, m) = (old.len(), new.len());
+    if n == 0 || m == 0 || n * m > 4_000_000 {
+        return Vec::new();
+    }
+    let mut dp = vec![0u16; (n + 1) * (m + 1)];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            dp[i * (m + 1) + j] = if old[i].0 == new[j].0 { dp[(i + 1) * (m + 1) + j + 1] + 1 } else { dp[(i + 1) * (m + 1) + j].max(dp[i * (m + 1) + j + 1]) };
+        }
+    }
+    let mut clock: Vec<Option<(u64, u64)>> = vec![None; m];
+    let (mut i, mut j) = (0, 0);
+    while i < n && j < m {
+        if old[i].0 == new[j].0 { clock[j] = Some((old[i].1, old[i].2)); i += 1; j += 1; }
+        else if dp[(i + 1) * (m + 1) + j] >= dp[i * (m + 1) + j + 1] { i += 1; } else { j += 1; }
+    }
+    // no letter in common ("Royalty Fee" for "โลยีตี้ฟรี"): the fix is spread over the whole line as heard
+    let mut j = 0;
+    while j < m {
+        if clock[j].is_some() { j += 1; continue; }
+        let end = (j..m).find(|&k| clock[k].is_some()).unwrap_or(m);
+        let left = j.checked_sub(1).and_then(|k| clock[k]).map_or(old[0].1, |c| c.1);
+        let right = clock.get(end).copied().flatten().map_or(old[n - 1].2, |c| c.0).max(left);
+        let run = (end - j) as u64;
+        for k in 0..run {
+            clock[j + k as usize] = Some((left + (right - left) * k / run, left + (right - left) * (k + 1) / run));
+        }
+        j = end;
+    }
+    let count = phrases.len();
+    phrases.into_iter().enumerate().filter_map(|(k, p)| {
+        let at: Vec<(u64, u64)> = new.iter().zip(&clock).filter(|((_, ph), _)| *ph == k).filter_map(|(_, c)| *c).collect();
+        let (a, b) = (at.first()?.0, at.last()?.1);
+        Some((if k + 1 < count { p + " " } else { p }, a, b.max(a)))
+    }).collect()
 }
 /// One piece's speech as single on-screen lines that fit the frame, timed from 0 at the piece start.
 /// Thai has no spaces for libass to wrap at, so lines are broken here on dictionary words.
@@ -840,15 +899,18 @@ pub fn layout_lines(piece: &Piece, style: &Value) -> Vec<(u64, u64, String)> {
     // the words once each: the engine can give one word twice at the same clock
     let mut words: Vec<(&str, u64, u64)> = Vec::new();
     for (word, from, to) in &piece.words {
-        let word = word.trim();
-        if word.is_empty() { continue; }
+        // a corrected line's phrase keeps its trailing space (realign) so two phrases on one card stay apart
+        let word = word.trim_start();
+        if word.trim().is_empty() { continue; }
         match words.last_mut() {
             Some(last) if last.0 == word && last.1 == *from => last.2 = last.2.max(*to),
             _ => words.push((word, *from, *to)),
         }
     }
-    let joined = |g: &[(&str, u64, u64)]| { let mut t = String::new(); for w in g { join(&mut t, w.0); } t };
-    let groups = card_groups(&words, |g| crate::text_layout::fits(&joined(g), style));
+    let joined = |g: &[(&str, u64, u64)]| { let mut t = String::new(); for w in g { join(&mut t, w.0); } t.trim_end().to_owned() };
+    // a style may hold longer sentences per card (card_ms: the ckfastwork reference reads whole clauses, 27 Oct)
+    let most = style["card_ms"].as_u64().filter(|n| (1000..=8000).contains(n)).unwrap_or(CARD_MAX_MS);
+    let groups = card_groups_within(&words, most, |g| crate::text_layout::fits(&joined(g), style));
     let mut rows = Vec::new();
     for (i, g) in groups.iter().enumerate() {
         let (start, end) = (g[0].1, g[g.len() - 1].2);
@@ -858,6 +920,8 @@ pub fn layout_lines(piece: &Piece, style: &Value) -> Vec<(u64, u64, String)> {
     rows.retain(|(a,b,_)| b > a);
     rows
 }
+/// A card whose words are said in less than this joins the next card, ms. Matches captionRows in text-style.js.
+pub const FLASH_MS: u64 = 120;
 /// A pause this long between two words is a place a card may end inside a phrase that runs too long, ms.
 pub const PHRASE_GAP_MS: u64 = 120;
 /// Words grouped into cards the way Nina 16 reads (its timeline transcribed 24 Oct): a card ends at a pause of
@@ -866,6 +930,10 @@ pub const PHRASE_GAP_MS: u64 = 120;
 /// and a last word or two of five letters or fewer joins the card before ("แก", "ได้" stood alone).
 /// Matches captionRows in text-style.js.
 pub fn card_groups<'a>(words: &[(&'a str, u64, u64)], fits: impl Fn(&[(&'a str, u64, u64)]) -> bool) -> Vec<Vec<(&'a str, u64, u64)>> {
+    card_groups_within(words, CARD_MAX_MS, fits)
+}
+/// card_groups with a card holding at most `most` ms of speech.
+pub fn card_groups_within<'a>(words: &[(&'a str, u64, u64)], most: u64, fits: impl Fn(&[(&'a str, u64, u64)]) -> bool) -> Vec<Vec<(&'a str, u64, u64)>> {
     let mut groups: Vec<Vec<(&str, u64, u64)>> = Vec::new();
     let mut cur: Vec<(&str, u64, u64)> = Vec::new();
     for &w in words {
@@ -873,14 +941,14 @@ pub fn card_groups<'a>(words: &[(&'a str, u64, u64)], fits: impl Fn(&[(&'a str, 
             let pause = w.1.saturating_sub(last.2) >= PHRASE_PAUSE_MS;
             let mut with = cur.clone();
             with.push(w);
-            let over = w.2.saturating_sub(cur[0].1) > CARD_MAX_MS || !fits(&with);
+            let over = w.2.saturating_sub(cur[0].1) > most || !fits(&with);
             if pause {
                 groups.push(std::mem::take(&mut cur));
             } else if over {
                 // the widest pause inside the card, leaving at least one word on each side
                 let split = (1..cur.len()).map(|k| (cur[k].1.saturating_sub(cur[k - 1].2), k)).filter(|&(gap, _)| gap >= PHRASE_GAP_MS).max();
                 match split {
-                    Some((_, k)) if { let mut rest = cur[k..].to_vec(); rest.push(w); fits(&rest) && w.2.saturating_sub(rest[0].1) <= CARD_MAX_MS } => {
+                    Some((_, k)) if { let mut rest = cur[k..].to_vec(); rest.push(w); fits(&rest) && w.2.saturating_sub(rest[0].1) <= most } => {
                         let rest = cur.split_off(k);
                         groups.push(std::mem::replace(&mut cur, rest));
                     }
@@ -892,6 +960,19 @@ pub fn card_groups<'a>(words: &[(&'a str, u64, u64)], fits: impl Fn(&[(&'a str, 
     }
     if !cur.is_empty() {
         groups.push(cur);
+    }
+    // a card said in no time (its words fall in cut dead air, so their clocks close up: "บาท" on C4926 s38,
+    // 27 Oct) would flash for a frame and sit on a track of its own in CapCut: it joins the card after it
+    let mut k = 0;
+    while k + 1 < groups.len() {
+        let mut both = groups[k].clone();
+        both.extend(groups[k + 1].iter().copied());
+        if groups[k][groups[k].len() - 1].2.saturating_sub(groups[k][0].1) < FLASH_MS && fits(&both) {
+            groups.remove(k);
+            groups[k] = both;
+        } else {
+            k += 1;
+        }
     }
     // a short tail joins the card before when they fit together
     if groups.len() > 1 {
@@ -1181,8 +1262,10 @@ fn without_picks(p: &Piece, document: &Value) -> Piece {
         .words
         .iter()
         .enumerate()
-        .map(|(n, (_, from, to))| {
-            let text: String = letters.iter().zip(&keep).filter(|(l, k)| l.0 == n && **k).map(|(l, _)| l.1).collect();
+        .map(|(n, (word, from, to))| {
+            let mut text: String = letters.iter().zip(&keep).filter(|(l, k)| l.0 == n && **k).map(|(l, _)| l.1).collect();
+            // a phrase's trailing space (realign) stays with what is left of it
+            if !text.is_empty() && word.ends_with(' ') { text.push(' '); }
             (text, *from, *to)
         })
         .filter(|(text, _, _)| !text.is_empty())
@@ -1233,11 +1316,15 @@ pub fn speech_cues(story: &Story, document: &Value) -> Vec<(u64,u64,String)> {
         let mut j=i+1;
         while j<pieces.len() && pieces[j].segment==pieces[i].segment && pieces[j].source==pieces[i].source && pieces[j].start_ms>=pieces[j-1].end_ms { j+=1; }
         let run=&pieces[i..j];
-        let mut words=Vec::new(); let mut off=0;
+        let mut words:Vec<(String,u64,u64)>=Vec::new(); let mut off=0; let mut heard:Option<(&str,u64,u64)>=None;
         for p in run {
             for (w,a,b) in &p.words {
                 if *b<p.start_ms || *a>p.end_ms { continue; }
-                words.push((w.clone(), off+(*a).clamp(p.start_ms,p.end_ms)-p.start_ms, off+(*b).clamp(p.start_ms,p.end_ms)-p.start_ms));
+                let (from,to)=(off+(*a).clamp(p.start_ms,p.end_ms)-p.start_ms, off+(*b).clamp(p.start_ms,p.end_ms)-p.start_ms);
+                // a word (or a corrected phrase) said across a dead-air cut is in both pieces: draw it once
+                if heard==Some((w.as_str(),*a,*b)) { if let Some(last)=words.last_mut() { last.2=to; } continue; }
+                heard=Some((w.as_str(),*a,*b));
+                words.push((w.clone(), from, to));
             }
             off+=p.end_ms-p.start_ms;
         }
@@ -1253,6 +1340,19 @@ pub fn speech_cues(story: &Story, document: &Value) -> Vec<(u64,u64,String)> {
     for (a,b,text) in cues {
         if let Some(last)=unique.last_mut().filter(|last|last.0==a&&last.2==text) {last.1=last.1.max(b);}
         else {unique.push((a,b,text));}
+    }
+    // a card said in no time at the end of one run of pieces ("บาท" before a dead-air cut, C4926 s38) joins the
+    // card that starts with it, the same as inside a run (card_groups)
+    let mut k = 0;
+    while k + 1 < unique.len() {
+        if unique[k].1.saturating_sub(unique[k].0) < FLASH_MS && unique[k + 1].0.saturating_sub(unique[k].1) < FLASH_MS {
+            let (a, _, text) = unique.remove(k);
+            let mut joined = text.trim_end().to_owned();
+            join(&mut joined, &unique[k].2);
+            unique[k] = (a, unique[k].1, joined);
+        } else {
+            k += 1;
+        }
     }
     for i in 1..unique.len() {
         let next = unique[i].0;

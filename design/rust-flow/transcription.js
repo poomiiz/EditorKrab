@@ -209,6 +209,29 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
  // the inputs are replaced, never edited in place (a re-time or a new listen writes new lists), so a segment whose
  // inputs are the same objects as last time reuses its words: every redraw asks for every line
  const timedSeen=new WeakMap();
+ // a corrected line on the clocks of the words it was heard as, one word per phrase (export.rs realign)
+ function realign(heard,fixed){
+  const old=heard.flatMap(w=>{const l=[...w.text].filter(c=>!/\s/.test(c)),n=Math.max(1,l.length),span=Math.max(0,w.end_ms-w.start_ms);
+   return l.map((c,k)=>[c,w.start_ms+Math.floor(span*k/n),w.start_ms+Math.floor(span*(k+1)/n)]);}),latin=c=>/[A-Za-z0-9%]/.test(c || '');
+  const phrases=[];for(const t of fixed.split(/\s+/).filter(Boolean)){if(phrases.length&&latin(phrases.at(-1).at(-1))&&latin(t[0]))phrases[phrases.length-1]+=' '+t;else phrases.push(t);}
+  const neu=phrases.flatMap((p,n)=>[...p].filter(c=>!/\s/.test(c)).map(c=>[c,n])),n=old.length,m=neu.length;
+  if(!n || !m || n*m>4e6)return [];
+  const dp=new Uint16Array((n+1)*(m+1));
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)dp[i*(m+1)+j]=old[i][0]===neu[j][0]?dp[(i+1)*(m+1)+j+1]+1:Math.max(dp[(i+1)*(m+1)+j],dp[i*(m+1)+j+1]);
+  const clock=new Array(m).fill(null);
+  for(let i=0,j=0;i<n&&j<m;){if(old[i][0]===neu[j][0]){clock[j]=[old[i][1],old[i][2]];i++;j++;}else if(dp[(i+1)*(m+1)+j]>=dp[i*(m+1)+j+1])i++;else j++;}
+  // no letter in common: the fix is spread over the whole line as heard (export.rs realign)
+  // changed letters are spread over the time between their matched neighbours
+  for(let j=0;j<m;){
+   if(clock[j]!==null){j++;continue;}
+   let end=j;while(end<m&&clock[end]===null)end++;
+   const left=j?clock[j-1][1]:old[0][1],right=Math.max(left,end<m?clock[end][0]:old[n-1][2]),run=end-j;
+   for(let k=0;k<run;k++)clock[j+k]=[left+Math.floor((right-left)*k/run),left+Math.floor((right-left)*(k+1)/run)];
+   j=end;
+  }
+  return phrases.flatMap((p,k)=>{const at=clock.filter((_,j)=>neu[j][1]===k);if(!at.length)return [];
+   return [{text:k+1<phrases.length?p+' ':p,start_ms:at[0][0],end_ms:Math.max(at[0][0],at.at(-1)[1])}];});
+ }
  function timedWords(segment,source){
   const words=segment.words || [],times=read().word_times?.[segment.id],offset=Math.max(-5000,Math.min(5000,Number(read().subtitle_offset_ms) || 0));
   const speech=read().voice?.[source]?.speech,hush=read().voice?.[source]?.hush,seen=timedSeen.get(segment);
@@ -249,12 +272,20 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
    return [s,Math.max(e,s)];
   });
  }
- function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name,words:correction(job,segment)?[]:timedWords(segment,file.source_id)})));}
+ function texts(){return eligible().flatMap(file=>segments(file).map(({job,segment})=>({kind:'subtitle',id:job.id+'|'+segment.id,segment_id:segment.id,source_id:file.source_id,text:correction(job,segment)?.text ?? segment.text,start_ms:segment.start_ms,end_ms:segment.end_ms,source:file.name,words:correction(job,segment)?realign(timedWords(segment,file.source_id),correction(job,segment).text):timedWords(segment,file.source_id)})));}
  // the finished transcription pieces, for re-timing their words
  function pieces(){return eligible().flatMap(file=>chunks(file).filter(j=>j?.status==='succeeded'));}
  function find(id){for(const file of eligible())for(const row of segments(file))if(row.job.id+'|'+row.segment.id===id)return {file,...row};throw Error('line_not_found');}
  // For checking lines from the subtitle step: hear one line, or replace its text (kept as a hand edit and learned).
  function listen(id){const {file,segment}=find(id);return play(file,segment);}
+ // several lines at once (a refine answer's corrected words), saved as one change
+ function editAll(list){
+  const rows=list.map(([id,text])=>({...find(id),text}));
+  writeEdit(rows.map(({job,segment,text})=>({job_id:job.id,segment_id:segment.id,source_sha256:job.result.source.sha256,original_text:segment.text,text})));
+  if(rows.some(({job,segment,text})=>(correction(job,segment)?.text ?? segment.text)!==text))throw Error('edit_not_saved');
+  // not learned: these words come from the AI, and the learned list is for the person's own fixes
+  rowsKey='';paintRows(true);
+ }
  function edit(id,text){
   const {job,segment}=find(id),before=correction(job,segment)?.text ?? segment.text;
   writeEdit({job_id:job.id,segment_id:segment.id,source_sha256:job.result.source.sha256,original_text:segment.text,text});
@@ -284,5 +315,5 @@ export function createTranscription({project,read,state,writeEdit,changed,starte
   return total?files.reduce((n,f)=>n+fraction(f)*(probe(f)?.result?.duration_s||0),0)/total:0;}
  // while a piece runs the estimate moves, so the bar is redrawn every second
  setInterval(()=>{if(active().some(j=>j.status==='running'))refresh();},1000);
- return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit,fileDone,fraction,running:()=>active().some(j=>j.status==='running'),pieces};
+ return {changed:job=>{jobs.set(job.id,job);refresh();},reset:()=>{jobs.clear();refresh();},refresh,complete,texts,listen,edit,fileDone,fraction,running:()=>active().some(j=>j.status==='running'),pieces,editAll};
 }
