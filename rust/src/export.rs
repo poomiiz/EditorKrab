@@ -910,7 +910,9 @@ pub fn layout_lines(piece: &Piece, style: &Value) -> Vec<(u64, u64, String)> {
         }
     }
     let joined = |g: &[(&str, u64, u64)]| { let mut t = String::new(); for w in g { join(&mut t, w.0); } t.trim_end().to_owned() };
-    let groups = card_groups(&words, |g| crate::text_layout::fits(&joined(g), style));
+    // a style may hold longer sentences per card (card_ms: the ckfastwork reference reads whole clauses, 27 Oct)
+    let most = style["card_ms"].as_u64().filter(|n| (1000..=8000).contains(n)).unwrap_or(CARD_MAX_MS);
+    let groups = card_groups_within(&words, most, |g| crate::text_layout::fits(&joined(g), style));
     let mut rows = Vec::new();
     for (i, g) in groups.iter().enumerate() {
         let (start, end) = (g[0].1, g[g.len() - 1].2);
@@ -930,6 +932,10 @@ pub const PHRASE_GAP_MS: u64 = 120;
 /// and a last word or two of five letters or fewer joins the card before ("แก", "ได้" stood alone).
 /// Matches captionRows in text-style.js.
 pub fn card_groups<'a>(words: &[(&'a str, u64, u64)], fits: impl Fn(&[(&'a str, u64, u64)]) -> bool) -> Vec<Vec<(&'a str, u64, u64)>> {
+    card_groups_within(words, CARD_MAX_MS, fits)
+}
+/// card_groups with a card holding at most `most` ms of speech.
+pub fn card_groups_within<'a>(words: &[(&'a str, u64, u64)], most: u64, fits: impl Fn(&[(&'a str, u64, u64)]) -> bool) -> Vec<Vec<(&'a str, u64, u64)>> {
     let mut groups: Vec<Vec<(&str, u64, u64)>> = Vec::new();
     let mut cur: Vec<(&str, u64, u64)> = Vec::new();
     for &w in words {
@@ -937,14 +943,14 @@ pub fn card_groups<'a>(words: &[(&'a str, u64, u64)], fits: impl Fn(&[(&'a str, 
             let pause = w.1.saturating_sub(last.2) >= PHRASE_PAUSE_MS;
             let mut with = cur.clone();
             with.push(w);
-            let over = w.2.saturating_sub(cur[0].1) > CARD_MAX_MS || !fits(&with);
+            let over = w.2.saturating_sub(cur[0].1) > most || !fits(&with);
             if pause {
                 groups.push(std::mem::take(&mut cur));
             } else if over {
                 // the widest pause inside the card, leaving at least one word on each side
                 let split = (1..cur.len()).map(|k| (cur[k].1.saturating_sub(cur[k - 1].2), k)).filter(|&(gap, _)| gap >= PHRASE_GAP_MS).max();
                 match split {
-                    Some((_, k)) if { let mut rest = cur[k..].to_vec(); rest.push(w); fits(&rest) && w.2.saturating_sub(rest[0].1) <= CARD_MAX_MS } => {
+                    Some((_, k)) if { let mut rest = cur[k..].to_vec(); rest.push(w); fits(&rest) && w.2.saturating_sub(rest[0].1) <= most } => {
                         let rest = cur.split_off(k);
                         groups.push(std::mem::replace(&mut cur, rest));
                     }

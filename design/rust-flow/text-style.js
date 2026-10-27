@@ -26,7 +26,7 @@ export const captionJoin=(a,b)=>a+(a&&!/[\u0E00-\u0E7F]$/.test(a)&&b&&!/^[\u0E00
 // a breath under 650 ms stays inside a card; a card too long or too wide ends at its widest pause (120 ms+),
 // not before the word that did not fit; a short tail (5 letters or fewer) joins the card before
 // (export.rs card_groups, from Nina 16's timeline transcribed 24 Oct)
-export function captionRows(words,style={},maxMs=3000,measure=captionMeasure){
+export function captionRows(words,style={},maxMs=style.card_ms ?? 3000,measure=captionMeasure){
  const fits=g=>measure(g.map(x=>x.text).reduce(captionJoin,''),style)<=captionWidth(style)*.96;
  const rows=[];let cur=[];
  for(const w of words){
@@ -72,7 +72,8 @@ const effectValid={outline:v=>Number.isInteger(v)&&v>=0&&v<=20,shadow:v=>Number.
  bold:v=>typeof v==='boolean',italic:v=>typeof v==='boolean',underline:v=>typeof v==='boolean',glow_on:v=>typeof v==='boolean',
  case:v=>['none','upper','lower','title'].includes(v),align:v=>['left','center','right'].includes(v),spacing:v=>Number.isInteger(v)&&v>=-20&&v<=100,
  glow_color:v=>/^#[a-fA-F0-9]{6}$/.test(v),glow_strength:v=>Number.isInteger(v)&&v>=0&&v<=100,glow_range:v=>Number.isInteger(v)&&v>=0&&v<=60,
- shadow_angle:v=>Number.isInteger(v)&&v>=-180&&v<=180,box_opacity:v=>Number.isInteger(v)&&v>=0&&v<=100};
+ shadow_angle:v=>Number.isInteger(v)&&v>=-180&&v<=180,box_opacity:v=>Number.isInteger(v)&&v>=0&&v<=100,
+ card_ms:v=>Number.isInteger(v)&&v>=1000&&v<=8000};
 // every role, speech included, shows its whole line at once unless an entrance is picked (P'Ohm 23 Oct)
 export const roleEffects=()=>effectDefaults;
 // one press sets speech, emphasis and English together (P'Ohm 24 Oct: step 4 too hard); positions stay

@@ -759,3 +759,11 @@ fn a_card_said_in_no_time_joins_the_next_one_instead_of_flashing_on_its_own_trac
     let groups = editorkrab::export::card_groups(&words, |_| true);
     assert_eq!(groups, vec![words.to_vec()]);
 }
+
+#[test]
+fn a_style_with_card_ms_holds_a_longer_sentence_per_card() {
+    // ckfastwork reference (27 Oct): one small white row reads a whole clause, about 4-5 s
+    let words = [("ไปวัดพื้นที่เนี่ย ", 0, 1000), ("ห้าหมื่นบาท ", 1100, 2200), ("อยู่ในก้อนนี้", 2300, 3200)];
+    assert_eq!(editorkrab::export::card_groups(&words, |_| true).len(), 2);
+    assert_eq!(editorkrab::export::card_groups_within(&words, 5000, |_| true), vec![words.to_vec()]);
+}
