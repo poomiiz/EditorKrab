@@ -35,4 +35,4 @@ change on `main`; to ship, bump `version` in `.claude-plugin/plugin.json`, then 
 `git push origin vX.Y.Z`. The release workflow makes the GitHub Release with the merged PRs as notes. A bad
 release is fixed by tagging a newer one.
 
-By contributing you agree your work is released under the [MIT License](LICENSE).
+By contributing you agree your work is released under the [GNU AGPL-3.0 License](LICENSE).
