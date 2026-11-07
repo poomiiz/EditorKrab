@@ -112,4 +112,4 @@ Keep client media, private projects and personal `config.json` files out of Git.
 
 [Contributing](CONTRIBUTING.md) explains bug reports and pull requests. [Security](SECURITY.md) explains private vulnerability reporting. [Sponsor the project](https://github.com/sponsors/poomiiz) to support development.
 
-[MIT license](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for ffmpeg, whisper.cpp and other components.
+[GNU AGPL-3.0 license](LICENSE). Releases up to and including the last commit before this change remain available under MIT. See [third-party notices](THIRD_PARTY_NOTICES.md) for ffmpeg, whisper.cpp and other components.

@@ -46,4 +46,4 @@ EditorKrab เป็นแอปบนเครื่องที่เปลี
 
 ต้องมี [Rust](https://rustup.rs) (stable) บน Windows แล้วรัน `cargo build --release --manifest-path rust/Cargo.toml` และ `cargo test --manifest-path rust/Cargo.toml --locked` ดูรายละเอียดใน[README ภาษาอังกฤษ](../README.md#build-from-source) แอป Python รุ่นเก่าถูกลบออกเมื่อ 25 ต.ค. 2026 ดู[เอกสารทั้งหมด](index.md)
 
-[MIT license](../LICENSE) · [ประกาศซอฟต์แวร์ของบุคคลที่สาม](../THIRD_PARTY_NOTICES.md)
+[สัญญาอนุญาต GNU AGPL-3.0](../LICENSE) (รุ่นก่อนหน้านี้ยังใช้ MIT) · [ประกาศซอฟต์แวร์ของบุคคลที่สาม](../THIRD_PARTY_NOTICES.md)
